@@ -257,7 +257,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v1.7</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v1.8</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -357,12 +357,14 @@ function App() {
           <button className="secondary-button sample-button" type="button" onClick={useSample}>
             サンプル
           </button>
-          <button className="primary-button" type="button" disabled={!plan}>
-            次へ進む
-            <ArrowRight size={21} />
-          </button>
         </div>
       </section>
+      <div className="floating-next-bar" aria-label="次の操作">
+        <button className="primary-button floating-next-button" type="button" disabled={!plan}>
+          次へ進む
+          <ArrowRight size={21} />
+        </button>
+      </div>
     </main>
   );
 }
