@@ -3,6 +3,7 @@ dist/
 .npm-cache/
 .env
 .vercel/
+morning-flow-ai-*.zip
 *.log
 *.tsbuildinfo
 vite.config.js

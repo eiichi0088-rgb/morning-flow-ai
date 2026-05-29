@@ -23,3 +23,18 @@ AIが整理した計画を、ユーザーが朝の短い時間で微調整でき
 2. `VERSIONING.md`
 3. `CHANGELOG.md`
 4. `NEXT_VERSION.md`
+
+## Version 1.7以降の完了フロー
+
+1. `npm.cmd run build`
+2. `npm.cmd run release`
+3. `git add .`
+4. `git commit -m "Update MORNING FLOW AI to vX.X"`
+5. `git push origin main`
+6. Vercel自動デプロイ確認
+
+Codexから自動commit/pushする場合:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\git-release.ps1
+```

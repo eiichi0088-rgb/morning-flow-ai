@@ -13,3 +13,7 @@
 11. スマホファースト、音声入力最優先、Apple × Tesla × Notion の世界観を維持する。
 12. Version 1.6以降の開発前は `PROJECT_RULES.md`、`VERSIONING.md`、`CHANGELOG.md` の順に確認する。
 13. `NEXT_VERSION.md` がある場合は、開発前に必ず確認し、完了時に次回予定へ更新する。
+14. Version 1.7以降は、release成功後にGitHubへcommit/pushし、Vercel自動デプロイを確認する。
+15. build失敗、release失敗、VERSION確認失敗の状態ではpushしない。
+16. ZIPはローカル安定版バックアップとして保存し、GitHubへ含めない。
+17. GitHub認証が未完了の場合は、GitHub Desktopでサインインしてpushを1回完了してから自動pushへ移行する。

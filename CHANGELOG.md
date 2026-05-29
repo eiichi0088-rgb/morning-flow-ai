@@ -53,5 +53,7 @@
 - 気分とAIコーチ提案を保存データに含める構造へ拡張
 - `NEXT_VERSION.md` を作成
 - Vercel公開準備として `api/plan.mjs`、`vercel.json`、`.vercelignore`、README、公開手順を追加
+- GitHub/Vercel運用ルールを `PROJECT_RULES.md` と `VERSIONING.md` に反映
+- GitHub自動commit/push用の `scripts/git-release.ps1` を追加
 - 画面表示を `v1.6` に更新
 - `morning-flow-ai-v1.6.zip` として保存

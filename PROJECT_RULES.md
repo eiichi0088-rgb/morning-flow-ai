@@ -18,6 +18,10 @@ MORNING FLOW AI は単なるTODOアプリではない。
 6. 問題発生時は直前ZIPへ戻せる状態を維持する。
 7. 操作数を増やさず、音声入力を最優先に保つ。
 8. ユーザー価値を上げる改善を優先する。
+9. Version 1.7以降は、可能な限りCodexが `build → release → ZIP作成 → git commit → git push` まで実行する。
+10. GitHubは正式なソース管理場所、Vercelは公開環境として扱う。
+11. GitHubへpushが成功した場合、Vercelの同じURLが自動更新される前提で進める。
+12. GitHub認証が必要な場合は、先にGitHub Desktopでサインインとpushを1回完了させる。
 
 ## デザインルール
 
@@ -44,6 +48,9 @@ MORNING FLOW AI は単なるTODOアプリではない。
 ```powershell
 npm.cmd run build
 npm.cmd run release
+git add .
+git commit -m "Update MORNING FLOW AI to vX.X"
+git push origin main
 ```
 
 `npm.cmd run release` は以下を自動実行する。
@@ -53,6 +60,14 @@ npm.cmd run release
 3. CHANGELOG更新
 4. VERSION確認
 
+GitHubへpushする前に、必ずbuildとreleaseが成功していることを確認する。
+
+GitHub認証後は、必要に応じて以下でcommit/pushを実行する。
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\git-release.ps1
+```
+
 ## 禁止事項
 
 1. `.env` やAPIキーをZIPやコードへ含めない。
@@ -61,6 +76,8 @@ npm.cmd run release
 4. 音声入力を弱くする変更をしない。
 5. スマホで使いにくいUIを追加しない。
 6. ユーザーの朝の操作数をむやみに増やさない。
+7. build失敗状態でpushしない。
+8. ZIPファイルをGitHubへ含めない。
 
 ## 開発者モード
 
@@ -92,3 +109,11 @@ Developer Mode Marker
 - Version 1.8: 朝のテンプレート提案
 - Version 1.9: 通知・リマインド
 - Version 2.0: クラウド保存と複数端末同期
+
+## ソース管理と公開
+
+- GitHubを正式なソース管理場所とする。
+- Vercelを公開環境とする。
+- `main` ブランチへpush後、Vercelが自動デプロイする。
+- 公開URLは継続利用し、バージョンごとにURLを変更しない。
+- `.env`、`node_modules`、`.npm-cache`、ZIPファイルはGitHubへ含めない。
