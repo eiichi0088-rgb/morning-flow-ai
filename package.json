@@ -1,0 +1,22 @@
+{
+  "version": "1.6.0",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "tsc --noEmit && vite build",
+    "release": "npm.cmd run build && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\zip-project.ps1 && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\update-changelog.ps1 && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-version.ps1",
+    "preview": "vite preview",
+    "serve": "node scripts/serve.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3"
+  }
+}
