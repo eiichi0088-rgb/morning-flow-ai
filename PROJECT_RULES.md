@@ -83,9 +83,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\git-release.ps1
 
 Developer Mode Marker
 
-現在バージョン: Version 1.9
+現在バージョン: Version 2.0
 
-次回予定バージョン: Version 2.0
+次回予定バージョン: Version 2.1
 
 未実装機能:
 
@@ -104,8 +104,8 @@ Developer Mode Marker
 
 ## 今後のロードマップ
 
-- Version 2.0: 通知・リマインド
-- Version 2.1: クラウド保存と複数端末同期
+- Version 2.1: 通知・リマインド
+- Version 2.2: クラウド保存と複数端末同期
 
 ## ソース管理と公開
 

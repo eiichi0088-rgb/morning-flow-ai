@@ -23,6 +23,13 @@ import {
 } from 'lucide-react';
 import { createAiMorningPlan, type EnergyMood, type MorningPlan } from './services/aiPlanner';
 import {
+  insertGoogleCalendarEvents,
+  isGoogleCalendarConfigured,
+  requestGoogleAccessToken,
+  revokeGoogleAccessToken,
+  type GoogleCalendarPriority,
+} from './services/googleCalendar';
+import {
   loadLatestSnapshot,
   saveMorningSnapshot,
   saveReview,
@@ -69,6 +76,7 @@ const sampleTranscript =
   '今日は朝9時から仕込みをして、11時から14時まで昼営業。売上目標を達成したい。15時に銀行で手続き、17時に買い物。家族との時間も取りたい。夜22時半にジムへ行って30分運動したい。銀行の営業時間に間に合うように注意したい。';
 
 const draftStorageKey = 'morning-flow-ai:transcript-draft:v1';
+const googleLoginStorageKey = 'morning-flow-ai:google-calendar-login:v1';
 
 type CalendarEvent = {
   id: string;
@@ -76,6 +84,7 @@ type CalendarEvent = {
   start: Date;
   end: Date;
   memo: string;
+  priority: GoogleCalendarPriority;
   sourceTime: string;
 };
 
@@ -269,7 +278,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v1.9</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.0</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -652,7 +661,7 @@ function PlanView({ plan }: { plan: MorningPlan }) {
           <CalendarPlus size={19} />
           カレンダーへ追加
         </button>
-        {isCalendarOpen && <CalendarExportPanel events={calendarEvents} />}
+        {isCalendarOpen && <GoogleCalendarExportPanel events={calendarEvents} />}
       </PlanSection>
 
       <PlanSection icon={<Lightbulb size={18} />} title="AIアドバイス">
@@ -666,6 +675,186 @@ function PlanView({ plan }: { plan: MorningPlan }) {
         </ul>
       </PlanSection>
     </section>
+  );
+}
+
+function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
+  const [accessToken, setAccessToken] = React.useState('');
+  const [selectedEventIds, setSelectedEventIds] = React.useState(() => events.map((event) => event.id));
+  const [statusMessage, setStatusMessage] = React.useState('');
+  const [isSigningIn, setIsSigningIn] = React.useState(false);
+  const [isRegistering, setIsRegistering] = React.useState(false);
+  const isConfigured = isGoogleCalendarConfigured();
+  const selectedEvents = events.filter((event) => selectedEventIds.includes(event.id));
+
+  React.useEffect(() => {
+    setSelectedEventIds(events.map((event) => event.id));
+  }, [events]);
+
+  React.useEffect(() => {
+    if (!isConfigured || localStorage.getItem(googleLoginStorageKey) !== 'connected') return;
+
+    setIsSigningIn(true);
+    requestGoogleAccessToken('')
+      .then((token) => {
+        setAccessToken(token);
+        setStatusMessage('Googleカレンダーに接続済みです。');
+      })
+      .catch(() => {
+        localStorage.removeItem(googleLoginStorageKey);
+      })
+      .finally(() => setIsSigningIn(false));
+  }, [isConfigured]);
+
+  const connectGoogle = () => {
+    setIsSigningIn(true);
+    setStatusMessage('');
+    requestGoogleAccessToken('consent')
+      .then((token) => {
+        setAccessToken(token);
+        localStorage.setItem(googleLoginStorageKey, 'connected');
+        setStatusMessage('Googleカレンダーに接続しました。登録する予定を確認してください。');
+      })
+      .catch((reason: unknown) => {
+        setStatusMessage(reason instanceof Error ? reason.message : 'Googleログインに失敗しました。');
+      })
+      .finally(() => setIsSigningIn(false));
+  };
+
+  const disconnectGoogle = () => {
+    if (accessToken) {
+      revokeGoogleAccessToken(accessToken);
+    }
+    setAccessToken('');
+    localStorage.removeItem(googleLoginStorageKey);
+    setStatusMessage('Googleカレンダー連携を解除しました。');
+  };
+
+  const toggleEvent = (eventId: string) => {
+    setSelectedEventIds((current) =>
+      current.includes(eventId) ? current.filter((id) => id !== eventId) : [...current, eventId],
+    );
+  };
+
+  const registerSelectedEvents = () => {
+    if (!accessToken || !selectedEvents.length) return;
+
+    setIsRegistering(true);
+    setStatusMessage('');
+    insertGoogleCalendarEvents(accessToken, selectedEvents)
+      .then(() => {
+        setStatusMessage(`${selectedEvents.length}件の予定をGoogleカレンダーへ登録しました。`);
+      })
+      .catch((reason: unknown) => {
+        setStatusMessage(reason instanceof Error ? reason.message : 'Googleカレンダーへの登録に失敗しました。');
+      })
+      .finally(() => setIsRegistering(false));
+  };
+
+  if (!events.length) {
+    return (
+      <div className="calendar-panel">
+        <div className="calendar-panel-header">
+          <span>Calendar Export</span>
+          <strong>登録できる予定がありません</strong>
+        </div>
+        <p className="calendar-empty">
+          タイムスケジュールに「9:00」「11:00-14:00」のような時刻が入ると予定化できます。
+        </p>
+      </div>
+    );
+  }
+
+  const dateLabel = events[0].start.toLocaleDateString('ja-JP', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  });
+
+  return (
+    <div className="calendar-panel" aria-label="予定一覧確認画面">
+      <div className="calendar-panel-header">
+        <span>Google Calendar</span>
+        <strong>予定一覧確認画面</strong>
+      </div>
+
+      <p className="calendar-date">{dateLabel} の予定として作成します。登録しない予定はチェックを外せます。</p>
+
+      <div className="google-connect-card">
+        <div>
+          <span>Google OAuth</span>
+          <strong>{accessToken ? '接続済み' : '初回のみログイン'}</strong>
+        </div>
+        {accessToken ? (
+          <button className="calendar-mini-button" onClick={disconnectGoogle} type="button">
+            ログアウト
+          </button>
+        ) : (
+          <button
+            className="calendar-mini-button"
+            disabled={!isConfigured || isSigningIn}
+            onClick={connectGoogle}
+            type="button"
+          >
+            {isSigningIn ? '接続中' : 'Googleログイン'}
+          </button>
+        )}
+      </div>
+
+      {!isConfigured && (
+        <p className="calendar-status is-warning">
+          .envにVITE_GOOGLE_CLIENT_IDを設定するとGoogleカレンダーへ直接登録できます。
+        </p>
+      )}
+
+      <div className="calendar-event-list">
+        {events.map((event) => (
+          <article className="calendar-event" key={event.id}>
+            <label className="calendar-event-check">
+              <input
+                checked={selectedEventIds.includes(event.id)}
+                onChange={() => toggleEvent(event.id)}
+                type="checkbox"
+              />
+              <div>
+                <time dateTime={event.start.toISOString()}>
+                  {formatEventTime(event.start)} - {formatEventTime(event.end)}
+                </time>
+                <strong>{event.title}</strong>
+                <p>{event.memo}</p>
+                <small>優先度: {event.priority}</small>
+              </div>
+            </label>
+            <a
+              className="calendar-link"
+              href={createGoogleCalendarUrl(event)}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Googleで開く
+              <ExternalLink size={15} />
+            </a>
+          </article>
+        ))}
+      </div>
+
+      <button
+        className="calendar-register-button"
+        disabled={!accessToken || !selectedEvents.length || isRegistering}
+        onClick={registerSelectedEvents}
+        type="button"
+      >
+        <CalendarPlus size={18} />
+        {isRegistering ? '登録中' : `Googleカレンダーへ登録 (${selectedEvents.length}件)`}
+      </button>
+
+      {statusMessage && <p className="calendar-status">{statusMessage}</p>}
+
+      <button className="calendar-download-button" onClick={() => downloadIcs(events)} type="button">
+        <Download size={18} />
+        Appleカレンダー用ファイルを保存
+      </button>
+    </div>
   );
 }
 
@@ -800,11 +989,31 @@ function createCalendarEvents(plan: MorningPlan): CalendarEvent[] {
         title,
         start,
         end,
+        priority: getSchedulePriority(title, plan),
         sourceTime: item.time,
         memo: `MORNING FLOW AIで整理した予定: ${item.time} ${title}\n今日の目的: ${plan.purpose}`,
       };
     })
     .filter((event): event is CalendarEvent => Boolean(event));
+}
+
+function getSchedulePriority(title: string, plan: MorningPlan): GoogleCalendarPriority {
+  if (includesSimilarTask(plan.priorities.highest, title)) return '最優先';
+  if (includesSimilarTask(plan.priorities.important, title)) return '重要';
+  if (includesSimilarTask(plan.priorities.optional, title)) return '時間があれば';
+  return '通常';
+}
+
+function includesSimilarTask(tasks: string[], title: string) {
+  const normalizedTitle = normalizeTaskText(title);
+  return tasks.some((task) => {
+    const normalizedTask = normalizeTaskText(task);
+    return normalizedTask.includes(normalizedTitle) || normalizedTitle.includes(normalizedTask);
+  });
+}
+
+function normalizeTaskText(value: string) {
+  return value.replace(/\s/g, '').toLowerCase();
 }
 
 function parseScheduleTime(timeText: string) {
