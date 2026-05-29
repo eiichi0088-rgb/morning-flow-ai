@@ -65,6 +65,8 @@ const SpeechRecognition =
 const sampleTranscript =
   '今日は朝9時から仕込みをして、11時から14時まで昼営業。売上目標を達成したい。15時に銀行で手続き、17時に買い物。家族との時間も取りたい。夜22時半にジムへ行って30分運動したい。銀行の営業時間に間に合うように注意したい。';
 
+const draftStorageKey = 'morning-flow-ai:transcript-draft:v1';
+
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
   { label: '✓ 完了', value: 'done' },
   { label: '△ 一部完了', value: 'partial' },
@@ -82,6 +84,7 @@ function App() {
   const [recognition, setRecognition] = React.useState<SpeechRecognitionLike | null>(null);
   const [isListening, setIsListening] = React.useState(false);
   const [transcript, setTranscript] = React.useState('');
+  const [originalTranscript, setOriginalTranscript] = React.useState('');
   const [interimTranscript, setInterimTranscript] = React.useState('');
   const [error, setError] = React.useState('');
   const [plan, setPlan] = React.useState<MorningPlan | null>(null);
@@ -94,12 +97,26 @@ function App() {
   const isSupported = Boolean(SpeechRecognition);
   const resultText = [transcript, interimTranscript].filter(Boolean).join('\n');
   const canOrganize = Boolean(transcript.trim()) && !isListening;
+  const hasEditableTranscript = Boolean(transcript.trim()) && !isListening;
 
   React.useEffect(() => {
     const snapshot = loadLatestSnapshot();
     setPreviousSnapshot(snapshot);
     setReviewStatuses(snapshot?.review?.statuses ?? {});
+    const savedDraft = localStorage.getItem(draftStorageKey);
+    if (savedDraft) {
+      setTranscript(savedDraft);
+      setOriginalTranscript(savedDraft);
+    }
   }, []);
+
+  React.useEffect(() => {
+    if (transcript.trim()) {
+      localStorage.setItem(draftStorageKey, transcript);
+    } else {
+      localStorage.removeItem(draftStorageKey);
+    }
+  }, [transcript]);
 
   React.useEffect(() => {
     if (!SpeechRecognition) return;
@@ -139,7 +156,11 @@ function App() {
       }
 
       if (finalText) {
-        setTranscript((current) => `${current}${current ? '\n' : ''}${finalText.trim()}`);
+        setTranscript((current) => {
+          const nextTranscript = `${current}${current ? '\n' : ''}${finalText.trim()}`;
+          setOriginalTranscript(nextTranscript);
+          return nextTranscript;
+        });
         setPlan(null);
       }
       setInterimTranscript(interimText.trim());
@@ -170,6 +191,7 @@ function App() {
   const resetTranscript = () => {
     recognition?.abort();
     setTranscript('');
+    setOriginalTranscript('');
     setInterimTranscript('');
     setError('');
     setIsListening(false);
@@ -180,6 +202,7 @@ function App() {
   const useSample = () => {
     recognition?.abort();
     setTranscript(sampleTranscript);
+    setOriginalTranscript(sampleTranscript);
     setInterimTranscript('');
     setError('');
     setIsListening(false);
@@ -211,6 +234,18 @@ function App() {
     setPlan((currentPlan) => (currentPlan ? addCarryoverToPlan(currentPlan, todos) : currentPlan));
   };
 
+  const saveEditedTranscript = () => {
+    const normalized = transcript.trim();
+    setTranscript(normalized);
+    setOriginalTranscript(normalized);
+    setPlan(null);
+  };
+
+  const restoreOriginalTranscript = () => {
+    setTranscript(originalTranscript);
+    setPlan(null);
+  };
+
   return (
     <main className="app-shell">
       <div className="ambient-layer" aria-hidden="true">
@@ -222,7 +257,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v1.6</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v1.7</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -284,6 +319,18 @@ function App() {
           </div>
         </div>
 
+        {hasEditableTranscript && (
+          <TranscriptEditor
+            onCancel={restoreOriginalTranscript}
+            onSave={saveEditedTranscript}
+            onTextChange={(value) => {
+              setTranscript(value);
+              setPlan(null);
+            }}
+            text={transcript}
+          />
+        )}
+
         <EnergySelector energy={energy} onChange={setEnergy} />
 
         {canOrganize && (
@@ -344,6 +391,53 @@ function EnergySelector({
             {option.label}
           </button>
         ))}
+      </div>
+    </section>
+  );
+}
+
+function TranscriptEditor({
+  onCancel,
+  onSave,
+  onTextChange,
+  text,
+}: {
+  onCancel: () => void;
+  onSave: () => void;
+  onTextChange: (value: string) => void;
+  text: string;
+}) {
+  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+
+  React.useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [text]);
+
+  return (
+    <section className="editor-card" aria-label="文字起こし編集">
+      <div className="editor-header">
+        <span>Editable Transcript</span>
+        <strong>AI整理前に修正できます</strong>
+      </div>
+      <textarea
+        aria-label="認識されたテキストを編集"
+        className="transcript-editor"
+        onChange={(event) => onTextChange(event.target.value)}
+        placeholder="AI整理へ渡す内容をここで修正できます。"
+        ref={textareaRef}
+        rows={4}
+        value={text}
+      />
+      <div className="editor-actions">
+        <button className="secondary-button" onClick={onCancel} type="button">
+          元に戻す
+        </button>
+        <button className="primary-button" disabled={!text.trim()} onClick={onSave} type="button">
+          修正を保存
+        </button>
       </div>
     </section>
   );

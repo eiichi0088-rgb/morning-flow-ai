@@ -83,15 +83,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\git-release.ps1
 
 Developer Mode Marker
 
-現在バージョン: Version 1.6
+現在バージョン: Version 1.7
 
-次回予定バージョン: Version 1.7
+次回予定バージョン: Version 1.8
 
 未実装機能:
 
 - 振り返り内容のAI API連携強化
 - 計画履歴一覧
-- タスク編集
+- タスク並び替え
 - 通知・リマインド
 - クラウド保存
 - AIコーチ提案の履歴分析
@@ -105,8 +105,7 @@ Developer Mode Marker
 
 ## 今後のロードマップ
 
-- Version 1.7: タスク編集と並び替え
-- Version 1.8: 朝のテンプレート提案
+- Version 1.8: タスク並び替えと朝のテンプレート提案
 - Version 1.9: 通知・リマインド
 - Version 2.0: クラウド保存と複数端末同期
 

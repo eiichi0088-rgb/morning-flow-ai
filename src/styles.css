@@ -586,6 +586,80 @@ h1 {
   color: rgba(255, 255, 255, 0.94);
 }
 
+.editor-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.05)),
+    rgba(255, 255, 255, 0.04);
+  box-shadow:
+    0 18px 52px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(22px);
+}
+
+.editor-header {
+  display: grid;
+  gap: 4px;
+}
+
+.editor-header span {
+  color: rgba(226, 235, 245, 0.62);
+  font-size: 0.74rem;
+  font-weight: 840;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.editor-header strong {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.98rem;
+}
+
+.transcript-editor {
+  width: 100%;
+  min-height: 132px;
+  max-height: none;
+  resize: none;
+  overflow: hidden;
+  padding: 15px;
+  border: 1px solid rgba(223, 247, 255, 0.18);
+  border-radius: 16px;
+  outline: none;
+  color: rgba(255, 255, 255, 0.94);
+  caret-color: #f7e7be;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025)),
+    rgba(2, 6, 14, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.03);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.72;
+  white-space: pre-wrap;
+}
+
+.transcript-editor:focus {
+  border-color: rgba(247, 231, 190, 0.42);
+  box-shadow:
+    0 0 0 3px rgba(247, 231, 190, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.transcript-editor::placeholder {
+  color: rgba(226, 235, 245, 0.42);
+}
+
+.editor-actions {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 10px;
+}
+
 .energy-card,
 .coach-card {
   display: grid;
