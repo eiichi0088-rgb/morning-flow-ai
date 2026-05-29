@@ -1063,6 +1063,147 @@ h1 {
   line-height: 1.45;
 }
 
+.calendar-add-button,
+.calendar-download-button,
+.calendar-link {
+  min-height: 50px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 16px;
+  font-size: 0.94rem;
+  font-weight: 840;
+  transition:
+    transform 160ms ease,
+    border-color 180ms ease,
+    background 180ms ease,
+    opacity 180ms ease;
+}
+
+.calendar-add-button {
+  width: 100%;
+  margin-top: 12px;
+  border: 1px solid rgba(223, 247, 255, 0.22);
+  color: rgba(247, 251, 255, 0.94);
+  background:
+    linear-gradient(135deg, rgba(223, 247, 255, 0.14), rgba(247, 231, 190, 0.08)),
+    rgba(255, 255, 255, 0.045);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 14px 34px rgba(0, 0, 0, 0.16);
+}
+
+.calendar-add-button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.calendar-add-button:not(:disabled):active,
+.calendar-download-button:active,
+.calendar-link:active {
+  transform: scale(0.985);
+}
+
+.calendar-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 16% 0%, rgba(223, 247, 255, 0.13), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025)),
+    rgba(2, 6, 14, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 18px 46px rgba(0, 0, 0, 0.18);
+}
+
+.calendar-panel-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.calendar-panel-header span {
+  color: rgba(223, 247, 255, 0.62);
+  font-size: 0.72rem;
+  font-weight: 820;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.calendar-panel-header strong {
+  color: #f7fbff;
+  font-size: 1rem;
+}
+
+.calendar-date,
+.calendar-empty {
+  margin: 0;
+  color: rgba(232, 240, 248, 0.72);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.calendar-event-list {
+  display: grid;
+  gap: 9px;
+}
+
+.calendar-event {
+  display: grid;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 15px;
+  background: rgba(2, 6, 14, 0.24);
+}
+
+.calendar-event time {
+  display: block;
+  margin-bottom: 4px;
+  color: #dff7ff;
+  font-size: 0.84rem;
+  font-weight: 850;
+}
+
+.calendar-event strong {
+  display: block;
+  color: rgba(247, 251, 255, 0.94);
+  font-size: 0.98rem;
+  line-height: 1.4;
+}
+
+.calendar-event p {
+  margin: 5px 0 0;
+  color: rgba(232, 240, 248, 0.62);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.calendar-link {
+  width: 100%;
+  border: 1px solid rgba(223, 247, 255, 0.16);
+  color: rgba(247, 251, 255, 0.9);
+  background: rgba(255, 255, 255, 0.055);
+  text-decoration: none;
+}
+
+.calendar-download-button {
+  width: 100%;
+  border: 0;
+  color: #11151d;
+  background:
+    linear-gradient(135deg, #ffffff 0%, #dff7ff 52%, #f5e3bd 100%);
+  box-shadow:
+    0 14px 36px rgba(223, 247, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.76);
+}
+
 .advice-list li {
   display: flex;
   gap: 8px;

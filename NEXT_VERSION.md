@@ -1,6 +1,6 @@
 # NEXT VERSION
 
-次回予定バージョン: Version 1.9
+次回予定バージョン: Version 2.0
 
 ## 開発テーマ候補
 

@@ -4,9 +4,12 @@ import {
   ArrowRight,
   Brain,
   CalendarClock,
+  CalendarPlus,
   CheckCircle2,
   ChevronRight,
   Compass,
+  Download,
+  ExternalLink,
   Flag,
   HeartPulse,
   Lightbulb,
@@ -66,6 +69,15 @@ const sampleTranscript =
   '今日は朝9時から仕込みをして、11時から14時まで昼営業。売上目標を達成したい。15時に銀行で手続き、17時に買い物。家族との時間も取りたい。夜22時半にジムへ行って30分運動したい。銀行の営業時間に間に合うように注意したい。';
 
 const draftStorageKey = 'morning-flow-ai:transcript-draft:v1';
+
+type CalendarEvent = {
+  id: string;
+  title: string;
+  start: Date;
+  end: Date;
+  memo: string;
+  sourceTime: string;
+};
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
   { label: '✓ 完了', value: 'done' },
@@ -257,7 +269,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v1.8</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v1.9</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -577,6 +589,9 @@ function ReflectionView({
 }
 
 function PlanView({ plan }: { plan: MorningPlan }) {
+  const [isCalendarOpen, setIsCalendarOpen] = React.useState(false);
+  const calendarEvents = React.useMemo(() => createCalendarEvents(plan), [plan]);
+
   return (
     <section className="plan-stack" aria-label="AI整理結果">
       <PlanSection icon={<Flag size={18} />} title="今日の目的">
@@ -628,6 +643,16 @@ function PlanView({ plan }: { plan: MorningPlan }) {
             </div>
           ))}
         </div>
+        <button
+          className="calendar-add-button"
+          disabled={!calendarEvents.length}
+          onClick={() => setIsCalendarOpen((current) => !current)}
+          type="button"
+        >
+          <CalendarPlus size={19} />
+          カレンダーへ追加
+        </button>
+        {isCalendarOpen && <CalendarExportPanel events={calendarEvents} />}
       </PlanSection>
 
       <PlanSection icon={<Lightbulb size={18} />} title="AIアドバイス">
@@ -641,6 +666,67 @@ function PlanView({ plan }: { plan: MorningPlan }) {
         </ul>
       </PlanSection>
     </section>
+  );
+}
+
+function CalendarExportPanel({ events }: { events: CalendarEvent[] }) {
+  if (!events.length) {
+    return (
+      <div className="calendar-panel">
+        <div className="calendar-panel-header">
+          <span>Calendar Export</span>
+          <strong>登録できる予定がありません</strong>
+        </div>
+        <p className="calendar-empty">
+          タイムスケジュールに「9:00」「11:00〜14:00」のような時刻が入ると予定化できます。
+        </p>
+      </div>
+    );
+  }
+
+  const dateLabel = events[0].start.toLocaleDateString('ja-JP', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  });
+
+  return (
+    <div className="calendar-panel" aria-label="登録する予定を確認">
+      <div className="calendar-panel-header">
+        <span>Calendar Export</span>
+        <strong>登録する予定を確認</strong>
+      </div>
+
+      <p className="calendar-date">{dateLabel} の予定として作成します</p>
+
+      <div className="calendar-event-list">
+        {events.map((event) => (
+          <article className="calendar-event" key={event.id}>
+            <div>
+              <time dateTime={event.start.toISOString()}>
+                {formatEventTime(event.start)} - {formatEventTime(event.end)}
+              </time>
+              <strong>{event.title}</strong>
+              <p>{event.memo}</p>
+            </div>
+            <a
+              className="calendar-link"
+              href={createGoogleCalendarUrl(event)}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Googleで開く
+              <ExternalLink size={15} />
+            </a>
+          </article>
+        ))}
+      </div>
+
+      <button className="calendar-download-button" onClick={() => downloadIcs(events)} type="button">
+        <Download size={18} />
+        Appleカレンダー用ファイルを保存
+      </button>
+    </div>
   );
 }
 
@@ -686,6 +772,123 @@ function CategoryColumn({ title, items }: { title: string; items: string[] }) {
       )}
     </div>
   );
+}
+
+function createCalendarEvents(plan: MorningPlan): CalendarEvent[] {
+  const today = new Date();
+  today.setSeconds(0, 0);
+
+  return plan.schedule
+    .map((item, index) => {
+      const range = parseScheduleTime(item.time);
+      if (!range) return null;
+
+      const start = new Date(today);
+      start.setHours(Math.floor(range.startMinutes / 60), range.startMinutes % 60, 0, 0);
+
+      const endMinutes = range.endMinutes ?? range.startMinutes + 60;
+      const end = new Date(today);
+      end.setHours(Math.floor(endMinutes / 60), endMinutes % 60, 0, 0);
+      if (end <= start) {
+        end.setTime(start.getTime() + 60 * 60 * 1000);
+      }
+
+      const title = item.task.trim() || 'MORNING FLOW AI 予定';
+
+      return {
+        id: `${index}-${item.time}-${title}`,
+        title,
+        start,
+        end,
+        sourceTime: item.time,
+        memo: `MORNING FLOW AIで整理した予定: ${item.time} ${title}\n今日の目的: ${plan.purpose}`,
+      };
+    })
+    .filter((event): event is CalendarEvent => Boolean(event));
+}
+
+function parseScheduleTime(timeText: string) {
+  const matches = Array.from(
+    timeText
+      .replace(/：/g, ':')
+      .matchAll(/(\d{1,2})(?::(\d{2})|時(?:\s*(\d{1,2})\s*分?)?)/g),
+  );
+
+  const times = matches
+    .map((match) => {
+      const hour = Number(match[1]);
+      const minute = Number(match[2] ?? match[3] ?? 0);
+      if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+      return hour * 60 + minute;
+    })
+    .filter((minutes): minutes is number => minutes !== null);
+
+  if (!times.length) return null;
+
+  return {
+    startMinutes: times[0],
+    endMinutes: times[1],
+  };
+}
+
+function createGoogleCalendarUrl(event: CalendarEvent) {
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    dates: `${toCalendarTimestamp(event.start)}/${toCalendarTimestamp(event.end)}`,
+    details: event.memo,
+    text: event.title,
+  });
+
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+function downloadIcs(events: CalendarEvent[]) {
+  const now = toCalendarTimestamp(new Date());
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//MORNING FLOW AI//Calendar Export//JA',
+    'CALSCALE:GREGORIAN',
+    ...events.flatMap((event, index) => [
+      'BEGIN:VEVENT',
+      `UID:morning-flow-ai-${Date.now()}-${index}@local`,
+      `DTSTAMP:${now}`,
+      `DTSTART:${toCalendarTimestamp(event.start)}`,
+      `DTEND:${toCalendarTimestamp(event.end)}`,
+      `SUMMARY:${escapeIcsText(event.title)}`,
+      `DESCRIPTION:${escapeIcsText(event.memo)}`,
+      'END:VEVENT',
+    ]),
+    'END:VCALENDAR',
+  ];
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'morning-flow-ai-schedule.ics';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function toCalendarTimestamp(date: Date) {
+  return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+}
+
+function escapeIcsText(value: string) {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/\n/g, '\\n')
+    .replace(/,/g, '\\,')
+    .replace(/;/g, '\\;');
+}
+
+function formatEventTime(date: Date) {
+  return date.toLocaleTimeString('ja-JP', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function addCarryoverToPlan(plan: MorningPlan, carriedTodos: string[]): MorningPlan {
