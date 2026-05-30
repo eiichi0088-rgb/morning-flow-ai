@@ -45,7 +45,9 @@ import {
 } from './services/reflectionStorage';
 import {
   createShoppingPlan,
+  formatShoppingItemLabel,
   groupShoppingItems,
+  parseShoppingItemInput,
   type ShoppingItem,
 } from './services/shoppingPlanner';
 import './styles.css';
@@ -478,12 +480,20 @@ function App() {
     const item = shoppingItems.find((currentItem) => currentItem.id === itemId);
     if (!item) return;
 
-    const nextName = window.prompt('商品名を編集してください', item.name)?.trim();
-    if (!nextName) return;
+    const nextText = window.prompt('商品名と数量を編集してください', formatShoppingItemLabel(item))?.trim();
+    if (!nextText) return;
+    const parsed = parseShoppingItemInput(nextText);
+    if (!parsed.name) return;
 
     setShoppingItems((current) =>
       current.map((currentItem) =>
-        currentItem.id === itemId ? { ...currentItem, name: nextName } : currentItem,
+        currentItem.id === itemId
+          ? {
+              ...currentItem,
+              name: parsed.name,
+              quantity: parsed.quantity,
+            }
+          : currentItem,
       ),
     );
     setShoppingUpdatedAt(new Date().toISOString());
@@ -511,6 +521,11 @@ function App() {
       await navigator.clipboard.writeText(shareText);
       setShoppingShareMessage('買い物リストをコピーしました。LINEに貼り付けて共有できます。');
     } catch (error) {
+      if (isShareCancelError(error)) {
+        setShoppingShareMessage('共有をキャンセルしました。');
+        return;
+      }
+
       console.error(error);
       setShoppingShareMessage('共有できませんでした。もう一度お試しください。');
     }
@@ -581,7 +596,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.4</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.5</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -852,7 +867,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.4</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.5</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
@@ -975,10 +990,10 @@ function ShoppingListPage({
                               onChange={() => onToggleItem(item.id)}
                               type="checkbox"
                             />
-                            <span>{item.name}</span>
+                            <span>{formatShoppingItemLabel(item)}</span>
                           </label>
                           <button
-                            aria-label={`${item.name}を編集`}
+                            aria-label={`${formatShoppingItemLabel(item)}を編集`}
                             className="shopping-icon-button"
                             onClick={() => onEditItem(item.id)}
                             type="button"
@@ -986,7 +1001,7 @@ function ShoppingListPage({
                             <Pencil size={17} />
                           </button>
                           <button
-                            aria-label={`${item.name}を削除`}
+                            aria-label={`${formatShoppingItemLabel(item)}を削除`}
                             className="shopping-icon-button shopping-delete-button"
                             onClick={() => onDeleteItem(item.id)}
                             type="button"
@@ -1676,12 +1691,17 @@ function formatShoppingShareText(items: ShoppingItem[]) {
   const groups = groupShoppingItems(items).filter((group) => group.items.length > 0);
   const body = groups
     .map((group) => {
-      const lines = group.items.map((item) => `・${item.name}`);
+      const lines = group.items.map((item) => `・${formatShoppingItemLabel(item)}`);
       return [`■ ${group.category}`, ...lines].join('\n');
     })
     .join('\n\n');
 
   return ['【今日の買い物リスト】', '', body || '買い物リストはまだありません。', '', '買い物よろしくお願いします。'].join('\n');
+}
+
+function isShareCancelError(error: unknown) {
+  if (!(error instanceof DOMException || error instanceof Error)) return false;
+  return error.name === 'AbortError' || /cancel|abort|キャンセル/i.test(error.message);
 }
 
 function preserveExistingPlan(previousPlan: MorningPlan, nextPlan: MorningPlan): MorningPlan {

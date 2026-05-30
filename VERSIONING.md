@@ -24,3 +24,9 @@
 - ZIP: morning-flow-ai-v2.4.zip
 - 次回予定: Version 2.5
 - release は build、ZIP作成、CHANGELOG確認、VERSION確認を通過した状態で完了扱いにする
+## Version 2.5 完了記録 - 2026-05-30
+
+- 画面表示: v2.5
+- ZIP: morning-flow-ai-v2.5.zip
+- 次回予定: Version 2.6
+- 買い物リストで数量・単位を保持し、共有キャンセルをエラー扱いしないように改善
