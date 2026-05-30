@@ -20,6 +20,8 @@ import {
   Mic,
   RefreshCw,
   Route,
+  Pencil,
+  Share2,
   ShoppingCart,
   Sparkles,
   Square,
@@ -135,6 +137,7 @@ function App() {
   const [shoppingItems, setShoppingItems] = React.useState<ShoppingItem[]>([]);
   const [shoppingUpdatedAt, setShoppingUpdatedAt] = React.useState('');
   const [shoppingError, setShoppingError] = React.useState('');
+  const [shoppingShareMessage, setShoppingShareMessage] = React.useState('');
   const [isShoppingOrganizing, setIsShoppingOrganizing] = React.useState(false);
   const [isShoppingResetDialogOpen, setIsShoppingResetDialogOpen] = React.useState(false);
   const [highlightedShoppingIds, setHighlightedShoppingIds] = React.useState<string[]>([]);
@@ -471,9 +474,46 @@ function App() {
     setShoppingUpdatedAt(new Date().toISOString());
   };
 
+  const editShoppingItem = (itemId: string) => {
+    const item = shoppingItems.find((currentItem) => currentItem.id === itemId);
+    if (!item) return;
+
+    const nextName = window.prompt('商品名を編集してください', item.name)?.trim();
+    if (!nextName) return;
+
+    setShoppingItems((current) =>
+      current.map((currentItem) =>
+        currentItem.id === itemId ? { ...currentItem, name: nextName } : currentItem,
+      ),
+    );
+    setShoppingUpdatedAt(new Date().toISOString());
+  };
+
   const deleteShoppingItem = (itemId: string) => {
     setShoppingItems((current) => current.filter((item) => item.id !== itemId));
     setShoppingUpdatedAt(new Date().toISOString());
+  };
+
+  const shareShoppingList = async () => {
+    const shareText = formatShoppingShareText(shoppingItems);
+    setShoppingShareMessage('');
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          text: shareText,
+          title: '今日の買い物リスト',
+        });
+        setShoppingShareMessage('共有メニューを開きました。LINEなどを選んで送れます。');
+        return;
+      }
+
+      await navigator.clipboard.writeText(shareText);
+      setShoppingShareMessage('買い物リストをコピーしました。LINEに貼り付けて共有できます。');
+    } catch (error) {
+      console.error(error);
+      setShoppingShareMessage('共有できませんでした。もう一度お試しください。');
+    }
   };
 
   const handleNextAction = () => {
@@ -523,22 +563,25 @@ function App() {
           onResetRequest={() => setIsShoppingResetDialogOpen(true)}
           onStartListening={startListening}
           onStopListening={stopListening}
+          onEditItem={editShoppingItem}
           onTextChange={(value) => {
             setShoppingText(value);
             setShoppingError('');
           }}
           onDeleteItem={deleteShoppingItem}
+          onShare={shareShoppingList}
           onToggleItem={toggleShoppingItem}
           resultText={shoppingResultText}
           savedText={originalShoppingText}
           text={shoppingText}
           updatedAt={shoppingUpdatedAt}
+          shareMessage={shoppingShareMessage}
         />
       ) : (
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.3</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.4</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -750,10 +793,13 @@ function ShoppingListPage({
   onStartListening,
   onStopListening,
   onDeleteItem,
+  onEditItem,
+  onShare,
   onTextChange,
   onToggleItem,
   resultText,
   savedText,
+  shareMessage,
   text,
   updatedAt,
 }: {
@@ -773,10 +819,13 @@ function ShoppingListPage({
   onStartListening: () => void;
   onStopListening: () => void;
   onDeleteItem: (itemId: string) => void;
+  onEditItem: (itemId: string) => void;
+  onShare: () => void;
   onTextChange: (value: string) => void;
   onToggleItem: (itemId: string) => void;
   resultText: string;
   savedText: string;
+  shareMessage: string;
   text: string;
   updatedAt: string;
 }) {
@@ -803,7 +852,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.3</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.4</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
@@ -882,7 +931,7 @@ function ShoppingListPage({
           type="button"
         >
           <Brain size={21} />
-          {isOrganizing ? 'AIが買い物リストを整理中…' : items.length ? 'この内容をリストに反映' : 'AIで整理する'}
+          {isOrganizing ? '買い物リストを整理中…' : '買い物リストを整理する'}
           {isOrganizing ? <Loader2 className="button-spinner" size={18} /> : <Sparkles size={18} />}
         </button>
       </section>
@@ -899,6 +948,11 @@ function ShoppingListPage({
               <strong>{completedCount}/{items.length} 完了</strong>
               {updatedLabel && <span>最終更新 {updatedLabel}</span>}
             </div>
+            <button className="shopping-share-button" type="button" onClick={onShare}>
+              <Share2 size={18} />
+              家族に共有
+            </button>
+            {shareMessage && <p className="shopping-share-message">{shareMessage}</p>}
             <div className="shopping-category-list">
               {groups.map((group) => (
                 <div className="shopping-category" key={group.category}>
@@ -924,8 +978,16 @@ function ShoppingListPage({
                             <span>{item.name}</span>
                           </label>
                           <button
+                            aria-label={`${item.name}を編集`}
+                            className="shopping-icon-button"
+                            onClick={() => onEditItem(item.id)}
+                            type="button"
+                          >
+                            <Pencil size={17} />
+                          </button>
+                          <button
                             aria-label={`${item.name}を削除`}
-                            className="shopping-delete-button"
+                            className="shopping-icon-button shopping-delete-button"
                             onClick={() => onDeleteItem(item.id)}
                             type="button"
                           >
@@ -1608,6 +1670,18 @@ function CategoryColumn({ title, items }: { title: string; items: string[] }) {
       )}
     </div>
   );
+}
+
+function formatShoppingShareText(items: ShoppingItem[]) {
+  const groups = groupShoppingItems(items).filter((group) => group.items.length > 0);
+  const body = groups
+    .map((group) => {
+      const lines = group.items.map((item) => `・${item.name}`);
+      return [`■ ${group.category}`, ...lines].join('\n');
+    })
+    .join('\n\n');
+
+  return ['【今日の買い物リスト】', '', body || '買い物リストはまだありません。', '', '買い物よろしくお願いします。'].join('\n');
 }
 
 function preserveExistingPlan(previousPlan: MorningPlan, nextPlan: MorningPlan): MorningPlan {

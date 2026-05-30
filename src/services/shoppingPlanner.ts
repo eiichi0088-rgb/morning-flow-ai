@@ -1,11 +1,8 @@
 export const shoppingCategories = [
-  '食品・調味料',
-  '野菜・果物',
-  '肉・魚・冷凍食品',
+  '食品',
   '飲み物',
   '日用品',
-  '店舗・仕込み関連',
-  '家族・子供用品',
+  '子供用品',
   'ジム・外出用品',
   'その他',
 ] as const;
@@ -31,50 +28,38 @@ type CategoryRule = {
 };
 
 const categoryAliases: Record<string, ShoppingCategory> = {
-  食品: '食品・調味料',
-  '肉・魚': '肉・魚・冷凍食品',
+  '食品・調味料': '食品',
+  '野菜・果物': '食品',
+  '肉・魚・冷凍食品': '食品',
+  '店舗・仕込み関連': '食品',
+  '家族・子供用品': '子供用品',
 };
 
-const contextRules: CategoryRule[] = [
+const localCategoryRules: CategoryRule[] = [
   {
-    category: '店舗・仕込み関連',
-    patterns: [
-      /店舗|店用|業務用|仕込み|営業用|厨房|ラーメン/,
-      /チャーシュー用|替玉用|替え玉用|スープ用|仕込み用/,
-      /ネギ\s*\d+\s*(kg|キロ)|\d+\s*(kg|キロ)\s*ネギ/,
-      /紅しょうが|紅生姜|チャーシュー|替玉|替え玉|麺/,
-    ],
-  },
-  {
-    category: '家族・子供用品',
-    patterns: [/娘|息子|子供|こども|子ども|チーちゃん|アズキ|家族|学校|保育|子供用|こども用|子ども用/],
+    category: '子供用品',
+    patterns: [/子供|こども|子ども|娘|息子|おむつ|オムツ|ベビー|学校|保育|チーちゃん|アズキ|子供用|こども用|子ども用/],
   },
   {
     category: 'ジム・外出用品',
-    patterns: [/ジム用|運動用|外出用|トレーニング用|プロテイン|スポーツ|水筒|ジム|運動/],
-  },
-];
-
-const itemRules: CategoryRule[] = [
-  {
-    category: '日用品',
-    patterns: [/洗剤|ラップ|トイレットペーパー|ティッシュ|キッチンペーパー|ゴミ袋|電池|掃除|シャンプー|石鹸|せっけん/],
-  },
-  {
-    category: '野菜・果物',
-    patterns: [/ネギ|ねぎ|玉ねぎ|玉葱|人参|にんじん|じゃがいも|キャベツ|レタス|トマト|きゅうり|りんご|バナナ|野菜|果物/],
-  },
-  {
-    category: '肉・魚・冷凍食品',
-    patterns: [/豚肉|牛肉|鶏肉|肉|魚|刺身|鮭|さば|サバ|まぐろ|ツナ|冷凍|ハム|ベーコン/],
-  },
-  {
-    category: '食品・調味料',
-    patterns: [/牛乳|卵|たまご|パン|米|ご飯|チーズ|ヨーグルト|豆腐|納豆|調味料|砂糖|塩|醤油|味噌|しょうが|生姜|お菓子|食品/],
+    patterns: [/ジム|運動|外出|プロテイン|タオル|水筒|スポーツ|トレーニング|着替え|汗拭き/],
   },
   {
     category: '飲み物',
-    patterns: [/水|お茶|茶|コーヒー|ジュース|飲み物|ドリンク|炭酸/],
+    patterns: [/水|ミネラルウォーター|お茶|茶|コーヒー|珈琲|ジュース|飲み物|ドリンク|炭酸/],
+  },
+  {
+    category: '日用品',
+    patterns: [/洗剤|ラップ|トイレットペーパー|ティッシュ|キッチンペーパー|ゴミ袋|電池|掃除|シャンプー|石鹸|せっけん|歯ブラシ|歯磨き/],
+  },
+  {
+    category: '食品',
+    patterns: [
+      /卵|たまご|パン|米|ご飯|チーズ|牛乳|豆乳|ヨーグルト|豆腐|納豆|調味料|砂糖|塩|醤油|味噌|しょうが|生姜|お菓子/,
+      /ネギ|ねぎ|玉ねぎ|玉葱|人参|にんじん|じゃがいも|キャベツ|レタス|トマト|きゅうり|りんご|バナナ|野菜|果物/,
+      /豚肉|牛肉|鶏肉|肉|魚|刺身|鮭|さば|サバ|まぐろ|ツナ|冷凍|ハム|ベーコン/,
+      /パスタ|うどん|そば|素麺|そうめん|カップ麺|インスタントラーメン|ラーメン|中華麺|麺/,
+    ],
   },
 ];
 
@@ -94,8 +79,7 @@ export async function createShoppingPlan(
 
   const removeMode = /消して|削除|外して|いらない|不要/.test(instruction);
   if (removeMode) {
-    const detectedItems = extractShoppingItems(instruction);
-    const removeNames = new Set(detectedItems.map((item) => normalizeName(item)));
+    const removeNames = new Set(extractShoppingItems(instruction).map((item) => normalizeName(item)));
     return {
       items: normalizedCurrentItems.filter((item) => !removeNames.has(normalizeName(item.name))),
       updatedAt: new Date().toISOString(),
@@ -124,13 +108,7 @@ export function groupShoppingItems(items: ShoppingItem[]) {
 export function classifyShoppingItem(name: string): ShoppingCategory {
   const itemText = normalizeForMatching(name);
 
-  for (const rule of contextRules) {
-    if (rule.patterns.some((pattern) => pattern.test(itemText))) {
-      return rule.category;
-    }
-  }
-
-  for (const rule of itemRules) {
+  for (const rule of localCategoryRules) {
     if (rule.patterns.some((pattern) => pattern.test(itemText))) {
       return rule.category;
     }
@@ -187,7 +165,7 @@ function mergeAiItems(
     const normalized = normalizeName(name);
     if (!normalized) return;
 
-    const category = shoppingCategories.includes(aiItem.category) ? aiItem.category : 'その他';
+    const category = normalizeCategory(aiItem.category);
     const existing = existingByName.get(normalized);
     if (existing) {
       existing.category = category;
@@ -195,7 +173,7 @@ function mergeAiItems(
     }
 
     const item: ShoppingItem = {
-      id: createShoppingItemId(name),
+      id: createShoppingItemId(),
       name,
       category,
       completed: false,
@@ -235,17 +213,25 @@ function cleanShoppingItemName(item: string) {
 function normalizeStoredItem(item: ShoppingItem): ShoppingItem {
   return {
     ...item,
-    category: categoryAliases[item.category] ?? item.category,
-    id: item.id || createShoppingItemId(item.name),
+    category: normalizeCategory(item.category),
+    id: item.id?.startsWith('shopping-') ? item.id : createShoppingItemId(),
   };
 }
 
+function normalizeCategory(category: string): ShoppingCategory {
+  if (shoppingCategories.includes(category as ShoppingCategory)) return category as ShoppingCategory;
+  return categoryAliases[category] ?? 'その他';
+}
+
 function sortShoppingItems(items: ShoppingItem[]) {
-  return items.map((item, index) => ({ item, index })).sort((a, b) => {
-    const categoryOrder = shoppingCategories.indexOf(a.item.category) - shoppingCategories.indexOf(b.item.category);
-    if (categoryOrder !== 0) return categoryOrder;
-    return a.index - b.index;
-  }).map(({ item }) => item);
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const categoryOrder = shoppingCategories.indexOf(a.item.category) - shoppingCategories.indexOf(b.item.category);
+      if (categoryOrder !== 0) return categoryOrder;
+      return a.index - b.index;
+    })
+    .map(({ item }) => item);
 }
 
 function normalizeForMatching(value: string) {
@@ -256,9 +242,9 @@ function normalizeName(name: string) {
   return normalizeForMatching(name).replace(/[。、,，/／・]/g, '');
 }
 
-function createShoppingItemId(name: string) {
+function createShoppingItemId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return `shopping-${crypto.randomUUID()}`;
   }
-  return `shopping-${Date.now()}-${Math.random().toString(36).slice(2)}-${normalizeName(name)}`;
+  return `shopping-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }

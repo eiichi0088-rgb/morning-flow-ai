@@ -3,13 +3,10 @@ import { readJsonBody, sendJson } from './openai-plan-handler.mjs';
 const defaultShoppingModel = 'gpt-4o-mini';
 
 export const shoppingCategories = [
-  '食品・調味料',
-  '野菜・果物',
-  '肉・魚・冷凍食品',
+  '食品',
   '飲み物',
   '日用品',
-  '店舗・仕込み関連',
-  '家族・子供用品',
+  '子供用品',
   'ジム・外出用品',
   'その他',
 ];
@@ -67,14 +64,19 @@ export async function handleShoppingRequest(request, response) {
 export async function createShoppingPlanFromTranscript(text, currentItems = []) {
   const systemText = [
     'You are MORNING FLOW AI shopping organizer.',
-    'Classify a Japanese shopping list for a user who runs a food shop and also buys household and family items.',
+    'Classify Japanese shopping items into simple categories anyone can use.',
     'Return only JSON that matches the schema.',
     'Return the complete merged shopping list: include relevant existing items plus the new items.',
     'Preserve original item names and quantities exactly as much as possible.',
     'Merge duplicates into one item.',
-    'Use context such as "for shop", "for prep", "for kids", "for gym", "for daughter", or quantities like 10kg.',
-    'If an item seems shop/prep/business related, choose 店舗・仕込み関連.',
-    'If an item seems household/family normal use, choose the normal category.',
+    'Use only these categories: 食品, 飲み物, 日用品, 子供用品, ジム・外出用品, その他.',
+    'Do not create categories for store use, household use, office use, or prep use.',
+    'Do not classify an item as store use just because it contains 麺.',
+    '牛乳, 卵, パスタ, うどん, そば, 素麺, カップ麺, and インスタントラーメン are 食品.',
+    '水, お茶, コーヒー, ジュース, and ミネラルウォーター are 飲み物 unless clearly gym/outdoor use.',
+    '洗剤, ラップ, トイレットペーパー, and ティッシュ are 日用品.',
+    'プロテイン, タオル, 水筒, and gym items are ジム・外出用品.',
+    '子供, 娘, 息子, おむつ, and school/kids items are 子供用品.',
     'If unsure, choose その他 rather than forcing a category.',
   ].join(' ');
 

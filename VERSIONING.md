@@ -17,3 +17,10 @@
 15. build失敗、release失敗、VERSION確認失敗の状態ではpushしない。
 16. ZIPはローカル安定版バックアップとして保存し、GitHubへ含めない。
 17. GitHub認証が未完了の場合は、GitHub Desktopでサインインしてpushを1回完了してから自動pushへ移行する。
+
+## Version 2.4 完了記録 - 2026-05-30
+
+- 画面表示: v2.4
+- ZIP: morning-flow-ai-v2.4.zip
+- 次回予定: Version 2.5
+- release は build、ZIP作成、CHANGELOG確認、VERSION確認を通過した状態で完了扱いにする
