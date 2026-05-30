@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import {
   ArrowRight,
+  AlertTriangle,
   Brain,
   CalendarClock,
   CalendarPlus,
@@ -14,6 +15,7 @@ import {
   HeartPulse,
   Lightbulb,
   ListChecks,
+  Loader2,
   Mic,
   RefreshCw,
   Route,
@@ -116,6 +118,7 @@ function App() {
   const [captureMode, setCaptureMode] = React.useState<CaptureMode>('create');
   const [highlightedScheduleKeys, setHighlightedScheduleKeys] = React.useState<string[]>([]);
   const [isOrganizing, setIsOrganizing] = React.useState(false);
+  const [isResetDialogOpen, setIsResetDialogOpen] = React.useState(false);
   const [previousSnapshot, setPreviousSnapshot] = React.useState<MorningSnapshot | null>(null);
   const [reviewStatuses, setReviewStatuses] = React.useState<Record<string, ReviewStatus>>({});
   const [carriedTodos, setCarriedTodos] = React.useState<string[]>([]);
@@ -127,6 +130,12 @@ function App() {
   const resultText = [activeText, interimTranscript].filter(Boolean).join('\n');
   const canOrganize = Boolean(transcript.trim()) && !isListening && captureMode === 'create';
   const canUpdatePlan = Boolean(plan && updateInstruction.trim()) && !isListening;
+  const canUseNext = canOrganize || canUpdatePlan || Boolean(plan);
+  const nextButtonLabel = isOrganizing
+    ? canUpdatePlan
+      ? 'スケジュールを更新中…'
+      : 'AIが整理中…'
+    : '次へ進む';
   const hasEditableTranscript = Boolean(transcript.trim()) && !isListening && captureMode === 'create';
   const hasEditableUpdateInstruction = Boolean(plan && updateInstruction.trim()) && !isListening;
 
@@ -237,6 +246,7 @@ function App() {
 
   const resetTranscript = () => {
     recognition?.abort();
+    setIsResetDialogOpen(false);
     setTranscript('');
     setOriginalTranscript('');
     setUpdateInstruction('');
@@ -281,7 +291,8 @@ function App() {
         saveMorningSnapshot(transcript, planWithCarryover);
       })
       .catch((reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : 'AI整理に失敗しました。');
+        console.error(reason);
+        setError('うまく処理できませんでした。もう一度お試しください。');
       })
       .finally(() => {
         setIsOrganizing(false);
@@ -309,7 +320,8 @@ function App() {
         saveMorningSnapshot(transcript, mergedPlan);
       })
       .catch((reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : 'スケジュール更新に失敗しました。');
+        console.error(reason);
+        setError('うまく処理できませんでした。もう一度お試しください。');
       })
       .finally(() => {
         setIsOrganizing(false);
@@ -334,6 +346,8 @@ function App() {
   };
 
   const handleNextAction = () => {
+    if (isOrganizing) return;
+
     if (canUpdatePlan) {
       applyScheduleUpdate();
       return;
@@ -396,6 +410,11 @@ function App() {
         </div>
 
         {error && <p className="error-message">{error}</p>}
+        {isOrganizing && (
+          <p className="loading-message" role="status" aria-live="polite">
+            AIが整理中です。少しだけお待ちください。
+          </p>
+        )}
 
         {previousSnapshot && (
           <ReflectionView
@@ -485,7 +504,7 @@ function App() {
         {plan && <PlanView highlightedScheduleKeys={highlightedScheduleKeys} plan={plan} />}
 
         <div className="action-row">
-          <button className="secondary-button" type="button" onClick={resetTranscript}>
+          <button className="secondary-button" type="button" onClick={() => setIsResetDialogOpen(true)}>
             <RefreshCw size={19} />
             やり直し
           </button>
@@ -496,15 +515,42 @@ function App() {
       </section>
       <div className="floating-next-bar" aria-label="次の操作">
         <button
-          className="primary-button floating-next-button"
+          className={`primary-button floating-next-button ${isOrganizing ? 'is-loading' : ''}`}
           type="button"
-          disabled={!canOrganize && !plan}
+          disabled={isOrganizing || !canUseNext}
           onClick={handleNextAction}
         >
-          次へ進む
-          <ArrowRight size={21} />
+          {nextButtonLabel}
+          {isOrganizing ? <Loader2 className="button-spinner" size={21} /> : <ArrowRight size={21} />}
         </button>
       </div>
+      {isResetDialogOpen && (
+        <div className="confirm-dialog-backdrop" role="presentation">
+          <section
+            aria-describedby="reset-dialog-description"
+            aria-labelledby="reset-dialog-title"
+            aria-modal="true"
+            className="confirm-dialog"
+            role="dialog"
+          >
+            <div className="confirm-dialog-icon" aria-hidden="true">
+              <AlertTriangle size={23} />
+            </div>
+            <h2 id="reset-dialog-title">本当に最初からやり直しますか？</h2>
+            <p id="reset-dialog-description">
+              現在の音声入力・AI整理結果・スケジュールは削除されます。
+            </p>
+            <div className="confirm-dialog-actions">
+              <button className="secondary-button" type="button" onClick={() => setIsResetDialogOpen(false)}>
+                キャンセル
+              </button>
+              <button className="danger-button" type="button" onClick={resetTranscript}>
+                やり直す
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
