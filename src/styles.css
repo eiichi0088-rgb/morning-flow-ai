@@ -1153,6 +1153,14 @@ h1 {
   line-height: 1.55;
 }
 
+.editor-live-note,
+.calendar-primary-note {
+  margin: 0;
+  color: rgba(223, 247, 255, 0.74);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
 .google-connect-card {
   display: flex;
   align-items: center;
@@ -1212,14 +1220,15 @@ h1 {
 
 .calendar-event-check {
   display: grid;
-  grid-template-columns: 22px 1fr;
-  gap: 10px;
+  grid-template-columns: 28px 1fr;
+  gap: 12px;
+  min-height: 56px;
   cursor: pointer;
 }
 
 .calendar-event-check input {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   margin-top: 2px;
   accent-color: #dff7ff;
 }
@@ -1255,10 +1264,13 @@ h1 {
 }
 
 .calendar-link {
-  width: 100%;
+  justify-self: end;
+  min-height: 36px;
+  padding: 0 12px;
   border: 1px solid rgba(223, 247, 255, 0.16);
   color: rgba(247, 251, 255, 0.9);
   background: rgba(255, 255, 255, 0.055);
+  font-size: 0.82rem;
   text-decoration: none;
 }
 

@@ -88,7 +88,7 @@ export async function insertGoogleCalendarEvents(
   accessToken: string,
   events: GoogleCalendarEventInput[],
 ) {
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Tokyo';
+  const timeZone = 'Asia/Tokyo';
 
   return Promise.all(
     events.map(async (event) => {
@@ -102,11 +102,11 @@ export async function insertGoogleCalendarEvents(
           summary: event.title,
           description: `${event.memo}\n\n優先度: ${event.priority}`,
           start: {
-            dateTime: event.start.toISOString(),
+            dateTime: toTokyoDateTime(event.start),
             timeZone,
           },
           end: {
-            dateTime: event.end.toISOString(),
+            dateTime: toTokyoDateTime(event.end),
             timeZone,
           },
           extendedProperties: {
@@ -127,6 +127,16 @@ export async function insertGoogleCalendarEvents(
       return response.json();
     }),
   );
+}
+
+function toTokyoDateTime(date: Date) {
+  const formatter = new Intl.DateTimeFormat('sv-SE', {
+    dateStyle: 'short',
+    hour12: false,
+    timeStyle: 'medium',
+    timeZone: 'Asia/Tokyo',
+  });
+  return formatter.format(date).replace(' ', 'T');
 }
 
 function loadGoogleIdentityServices() {

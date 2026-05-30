@@ -70,3 +70,16 @@ MORNING FLOW AI の各バージョンの変更内容を記録します。
 - READMEをVersion 2.0向けに更新
 - 画面表示を `v2.0` に更新
 - `morning-flow-ai-v2.0.zip` として保存
+
+## Version 2.1 - 2026-05-30
+
+- GoogleカレンダーURLに `ctz=Asia/Tokyo` を追加し、日本時間の予定がズレないように修正
+- GoogleカレンダーURLとICS出力で不要なUTC `Z` に依存しない日時形式へ変更
+- Google Calendar API直接登録でも `Asia/Tokyo` の日時として送信するように修正
+- 「次へ進む」ボタンでAI整理実行またはカレンダー登録エリアへ自然に移動できるように改善
+- Googleカレンダー登録UIで一括登録をメイン操作として明確化
+- 個別リンクを「編集して登録」の補助操作として整理
+- 予定選択チェックボックスに `id`、`label htmlFor`、`aria-label` を追加
+- 文字起こし編集中の内容がAI整理へ反映されることを明示
+- 画面表示を `v2.1` に更新
+- `morning-flow-ai-v2.1.zip` として保存

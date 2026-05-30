@@ -114,6 +114,7 @@ function App() {
   const [reviewStatuses, setReviewStatuses] = React.useState<Record<string, ReviewStatus>>({});
   const [carriedTodos, setCarriedTodos] = React.useState<string[]>([]);
   const [energy, setEnergy] = React.useState<EnergyMood>('normal');
+  const planAnchorRef = React.useRef<HTMLDivElement | null>(null);
 
   const isSupported = Boolean(SpeechRecognition);
   const resultText = [transcript, interimTranscript].filter(Boolean).join('\n');
@@ -267,6 +268,16 @@ function App() {
     setPlan(null);
   };
 
+  const handleNextAction = () => {
+    if (!plan && canOrganize) {
+      organizeMorning();
+      return;
+    }
+
+    const target = document.querySelector('.calendar-add-button, .calendar-panel') ?? planAnchorRef.current;
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
   return (
     <main className="app-shell">
       <div className="ambient-layer" aria-hidden="true">
@@ -278,7 +289,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.0</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.1</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -348,6 +359,7 @@ function App() {
               setTranscript(value);
               setPlan(null);
             }}
+            savedText={originalTranscript}
             text={transcript}
           />
         )}
@@ -367,6 +379,7 @@ function App() {
           </button>
         )}
 
+        <div ref={planAnchorRef} />
         {plan && <CoachCard plan={plan} />}
         {plan && <PlanView plan={plan} />}
 
@@ -381,7 +394,12 @@ function App() {
         </div>
       </section>
       <div className="floating-next-bar" aria-label="次の操作">
-        <button className="primary-button floating-next-button" type="button" disabled={!plan}>
+        <button
+          className="primary-button floating-next-button"
+          type="button"
+          disabled={!canOrganize && !plan}
+          onClick={handleNextAction}
+        >
           次へ進む
           <ArrowRight size={21} />
         </button>
@@ -423,14 +441,17 @@ function TranscriptEditor({
   onCancel,
   onSave,
   onTextChange,
+  savedText,
   text,
 }: {
   onCancel: () => void;
   onSave: () => void;
   onTextChange: (value: string) => void;
+  savedText: string;
   text: string;
 }) {
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const isDirty = text.trim() !== savedText.trim();
 
   React.useEffect(() => {
     const textarea = textareaRef.current;
@@ -445,6 +466,7 @@ function TranscriptEditor({
         <span>Editable Transcript</span>
         <strong>AI整理前に修正できます</strong>
       </div>
+      {isDirty && <p className="editor-live-note">編集中の内容はそのままAI整理に反映されます。</p>}
       <textarea
         aria-label="認識されたテキストを編集"
         className="transcript-editor"
@@ -808,11 +830,15 @@ function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
       )}
 
       <div className="calendar-event-list">
-        {events.map((event) => (
+        {events.map((event) => {
+          const checkboxId = `calendar-event-${event.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+          return (
           <article className="calendar-event" key={event.id}>
-            <label className="calendar-event-check">
+            <label className="calendar-event-check" htmlFor={checkboxId}>
               <input
+                aria-label={`${event.title}をGoogleカレンダー登録対象にする`}
                 checked={selectedEventIds.includes(event.id)}
+                id={checkboxId}
                 onChange={() => toggleEvent(event.id)}
                 type="checkbox"
               />
@@ -828,20 +854,26 @@ function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
             <a
               className="calendar-link"
               href={createGoogleCalendarUrl(event)}
+              aria-label={`${event.title}をGoogleカレンダーで編集して登録`}
               rel="noreferrer"
+              title="編集して登録"
               target="_blank"
             >
               Googleで開く
               <ExternalLink size={15} />
             </a>
           </article>
-        ))}
+          );
+        })}
       </div>
+
+      <p className="calendar-primary-note">メイン操作: 選択した予定をまとめてGoogleカレンダーへ登録します。</p>
 
       <button
         className="calendar-register-button"
         disabled={!accessToken || !selectedEvents.length || isRegistering}
         onClick={registerSelectedEvents}
+        aria-label="選択した予定をGoogleカレンダーへ一括登録"
         type="button"
       >
         <CalendarPlus size={18} />
@@ -1043,7 +1075,8 @@ function parseScheduleTime(timeText: string) {
 function createGoogleCalendarUrl(event: CalendarEvent) {
   const params = new URLSearchParams({
     action: 'TEMPLATE',
-    dates: `${toCalendarTimestamp(event.start)}/${toCalendarTimestamp(event.end)}`,
+    ctz: 'Asia/Tokyo',
+    dates: `${toLocalCalendarTimestamp(event.start)}/${toLocalCalendarTimestamp(event.end)}`,
     details: event.memo,
     text: event.title,
   });
@@ -1062,8 +1095,8 @@ function downloadIcs(events: CalendarEvent[]) {
       'BEGIN:VEVENT',
       `UID:morning-flow-ai-${Date.now()}-${index}@local`,
       `DTSTAMP:${now}`,
-      `DTSTART:${toCalendarTimestamp(event.start)}`,
-      `DTEND:${toCalendarTimestamp(event.end)}`,
+      `DTSTART;TZID=Asia/Tokyo:${toLocalCalendarTimestamp(event.start)}`,
+      `DTEND;TZID=Asia/Tokyo:${toLocalCalendarTimestamp(event.end)}`,
       `SUMMARY:${escapeIcsText(event.title)}`,
       `DESCRIPTION:${escapeIcsText(event.memo)}`,
       'END:VEVENT',
@@ -1083,6 +1116,16 @@ function downloadIcs(events: CalendarEvent[]) {
 
 function toCalendarTimestamp(date: Date) {
   return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+}
+
+function toLocalCalendarTimestamp(date: Date) {
+  const formatter = new Intl.DateTimeFormat('sv-SE', {
+    dateStyle: 'short',
+    hour12: false,
+    timeStyle: 'medium',
+    timeZone: 'Asia/Tokyo',
+  });
+  return formatter.format(date).replace(/[-: ]/g, '');
 }
 
 function escapeIcsText(value: string) {
