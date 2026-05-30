@@ -1,7 +1,7 @@
 export const shoppingCategories = [
-  '食品',
+  '食品・調味料',
   '野菜・果物',
-  '肉・魚',
+  '肉・魚・冷凍食品',
   '飲み物',
   '日用品',
   '店舗・仕込み関連',
@@ -25,37 +25,92 @@ export interface ShoppingPlan {
   updatedAt: string;
 }
 
+type CategoryRule = {
+  category: ShoppingCategory;
+  patterns: RegExp[];
+};
+
+const categoryAliases: Record<string, ShoppingCategory> = {
+  食品: '食品・調味料',
+  '肉・魚': '肉・魚・冷凍食品',
+};
+
+const contextRules: CategoryRule[] = [
+  {
+    category: '店舗・仕込み関連',
+    patterns: [
+      /店舗|店用|業務用|仕込み|営業用|厨房|ラーメン/,
+      /チャーシュー用|替玉用|替え玉用|スープ用|仕込み用/,
+      /ネギ\s*\d+\s*(kg|キロ)|\d+\s*(kg|キロ)\s*ネギ/,
+      /紅しょうが|紅生姜|チャーシュー|替玉|替え玉|麺/,
+    ],
+  },
+  {
+    category: '家族・子供用品',
+    patterns: [/娘|息子|子供|こども|子ども|チーちゃん|アズキ|家族|学校|保育|子供用|こども用|子ども用/],
+  },
+  {
+    category: 'ジム・外出用品',
+    patterns: [/ジム用|運動用|外出用|トレーニング用|プロテイン|スポーツ|水筒|ジム|運動/],
+  },
+];
+
+const itemRules: CategoryRule[] = [
+  {
+    category: '日用品',
+    patterns: [/洗剤|ラップ|トイレットペーパー|ティッシュ|キッチンペーパー|ゴミ袋|電池|掃除|シャンプー|石鹸|せっけん/],
+  },
+  {
+    category: '野菜・果物',
+    patterns: [/ネギ|ねぎ|玉ねぎ|玉葱|人参|にんじん|じゃがいも|キャベツ|レタス|トマト|きゅうり|りんご|バナナ|野菜|果物/],
+  },
+  {
+    category: '肉・魚・冷凍食品',
+    patterns: [/豚肉|牛肉|鶏肉|肉|魚|刺身|鮭|さば|サバ|まぐろ|ツナ|冷凍|ハム|ベーコン/],
+  },
+  {
+    category: '食品・調味料',
+    patterns: [/牛乳|卵|たまご|パン|米|ご飯|チーズ|ヨーグルト|豆腐|納豆|調味料|砂糖|塩|醤油|味噌|しょうが|生姜|お菓子|食品/],
+  },
+  {
+    category: '飲み物',
+    patterns: [/水|お茶|茶|コーヒー|ジュース|飲み物|ドリンク|炭酸/],
+  },
+];
+
 export async function createShoppingPlan(
   text: string,
   currentItems: ShoppingItem[] = [],
 ): Promise<ShoppingPlan> {
   const instruction = text.trim();
+  const normalizedCurrentItems = currentItems.map(normalizeStoredItem);
+
   if (!instruction) {
     return {
-      items: currentItems,
+      items: normalizedCurrentItems,
       updatedAt: new Date().toISOString(),
     };
   }
 
-  const existingByName = new Map(currentItems.map((item) => [normalizeName(item.name), item]));
+  const existingByName = new Map(normalizedCurrentItems.map((item) => [normalizeName(item.name), item]));
   const removeMode = /消して|削除|外して|いらない|不要/.test(instruction);
   const detectedItems = extractShoppingItems(instruction);
 
   if (removeMode) {
     const removeNames = new Set(detectedItems.map((item) => normalizeName(item)));
     return {
-      items: currentItems.filter((item) => !removeNames.has(normalizeName(item.name))),
+      items: normalizedCurrentItems.filter((item) => !removeNames.has(normalizeName(item.name))),
       updatedAt: new Date().toISOString(),
     };
   }
 
-  const nextItems = [...currentItems];
+  const nextItems = [...normalizedCurrentItems];
 
   detectedItems.forEach((name) => {
     const normalized = normalizeName(name);
     if (!normalized || existingByName.has(normalized)) return;
 
-    const category = categorizeShoppingItem(name, instruction);
+    const category = classifyShoppingItem(name);
     const item: ShoppingItem = {
       id: `${Date.now()}-${category}-${normalized}`,
       name,
@@ -75,68 +130,74 @@ export async function createShoppingPlan(
 }
 
 export function groupShoppingItems(items: ShoppingItem[]) {
+  const normalizedItems = items.map(normalizeStoredItem);
+
   return shoppingCategories
     .map((category) => ({
       category,
-      items: items.filter((item) => item.category === category),
+      items: normalizedItems.filter((item) => item.category === category),
     }))
     .filter((group) => group.items.length > 0);
 }
 
-function extractShoppingItems(text: string) {
-  const normalizedText = text
-    .replace(/買って|買う|買いたい|追加して|追加|入れて|お願い|あと|それと|それから/g, '、')
-    .replace(/も/g, '、')
-    .replace(/[。\n\r]/g, '、')
-    .replace(/\s+/g, '、');
+export function classifyShoppingItem(name: string): ShoppingCategory {
+  const itemText = normalizeForMatching(name);
 
-  return normalizedText
-    .split(/[、,，/／・]+/)
-    .map((item) => item.trim())
-    .map((item) => item.replace(/^(と|を|は|に|へ)+/, '').replace(/(です|ください|して)$/g, '').trim())
-    .filter((item) => item.length >= 1)
-    .filter((item) => !/買い物|リスト|予定|修正|削除|消して|外して/.test(item));
-}
+  for (const rule of contextRules) {
+    if (rule.patterns.some((pattern) => pattern.test(itemText))) {
+      return rule.category;
+    }
+  }
 
-function categorizeShoppingItem(name: string, fullText: string): ShoppingCategory {
-  const value = `${name} ${fullText}`;
-
-  if (/チャーシュー|仕込み|店舗|店|業務|営業|スープ|麺|ラーメン|餃子|厨房|テイクアウト/.test(value)) {
-    return '店舗・仕込み関連';
-  }
-  if (/子供|こども|娘|息子|お菓子|おやつ|学校|保育|家族/.test(value)) {
-    return '家族・子供用品';
-  }
-  if (/ジム|外出|水筒|タオル|プロテイン|スポーツ|移動|車/.test(value)) {
-    return 'ジム・外出用品';
-  }
-  if (/洗剤|ラップ|トイレット|ティッシュ|シャンプー|石鹸|せっけん|ゴミ袋|電池|掃除|日用品/.test(value)) {
-    return '日用品';
-  }
-  if (/水|お茶|茶|コーヒー|ジュース|飲み物|ドリンク|炭酸/.test(value)) {
-    return '飲み物';
-  }
-  if (/肉|魚|鶏|豚|牛|刺身|鮭|さば|サバ|まぐろ|ツナ|ハム|ベーコン/.test(value)) {
-    return '肉・魚';
-  }
-  if (/ネギ|ねぎ|玉ねぎ|玉葱|人参|にんじん|じゃがいも|キャベツ|レタス|トマト|きゅうり|りんご|バナナ|果物|野菜/.test(value)) {
-    return '野菜・果物';
-  }
-  if (/卵|たまご|パン|米|ご飯|牛乳|チーズ|ヨーグルト|食品|豆腐|納豆|調味料|砂糖|塩|醤油|味噌/.test(value)) {
-    return '食品';
+  for (const rule of itemRules) {
+    if (rule.patterns.some((pattern) => pattern.test(itemText))) {
+      return rule.category;
+    }
   }
 
   return 'その他';
 }
 
+function extractShoppingItems(text: string) {
+  const normalizedText = text
+    .replace(/買って|買う|買いたい|購入|追加して|追加|入れて|お願い|あと|それと|それから/g, '、')
+    .replace(/[。\n\r]/g, '、')
+    .replace(/\s*,\s*/g, '、');
+
+  return normalizedText
+    .split(/[、,，/／・]+/)
+    .map(cleanShoppingItemName)
+    .filter((item) => item.length >= 1)
+    .filter((item) => !/買い物|リスト|予定|修正|削除|消して|外して/.test(item));
+}
+
+function cleanShoppingItemName(item: string) {
+  return item
+    .trim()
+    .replace(/^(と|を|は|に|へ|も)+/, '')
+    .replace(/(です|ください|して)$/g, '')
+    .trim();
+}
+
+function normalizeStoredItem(item: ShoppingItem): ShoppingItem {
+  return {
+    ...item,
+    category: categoryAliases[item.category] ?? item.category,
+  };
+}
+
 function sortShoppingItems(items: ShoppingItem[]) {
-  return [...items].sort((a, b) => {
-    const categoryOrder = shoppingCategories.indexOf(a.category) - shoppingCategories.indexOf(b.category);
+  return items.map((item, index) => ({ item, index })).sort((a, b) => {
+    const categoryOrder = shoppingCategories.indexOf(a.item.category) - shoppingCategories.indexOf(b.item.category);
     if (categoryOrder !== 0) return categoryOrder;
-    return a.name.localeCompare(b.name, 'ja-JP');
-  });
+    return a.index - b.index;
+  }).map(({ item }) => item);
+}
+
+function normalizeForMatching(value: string) {
+  return value.replace(/\s/g, '').toLowerCase();
 }
 
 function normalizeName(name: string) {
-  return name.replace(/\s/g, '').toLowerCase();
+  return normalizeForMatching(name).replace(/[。、,，/／・]/g, '');
 }
