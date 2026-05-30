@@ -94,7 +94,7 @@ export async function loadEnvFile(root = process.cwd()) {
 
 export async function handlePlanRequest(request, response) {
   if (request.method !== 'POST') {
-    sendJson(response, 405, { message: 'POSTで送信してください。' });
+    sendJson(response, 405, { message: 'POST only.' });
     return;
   }
 
@@ -102,29 +102,53 @@ export async function handlePlanRequest(request, response) {
     const body = await readJsonBody(request);
     const transcript = String(body.transcript ?? '').trim();
     const energy = normalizeEnergy(body.energy);
+    const mode = body.mode === 'update' ? 'update' : 'create';
+    const currentPlan = body.currentPlan ?? null;
 
     if (!transcript) {
-      sendJson(response, 400, { message: '文字起こし内容が空です。' });
+      sendJson(response, 400, { message: 'Transcript is empty.' });
       return;
     }
 
     if (!process.env.OPENAI_API_KEY) {
       sendJson(response, 500, {
-        message: '.env に OPENAI_API_KEY を設定してください。',
+        message: 'Please set OPENAI_API_KEY in .env.',
       });
       return;
     }
 
-    const plan = await createPlanFromTranscript(transcript, energy);
+    const plan = await createPlanFromTranscript(transcript, energy, { currentPlan, mode });
     sendJson(response, 200, { plan });
   } catch (error) {
     sendJson(response, 500, {
-      message: error instanceof Error ? error.message : 'AI整理で問題が起きました。',
+      message: error instanceof Error ? error.message : 'Failed to organize the morning plan.',
     });
   }
 }
 
-export async function createPlanFromTranscript(transcript, energy = 'normal') {
+export async function createPlanFromTranscript(transcript, energy = 'normal', context = {}) {
+  const mode = context.mode === 'update' ? 'update' : 'create';
+  const currentPlan = context.currentPlan ?? null;
+  const systemText = [
+    'You are MORNING FLOW AI, a Japanese morning planning coach.',
+    'Return a concise Japanese day plan in the requested JSON schema.',
+    'Use the user transcript, energy level, and context to organize purpose, goals, todos, priorities, schedule, advice, categories, and coach.',
+    'If mode is update, integrate the new instruction into the current plan. Keep existing schedules and tasks unless the user clearly asks to change them.',
+    'Do not drop existing items when adding new items. Insert new schedule items at a reasonable time between existing items when possible.',
+  ].join(' ');
+  const userText = mode === 'update'
+    ? [
+        `Mode: update`,
+        `Morning energy: ${energy}`,
+        '',
+        'Current MORNING FLOW AI plan JSON:',
+        JSON.stringify(currentPlan, null, 2),
+        '',
+        'Additional or correction instruction:',
+        transcript,
+      ].join('\n')
+    : `Mode: create\nMorning energy: ${energy}\n\nTranscript:\n${transcript}`;
+
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
@@ -136,22 +160,11 @@ export async function createPlanFromTranscript(transcript, energy = 'normal') {
       input: [
         {
           role: 'system',
-          content: [
-            {
-              type: 'input_text',
-              text:
-                'あなたは朝の人生を導く日本語AIコーチです。ユーザーの文字起こしと朝の気分を読み、今日の目的、目標、TODO、優先順位、推奨タイムスケジュール、注意点を実用的に整理してください。さらに、今日の最重要ミッション、3つの集中項目、朝のアドバイス、3つ以内の成功条件を生成してください。気分が疲れている場合は予定を詰め込みすぎず、最重要に絞って提案してください。仕事・健康・家族・学習の4カテゴリーにも分類してください。入力にない事実は断定せず、必要な余白も提案してください。',
-            },
-          ],
+          content: [{ type: 'input_text', text: systemText }],
         },
         {
           role: 'user',
-          content: [
-            {
-              type: 'input_text',
-              text: `朝の気分: ${energy}\n\n文字起こし:\n${transcript}`,
-            },
-          ],
+          content: [{ type: 'input_text', text: userText }],
         },
       ],
       text: {
@@ -168,12 +181,12 @@ export async function createPlanFromTranscript(transcript, energy = 'normal') {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data?.error?.message ?? 'OpenAI APIの呼び出しに失敗しました。');
+    throw new Error(data?.error?.message ?? 'OpenAI API request failed.');
   }
 
   const text = data.output_text ?? extractOutputText(data);
   if (!text) {
-    throw new Error('OpenAI APIから整理結果を取得できませんでした。');
+    throw new Error('OpenAI API returned no plan text.');
   }
 
   return JSON.parse(text);
@@ -198,14 +211,14 @@ function readJsonBody(request) {
       body += chunk;
       if (body.length > 1_000_000) {
         request.destroy();
-        reject(new Error('入力が大きすぎます。'));
+        reject(new Error('Request body is too large.'));
       }
     });
     request.on('end', () => {
       try {
         resolve(body ? JSON.parse(body) : {});
       } catch {
-        reject(new Error('JSONの読み取りに失敗しました。'));
+        reject(new Error('Failed to parse JSON.'));
       }
     });
     request.on('error', reject);

@@ -88,6 +88,8 @@ type CalendarEvent = {
   sourceTime: string;
 };
 
+type CaptureMode = 'create' | 'update';
+
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
   { label: '✓ 完了', value: 'done' },
   { label: '△ 一部完了', value: 'partial' },
@@ -106,9 +108,13 @@ function App() {
   const [isListening, setIsListening] = React.useState(false);
   const [transcript, setTranscript] = React.useState('');
   const [originalTranscript, setOriginalTranscript] = React.useState('');
+  const [updateInstruction, setUpdateInstruction] = React.useState('');
+  const [originalUpdateInstruction, setOriginalUpdateInstruction] = React.useState('');
   const [interimTranscript, setInterimTranscript] = React.useState('');
   const [error, setError] = React.useState('');
   const [plan, setPlan] = React.useState<MorningPlan | null>(null);
+  const [captureMode, setCaptureMode] = React.useState<CaptureMode>('create');
+  const [highlightedScheduleKeys, setHighlightedScheduleKeys] = React.useState<string[]>([]);
   const [isOrganizing, setIsOrganizing] = React.useState(false);
   const [previousSnapshot, setPreviousSnapshot] = React.useState<MorningSnapshot | null>(null);
   const [reviewStatuses, setReviewStatuses] = React.useState<Record<string, ReviewStatus>>({});
@@ -117,9 +123,12 @@ function App() {
   const planAnchorRef = React.useRef<HTMLDivElement | null>(null);
 
   const isSupported = Boolean(SpeechRecognition);
-  const resultText = [transcript, interimTranscript].filter(Boolean).join('\n');
-  const canOrganize = Boolean(transcript.trim()) && !isListening;
-  const hasEditableTranscript = Boolean(transcript.trim()) && !isListening;
+  const activeText = captureMode === 'update' ? updateInstruction : transcript;
+  const resultText = [activeText, interimTranscript].filter(Boolean).join('\n');
+  const canOrganize = Boolean(transcript.trim()) && !isListening && captureMode === 'create';
+  const canUpdatePlan = Boolean(plan && updateInstruction.trim()) && !isListening;
+  const hasEditableTranscript = Boolean(transcript.trim()) && !isListening && captureMode === 'create';
+  const hasEditableUpdateInstruction = Boolean(plan && updateInstruction.trim()) && !isListening;
 
   React.useEffect(() => {
     const snapshot = loadLatestSnapshot();
@@ -139,6 +148,12 @@ function App() {
       localStorage.removeItem(draftStorageKey);
     }
   }, [transcript]);
+
+  React.useEffect(() => {
+    if (!highlightedScheduleKeys.length) return;
+    const timeoutId = window.setTimeout(() => setHighlightedScheduleKeys([]), 7000);
+    return () => window.clearTimeout(timeoutId);
+  }, [highlightedScheduleKeys]);
 
   React.useEffect(() => {
     if (!SpeechRecognition) return;
@@ -178,12 +193,22 @@ function App() {
       }
 
       if (finalText) {
-        setTranscript((current) => {
-          const nextTranscript = `${current}${current ? '\n' : ''}${finalText.trim()}`;
-          setOriginalTranscript(nextTranscript);
-          return nextTranscript;
-        });
-        setPlan(null);
+        const appendText = (current: string) => `${current}${current ? '\n' : ''}${finalText.trim()}`;
+        if (captureMode === 'update') {
+          setUpdateInstruction((current) => {
+            const nextInstruction = appendText(current);
+            setOriginalUpdateInstruction(nextInstruction);
+            return nextInstruction;
+          });
+        } else {
+          setTranscript((current) => {
+            const nextTranscript = appendText(current);
+            setOriginalTranscript(nextTranscript);
+            return nextTranscript;
+          });
+          setPlan(null);
+          setHighlightedScheduleKeys([]);
+        }
       }
       setInterimTranscript(interimText.trim());
     };
@@ -193,7 +218,7 @@ function App() {
     return () => {
       instance.abort();
     };
-  }, []);
+  }, [captureMode]);
 
   const startListening = () => {
     if (!recognition || isListening) return;
@@ -214,21 +239,29 @@ function App() {
     recognition?.abort();
     setTranscript('');
     setOriginalTranscript('');
+    setUpdateInstruction('');
+    setOriginalUpdateInstruction('');
     setInterimTranscript('');
     setError('');
     setIsListening(false);
     setPlan(null);
     setCarriedTodos([]);
+    setCaptureMode('create');
+    setHighlightedScheduleKeys([]);
   };
 
   const useSample = () => {
     recognition?.abort();
     setTranscript(sampleTranscript);
     setOriginalTranscript(sampleTranscript);
+    setUpdateInstruction('');
+    setOriginalUpdateInstruction('');
     setInterimTranscript('');
     setError('');
     setIsListening(false);
     setPlan(null);
+    setCaptureMode('create');
+    setHighlightedScheduleKeys([]);
   };
 
   const organizeMorning = () => {
@@ -241,10 +274,42 @@ function App() {
       .then((nextPlan) => {
         const planWithCarryover = addCarryoverToPlan(nextPlan, carriedTodos);
         setPlan(planWithCarryover);
+        setCaptureMode('update');
+        setUpdateInstruction('');
+        setOriginalUpdateInstruction('');
+        setHighlightedScheduleKeys([]);
         saveMorningSnapshot(transcript, planWithCarryover);
       })
       .catch((reason: unknown) => {
         setError(reason instanceof Error ? reason.message : 'AI整理に失敗しました。');
+      })
+      .finally(() => {
+        setIsOrganizing(false);
+      });
+  };
+
+  const applyScheduleUpdate = () => {
+    if (!plan || !updateInstruction.trim()) return;
+
+    const previousPlan = plan;
+    setIsOrganizing(true);
+    setError('');
+
+    createAiMorningPlan(updateInstruction, energy, {
+      currentPlan: previousPlan,
+      mode: 'update',
+    })
+      .then((nextPlan) => {
+        const mergedPlan = preserveExistingPlan(previousPlan, nextPlan);
+        setPlan(mergedPlan);
+        setHighlightedScheduleKeys(findNewScheduleKeys(previousPlan, mergedPlan));
+        setTranscript((current) => `${current.trim()}\n\n追加・修正指示:\n${updateInstruction.trim()}`.trim());
+        setUpdateInstruction('');
+        setOriginalUpdateInstruction('');
+        saveMorningSnapshot(transcript, mergedPlan);
+      })
+      .catch((reason: unknown) => {
+        setError(reason instanceof Error ? reason.message : 'スケジュール更新に失敗しました。');
       })
       .finally(() => {
         setIsOrganizing(false);
@@ -269,6 +334,11 @@ function App() {
   };
 
   const handleNextAction = () => {
+    if (canUpdatePlan) {
+      applyScheduleUpdate();
+      return;
+    }
+
     if (!plan && canOrganize) {
       organizeMorning();
       return;
@@ -289,7 +359,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.1</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.2</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -343,13 +413,15 @@ function App() {
 
         <div className="transcript-card">
           <div className="transcript-header">
-            <span>Today Capture</span>
+            <span>{captureMode === 'update' ? 'Update Instruction' : 'Today Capture'}</span>
             {interimTranscript && <span className="live-label">Listening</span>}
           </div>
           <div className={`transcript-box ${resultText ? 'has-text' : ''}`}>
             {resultText || '今日の予定、やること、目標、目的をそのまま話してください。'}
           </div>
         </div>
+
+        <CaptureModeSwitcher mode={captureMode} onChange={setCaptureMode} planExists={Boolean(plan)} />
 
         {hasEditableTranscript && (
           <TranscriptEditor
@@ -361,6 +433,22 @@ function App() {
             }}
             savedText={originalTranscript}
             text={transcript}
+          />
+        )}
+
+        {hasEditableUpdateInstruction && (
+          <TranscriptEditor
+            onCancel={() => {
+              setUpdateInstruction(originalUpdateInstruction);
+            }}
+            onSave={() => {
+              const normalized = updateInstruction.trim();
+              setUpdateInstruction(normalized);
+              setOriginalUpdateInstruction(normalized);
+            }}
+            onTextChange={setUpdateInstruction}
+            savedText={originalUpdateInstruction}
+            text={updateInstruction}
           />
         )}
 
@@ -379,9 +467,22 @@ function App() {
           </button>
         )}
 
+        {canUpdatePlan && (
+          <button
+            className={`organize-button update-plan-button ${isOrganizing ? 'is-organizing' : ''}`}
+            type="button"
+            onClick={applyScheduleUpdate}
+            disabled={isOrganizing}
+          >
+            <Brain size={21} />
+            {isOrganizing ? '既存スケジュールを更新中' : 'この内容をスケジュールに反映'}
+            <Sparkles size={18} />
+          </button>
+        )}
+
         <div ref={planAnchorRef} />
         {plan && <CoachCard plan={plan} />}
-        {plan && <PlanView plan={plan} />}
+        {plan && <PlanView highlightedScheduleKeys={highlightedScheduleKeys} plan={plan} />}
 
         <div className="action-row">
           <button className="secondary-button" type="button" onClick={resetTranscript}>
@@ -405,6 +506,36 @@ function App() {
         </button>
       </div>
     </main>
+  );
+}
+
+function CaptureModeSwitcher({
+  mode,
+  onChange,
+  planExists,
+}: {
+  mode: CaptureMode;
+  onChange: (mode: CaptureMode) => void;
+  planExists: boolean;
+}) {
+  return (
+    <div className="capture-mode-card" aria-label="音声入力モード">
+      <button
+        className={mode === 'create' ? 'selected' : ''}
+        onClick={() => onChange('create')}
+        type="button"
+      >
+        新規スケジュール作成
+      </button>
+      <button
+        className={mode === 'update' ? 'selected' : ''}
+        disabled={!planExists}
+        onClick={() => onChange('update')}
+        type="button"
+      >
+        既存スケジュールへの追加・修正
+      </button>
+    </div>
   );
 }
 
@@ -619,7 +750,13 @@ function ReflectionView({
   );
 }
 
-function PlanView({ plan }: { plan: MorningPlan }) {
+function PlanView({
+  highlightedScheduleKeys,
+  plan,
+}: {
+  highlightedScheduleKeys: string[];
+  plan: MorningPlan;
+}) {
   const [isCalendarOpen, setIsCalendarOpen] = React.useState(false);
   const calendarEvents = React.useMemo(() => createCalendarEvents(plan), [plan]);
 
@@ -668,7 +805,10 @@ function PlanView({ plan }: { plan: MorningPlan }) {
       <PlanSection icon={<CalendarClock size={18} />} title="推奨タイムスケジュール">
         <div className="schedule-list">
           {plan.schedule.map((item) => (
-            <div className="schedule-item" key={`${item.time}-${item.task}`}>
+            <div
+              className={`schedule-item ${highlightedScheduleKeys.includes(getScheduleKey(item)) ? 'is-new' : ''}`}
+              key={`${item.time}-${item.task}`}
+            >
               <time>{item.time}</time>
               <span>{item.task}</span>
             </div>
@@ -993,6 +1133,55 @@ function CategoryColumn({ title, items }: { title: string; items: string[] }) {
       )}
     </div>
   );
+}
+
+function preserveExistingPlan(previousPlan: MorningPlan, nextPlan: MorningPlan): MorningPlan {
+  const schedule = sortScheduleByTime(mergeSchedule(previousPlan.schedule, nextPlan.schedule));
+  const todos = mergeStrings(previousPlan.todos, nextPlan.todos);
+  const goals = mergeStrings(previousPlan.goals, nextPlan.goals);
+
+  return {
+    ...nextPlan,
+    goals,
+    todos,
+    schedule,
+    priorities: {
+      highest: mergeStrings(previousPlan.priorities.highest, nextPlan.priorities.highest),
+      important: mergeStrings(previousPlan.priorities.important, nextPlan.priorities.important),
+      optional: mergeStrings(previousPlan.priorities.optional, nextPlan.priorities.optional),
+    },
+  };
+}
+
+function mergeSchedule(
+  previousSchedule: MorningPlan['schedule'],
+  nextSchedule: MorningPlan['schedule'],
+) {
+  const byKey = new Map<string, MorningPlan['schedule'][number]>();
+  previousSchedule.forEach((item) => byKey.set(getScheduleKey(item), item));
+  nextSchedule.forEach((item) => byKey.set(getScheduleKey(item), item));
+  return Array.from(byKey.values());
+}
+
+function findNewScheduleKeys(previousPlan: MorningPlan, nextPlan: MorningPlan) {
+  const previousKeys = new Set(previousPlan.schedule.map(getScheduleKey));
+  return nextPlan.schedule.map(getScheduleKey).filter((key) => !previousKeys.has(key));
+}
+
+function getScheduleKey(item: MorningPlan['schedule'][number]) {
+  return `${item.time.trim()}::${item.task.trim()}`;
+}
+
+function mergeStrings(previousItems: string[], nextItems: string[]) {
+  return Array.from(new Set([...previousItems, ...nextItems].map((item) => item.trim()).filter(Boolean)));
+}
+
+function sortScheduleByTime(schedule: MorningPlan['schedule']) {
+  return [...schedule].sort((a, b) => getScheduleStartMinutes(a.time) - getScheduleStartMinutes(b.time));
+}
+
+function getScheduleStartMinutes(timeText: string) {
+  return parseScheduleTime(timeText)?.startMinutes ?? Number.MAX_SAFE_INTEGER;
 }
 
 function createCalendarEvents(plan: MorningPlan): CalendarEvent[] {

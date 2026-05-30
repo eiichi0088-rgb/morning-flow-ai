@@ -10,6 +10,8 @@ export default {
       const body = await request.json();
       const transcript = String(body.transcript ?? '').trim();
       const energy = normalizeEnergy(body.energy);
+      const mode = body.mode === 'update' ? 'update' : 'create';
+      const currentPlan = body.currentPlan ?? null;
 
       if (!transcript) {
         return Response.json({ message: '文字起こし内容が空です。' }, { status: 400 });
@@ -22,7 +24,7 @@ export default {
         );
       }
 
-      const plan = await createPlanFromTranscript(transcript, energy);
+      const plan = await createPlanFromTranscript(transcript, energy, { currentPlan, mode });
       return Response.json({ plan });
     } catch (error) {
       return Response.json(

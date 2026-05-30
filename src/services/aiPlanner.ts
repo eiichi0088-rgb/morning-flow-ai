@@ -29,16 +29,27 @@ export interface MorningPlan {
   };
 }
 
+export interface PlanUpdateContext {
+  currentPlan?: MorningPlan | null;
+  mode?: 'create' | 'update';
+}
+
 export async function createAiMorningPlan(
   transcript: string,
   energy: EnergyMood,
+  context: PlanUpdateContext = {},
 ): Promise<MorningPlan> {
   const response = await fetch('/api/plan', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ energy, transcript }),
+    body: JSON.stringify({
+      currentPlan: context.currentPlan,
+      energy,
+      mode: context.mode ?? 'create',
+      transcript,
+    }),
   });
 
   const payload = await response.json().catch(() => null);
