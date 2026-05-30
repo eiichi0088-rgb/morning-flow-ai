@@ -16,9 +16,11 @@ import {
   Lightbulb,
   ListChecks,
   Loader2,
+  Home,
   Mic,
   RefreshCw,
   Route,
+  ShoppingCart,
   Sparkles,
   Square,
   Target,
@@ -38,6 +40,11 @@ import {
   type MorningSnapshot,
   type ReviewStatus,
 } from './services/reflectionStorage';
+import {
+  createShoppingPlan,
+  groupShoppingItems,
+  type ShoppingItem,
+} from './services/shoppingPlanner';
 import './styles.css';
 
 type SpeechRecognitionResultListLike = SpeechRecognitionResultList;
@@ -79,6 +86,7 @@ const sampleTranscript =
 
 const draftStorageKey = 'morning-flow-ai:transcript-draft:v1';
 const googleLoginStorageKey = 'morning-flow-ai:google-calendar-login:v1';
+const shoppingStorageKey = 'morning-flow-ai:shopping-list:v1';
 
 type CalendarEvent = {
   id: string;
@@ -91,6 +99,7 @@ type CalendarEvent = {
 };
 
 type CaptureMode = 'create' | 'update';
+type AppView = 'morning' | 'shopping';
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
   { label: '✓ 完了', value: 'done' },
@@ -106,6 +115,7 @@ const energyOptions: { label: string; value: EnergyMood }[] = [
 ];
 
 function App() {
+  const [activeView, setActiveView] = React.useState<AppView>('morning');
   const [recognition, setRecognition] = React.useState<SpeechRecognitionLike | null>(null);
   const [isListening, setIsListening] = React.useState(false);
   const [transcript, setTranscript] = React.useState('');
@@ -119,6 +129,14 @@ function App() {
   const [highlightedScheduleKeys, setHighlightedScheduleKeys] = React.useState<string[]>([]);
   const [isOrganizing, setIsOrganizing] = React.useState(false);
   const [isResetDialogOpen, setIsResetDialogOpen] = React.useState(false);
+  const [shoppingText, setShoppingText] = React.useState('');
+  const [originalShoppingText, setOriginalShoppingText] = React.useState('');
+  const [shoppingItems, setShoppingItems] = React.useState<ShoppingItem[]>([]);
+  const [shoppingUpdatedAt, setShoppingUpdatedAt] = React.useState('');
+  const [shoppingError, setShoppingError] = React.useState('');
+  const [isShoppingOrganizing, setIsShoppingOrganizing] = React.useState(false);
+  const [isShoppingResetDialogOpen, setIsShoppingResetDialogOpen] = React.useState(false);
+  const [highlightedShoppingIds, setHighlightedShoppingIds] = React.useState<string[]>([]);
   const [previousSnapshot, setPreviousSnapshot] = React.useState<MorningSnapshot | null>(null);
   const [reviewStatuses, setReviewStatuses] = React.useState<Record<string, ReviewStatus>>({});
   const [carriedTodos, setCarriedTodos] = React.useState<string[]>([]);
@@ -126,10 +144,13 @@ function App() {
   const planAnchorRef = React.useRef<HTMLDivElement | null>(null);
 
   const isSupported = Boolean(SpeechRecognition);
+  const isShoppingView = activeView === 'shopping';
   const activeText = captureMode === 'update' ? updateInstruction : transcript;
   const resultText = [activeText, interimTranscript].filter(Boolean).join('\n');
+  const shoppingResultText = [shoppingText, isShoppingView ? interimTranscript : ''].filter(Boolean).join('\n');
   const canOrganize = Boolean(transcript.trim()) && !isListening && captureMode === 'create';
   const canUpdatePlan = Boolean(plan && updateInstruction.trim()) && !isListening;
+  const canOrganizeShopping = Boolean(shoppingText.trim()) && !isListening;
   const canUseNext = canOrganize || canUpdatePlan || Boolean(plan);
   const nextButtonLabel = isOrganizing
     ? canUpdatePlan
@@ -148,6 +169,22 @@ function App() {
       setTranscript(savedDraft);
       setOriginalTranscript(savedDraft);
     }
+    const savedShopping = localStorage.getItem(shoppingStorageKey);
+    if (savedShopping) {
+      try {
+        const parsed = JSON.parse(savedShopping) as {
+          items?: ShoppingItem[];
+          text?: string;
+          updatedAt?: string;
+        };
+        setShoppingText(parsed.text ?? '');
+        setOriginalShoppingText(parsed.text ?? '');
+        setShoppingItems(Array.isArray(parsed.items) ? parsed.items : []);
+        setShoppingUpdatedAt(parsed.updatedAt ?? '');
+      } catch {
+        localStorage.removeItem(shoppingStorageKey);
+      }
+    }
   }, []);
 
   React.useEffect(() => {
@@ -165,6 +202,28 @@ function App() {
   }, [highlightedScheduleKeys]);
 
   React.useEffect(() => {
+    if (!shoppingText.trim() && !shoppingItems.length) {
+      localStorage.removeItem(shoppingStorageKey);
+      return;
+    }
+
+    localStorage.setItem(
+      shoppingStorageKey,
+      JSON.stringify({
+        items: shoppingItems,
+        text: shoppingText,
+        updatedAt: shoppingUpdatedAt,
+      }),
+    );
+  }, [shoppingItems, shoppingText, shoppingUpdatedAt]);
+
+  React.useEffect(() => {
+    if (!highlightedShoppingIds.length) return;
+    const timeoutId = window.setTimeout(() => setHighlightedShoppingIds([]), 7000);
+    return () => window.clearTimeout(timeoutId);
+  }, [highlightedShoppingIds]);
+
+  React.useEffect(() => {
     if (!SpeechRecognition) return;
 
     const instance = new SpeechRecognition();
@@ -174,7 +233,11 @@ function App() {
 
     instance.onstart = () => {
       setIsListening(true);
-      setError('');
+      if (activeView === 'shopping') {
+        setShoppingError('');
+      } else {
+        setError('');
+      }
     };
 
     instance.onend = () => {
@@ -185,7 +248,11 @@ function App() {
     instance.onerror = (event) => {
       setIsListening(false);
       setInterimTranscript('');
-      setError(getSpeechErrorMessage(event.error));
+      if (activeView === 'shopping') {
+        setShoppingError(getSpeechErrorMessage(event.error));
+      } else {
+        setError(getSpeechErrorMessage(event.error));
+      }
     };
 
     instance.onresult = (event) => {
@@ -203,7 +270,13 @@ function App() {
 
       if (finalText) {
         const appendText = (current: string) => `${current}${current ? '\n' : ''}${finalText.trim()}`;
-        if (captureMode === 'update') {
+        if (activeView === 'shopping') {
+          setShoppingText((current) => {
+            const nextText = appendText(current);
+            setOriginalShoppingText(nextText);
+            return nextText;
+          });
+        } else if (captureMode === 'update') {
           setUpdateInstruction((current) => {
             const nextInstruction = appendText(current);
             setOriginalUpdateInstruction(nextInstruction);
@@ -227,16 +300,25 @@ function App() {
     return () => {
       instance.abort();
     };
-  }, [captureMode]);
+  }, [activeView, captureMode]);
 
   const startListening = () => {
     if (!recognition || isListening) return;
 
-    setError('');
+    if (activeView === 'shopping') {
+      setShoppingError('');
+    } else {
+      setError('');
+    }
     try {
       recognition.start();
     } catch {
-      setError('音声認識を開始できませんでした。少し待ってからもう一度お試しください。');
+      const message = '音声認識を開始できませんでした。少し待ってからもう一度お試しください。';
+      if (activeView === 'shopping') {
+        setShoppingError(message);
+      } else {
+        setError(message);
+      }
     }
   };
 
@@ -345,6 +427,49 @@ function App() {
     setPlan(null);
   };
 
+  const organizeShoppingList = () => {
+    if (!shoppingText.trim()) return;
+
+    const previousIds = new Set(shoppingItems.map((item) => item.id));
+    setIsShoppingOrganizing(true);
+    setShoppingError('');
+
+    createShoppingPlan(shoppingText, shoppingItems)
+      .then((shoppingPlan) => {
+        setShoppingItems(shoppingPlan.items);
+        setShoppingUpdatedAt(shoppingPlan.updatedAt);
+        setOriginalShoppingText(shoppingText.trim());
+        setHighlightedShoppingIds(shoppingPlan.items.filter((item) => !previousIds.has(item.id)).map((item) => item.id));
+      })
+      .catch((reason: unknown) => {
+        console.error(reason);
+        setShoppingError('うまく整理できませんでした。もう一度お試しください。');
+      })
+      .finally(() => {
+        setIsShoppingOrganizing(false);
+      });
+  };
+
+  const resetShoppingList = () => {
+    recognition?.abort();
+    setShoppingText('');
+    setOriginalShoppingText('');
+    setShoppingItems([]);
+    setShoppingUpdatedAt('');
+    setShoppingError('');
+    setInterimTranscript('');
+    setIsListening(false);
+    setIsShoppingResetDialogOpen(false);
+    setHighlightedShoppingIds([]);
+  };
+
+  const toggleShoppingItem = (itemId: string) => {
+    setShoppingItems((current) =>
+      current.map((item) => (item.id === itemId ? { ...item, completed: !item.completed } : item)),
+    );
+    setShoppingUpdatedAt(new Date().toISOString());
+  };
+
   const handleNextAction = () => {
     if (isOrganizing) return;
 
@@ -370,10 +495,43 @@ function App() {
         <span className="horizon-line" />
       </div>
 
+      {isShoppingView ? (
+        <ShoppingListPage
+          canOrganize={canOrganizeShopping}
+          error={shoppingError}
+          highlightedIds={highlightedShoppingIds}
+          isListening={isListening}
+          isOrganizing={isShoppingOrganizing}
+          isResetDialogOpen={isShoppingResetDialogOpen}
+          isSupported={isSupported}
+          items={shoppingItems}
+          onBack={() => {
+            recognition?.abort();
+            setInterimTranscript('');
+            setIsListening(false);
+            setActiveView('morning');
+          }}
+          onCancelReset={() => setIsShoppingResetDialogOpen(false)}
+          onOrganize={organizeShoppingList}
+          onReset={resetShoppingList}
+          onResetRequest={() => setIsShoppingResetDialogOpen(true)}
+          onStartListening={startListening}
+          onStopListening={stopListening}
+          onTextChange={(value) => {
+            setShoppingText(value);
+            setShoppingError('');
+          }}
+          onToggleItem={toggleShoppingItem}
+          resultText={shoppingResultText}
+          savedText={originalShoppingText}
+          text={shoppingText}
+          updatedAt={shoppingUpdatedAt}
+        />
+      ) : (
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.2</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.3</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -415,6 +573,16 @@ function App() {
             AIが整理中です。少しだけお待ちください。
           </p>
         )}
+
+        <div className="flow-switcher" aria-label="MORNING FLOW AI menu">
+          <button className="selected" type="button">
+            今日の予定を整理する
+          </button>
+          <button type="button" onClick={() => setActiveView('shopping')}>
+            <ShoppingCart size={18} />
+            買い物リストを作る
+          </button>
+        </div>
 
         {previousSnapshot && (
           <ReflectionView
@@ -513,6 +681,8 @@ function App() {
           </button>
         </div>
       </section>
+      )}
+      {!isShoppingView && (
       <div className="floating-next-bar" aria-label="次の操作">
         <button
           className={`primary-button floating-next-button ${isOrganizing ? 'is-loading' : ''}`}
@@ -524,6 +694,7 @@ function App() {
           {isOrganizing ? <Loader2 className="button-spinner" size={21} /> : <ArrowRight size={21} />}
         </button>
       </div>
+      )}
       {isResetDialogOpen && (
         <div className="confirm-dialog-backdrop" role="presentation">
           <section
@@ -552,6 +723,245 @@ function App() {
         </div>
       )}
     </main>
+  );
+}
+
+function ShoppingListPage({
+  canOrganize,
+  error,
+  highlightedIds,
+  isListening,
+  isOrganizing,
+  isResetDialogOpen,
+  isSupported,
+  items,
+  onBack,
+  onCancelReset,
+  onOrganize,
+  onReset,
+  onResetRequest,
+  onStartListening,
+  onStopListening,
+  onTextChange,
+  onToggleItem,
+  resultText,
+  savedText,
+  text,
+  updatedAt,
+}: {
+  canOrganize: boolean;
+  error: string;
+  highlightedIds: string[];
+  isListening: boolean;
+  isOrganizing: boolean;
+  isResetDialogOpen: boolean;
+  isSupported: boolean;
+  items: ShoppingItem[];
+  onBack: () => void;
+  onCancelReset: () => void;
+  onOrganize: () => void;
+  onReset: () => void;
+  onResetRequest: () => void;
+  onStartListening: () => void;
+  onStopListening: () => void;
+  onTextChange: (value: string) => void;
+  onToggleItem: (itemId: string) => void;
+  resultText: string;
+  savedText: string;
+  text: string;
+  updatedAt: string;
+}) {
+  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const groups = groupShoppingItems(items);
+  const completedCount = items.filter((item) => item.completed).length;
+  const updatedLabel = updatedAt
+    ? new Date(updatedAt).toLocaleString('ja-JP', {
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        month: 'short',
+      })
+    : '';
+
+  React.useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [text]);
+
+  return (
+    <section className="hero-panel shopping-page" aria-label="買い物リスト">
+      <div className="top-bar">
+        <div>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.3</span></p>
+          <h1>買い物リスト</h1>
+        </div>
+        <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
+          <Home size={20} />
+        </button>
+      </div>
+
+      <div className="flow-switcher" aria-label="MORNING FLOW AI menu">
+        <button type="button" onClick={onBack}>
+          今日の予定を整理する
+        </button>
+        <button className="selected" type="button">
+          <ShoppingCart size={18} />
+          買い物リストを作る
+        </button>
+      </div>
+
+      <p className="shopping-lead">買いたい物をマイクに向かって話してください。あとから思い出した物も、そのまま追加できます。</p>
+
+      <div className="focus-area shopping-focus">
+        <div className={`voice-stage ${isListening ? 'is-listening' : ''}`}>
+          <div className="waveform" aria-hidden="true">
+            {Array.from({ length: 17 }).map((_, index) => (
+              <span key={index} style={{ animationDelay: `${index * 72}ms` }} />
+            ))}
+          </div>
+
+          <button
+            aria-label={isListening ? '音声入力を止める' : '買い物リストを音声入力する'}
+            className={`mic-button ${isListening ? 'is-listening' : ''}`}
+            disabled={!isSupported}
+            onClick={isListening ? onStopListening : onStartListening}
+            type="button"
+          >
+            <span className="pulse-ring ring-one" aria-hidden="true" />
+            <span className="pulse-ring ring-two" aria-hidden="true" />
+            <span className="mic-glass" aria-hidden="true" />
+            {isListening ? <Square size={38} fill="currentColor" /> : <Mic size={56} />}
+          </button>
+        </div>
+
+        <div className="status-row" role="status" aria-live="polite">
+          <span className={`status-dot ${isListening ? 'active' : ''}`} />
+          {isListening ? '音声認識中' : items.length ? '買い物リストを保存中' : '話すだけでカテゴリ分けします'}
+        </div>
+      </div>
+
+      {error && <p className="error-message">{error}</p>}
+      {isOrganizing && (
+        <p className="loading-message" role="status" aria-live="polite">
+          AIが買い物リストを整理中です。カテゴリ分けしています。
+        </p>
+      )}
+
+      <section className="editor-card shopping-editor" aria-label="買い物メモ編集">
+        <div className="editor-header">
+          <span>Shopping Capture</span>
+          <strong>AIで整理する前に編集できます</strong>
+        </div>
+        {text.trim() !== savedText.trim() && (
+          <p className="editor-live-note">入力中の内容はこのままAI整理に反映されます。</p>
+        )}
+        <textarea
+          aria-label="買いたい物のテキストを編集"
+          className="transcript-editor"
+          onChange={(event) => onTextChange(event.target.value)}
+          placeholder="例：牛乳、卵、ネギ、洗剤、子供のお菓子、ジム用の水"
+          ref={textareaRef}
+          rows={5}
+          value={resultText}
+        />
+        <button
+          className={`organize-button ${isOrganizing ? 'is-organizing' : ''}`}
+          disabled={!canOrganize || isOrganizing}
+          onClick={onOrganize}
+          type="button"
+        >
+          <Brain size={21} />
+          {isOrganizing ? 'AIが買い物リストを整理中…' : items.length ? 'この内容をリストに反映' : 'AIで整理する'}
+          {isOrganizing ? <Loader2 className="button-spinner" size={18} /> : <Sparkles size={18} />}
+        </button>
+      </section>
+
+      <section className="plan-card shopping-result-card" aria-label="整理結果">
+        <div className="plan-title">
+          <span><ListChecks size={18} /></span>
+          <h2>整理結果</h2>
+        </div>
+
+        {items.length ? (
+          <>
+            <div className="shopping-summary">
+              <strong>{completedCount}/{items.length} 完了</strong>
+              {updatedLabel && <span>最終更新 {updatedLabel}</span>}
+            </div>
+            <div className="shopping-category-list">
+              {groups.map((group) => (
+                <div className="shopping-category" key={group.category}>
+                  <h3>{group.category}</h3>
+                  <div className="shopping-check-list">
+                    {group.items.map((item) => {
+                      const checkboxId = `shopping-${item.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+                      return (
+                        <label
+                          className={`shopping-check-item ${item.completed ? 'is-completed' : ''} ${
+                            highlightedIds.includes(item.id) ? 'is-new' : ''
+                          }`}
+                          htmlFor={checkboxId}
+                          key={item.id}
+                        >
+                          <input
+                            checked={item.completed}
+                            id={checkboxId}
+                            onChange={() => onToggleItem(item.id)}
+                            type="checkbox"
+                          />
+                          <span>{item.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="calendar-empty">まだ買い物リストはありません。マイクで話すか、テキストで入力してください。</p>
+        )}
+      </section>
+
+      <div className="action-row">
+        <button className="secondary-button" type="button" onClick={onResetRequest}>
+          <RefreshCw size={19} />
+          やり直し
+        </button>
+        <button className="secondary-button" type="button" onClick={onBack}>
+          <Home size={18} />
+          トップページへ戻る
+        </button>
+      </div>
+
+      {isResetDialogOpen && (
+        <div className="confirm-dialog-backdrop" role="presentation">
+          <section
+            aria-describedby="shopping-reset-dialog-description"
+            aria-labelledby="shopping-reset-dialog-title"
+            aria-modal="true"
+            className="confirm-dialog"
+            role="dialog"
+          >
+            <div className="confirm-dialog-icon" aria-hidden="true">
+              <AlertTriangle size={23} />
+            </div>
+            <h2 id="shopping-reset-dialog-title">本当に買い物リストを最初から作り直しますか？</h2>
+            <p id="shopping-reset-dialog-description">現在の買い物リストは削除されます。</p>
+            <div className="confirm-dialog-actions">
+              <button className="secondary-button" type="button" onClick={onCancelReset}>
+                キャンセル
+              </button>
+              <button className="danger-button" type="button" onClick={onReset}>
+                やり直す
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+    </section>
   );
 }
 
