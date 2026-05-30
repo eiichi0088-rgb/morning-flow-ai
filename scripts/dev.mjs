@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { createServer as createViteServer } from 'vite';
 import { handlePlanRequest, loadEnvFile } from './openai-plan-handler.mjs';
+import { handleShoppingRequest } from './openai-shopping-handler.mjs';
 
 await loadEnvFile();
 
@@ -20,6 +21,11 @@ createServer(async (request, response) => {
 
   if (url.pathname === '/api/plan') {
     await handlePlanRequest(request, response);
+    return;
+  }
+
+  if (url.pathname === '/api/shopping') {
+    await handleShoppingRequest(request, response);
     return;
   }
 

@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { handlePlanRequest, loadEnvFile } from './openai-plan-handler.mjs';
+import { handleShoppingRequest } from './openai-shopping-handler.mjs';
 
 const root = join(process.cwd(), 'dist');
 const port = Number(process.env.PORT ?? 4173);
@@ -24,6 +25,11 @@ createServer(async (request, response) => {
 
   if (url.pathname === '/api/plan') {
     await handlePlanRequest(request, response);
+    return;
+  }
+
+  if (url.pathname === '/api/shopping') {
+    await handleShoppingRequest(request, response);
     return;
   }
 

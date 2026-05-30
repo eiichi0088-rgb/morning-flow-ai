@@ -24,6 +24,7 @@ import {
   Sparkles,
   Square,
   Target,
+  Trash2,
 } from 'lucide-react';
 import { createAiMorningPlan, type EnergyMood, type MorningPlan } from './services/aiPlanner';
 import {
@@ -470,6 +471,11 @@ function App() {
     setShoppingUpdatedAt(new Date().toISOString());
   };
 
+  const deleteShoppingItem = (itemId: string) => {
+    setShoppingItems((current) => current.filter((item) => item.id !== itemId));
+    setShoppingUpdatedAt(new Date().toISOString());
+  };
+
   const handleNextAction = () => {
     if (isOrganizing) return;
 
@@ -521,6 +527,7 @@ function App() {
             setShoppingText(value);
             setShoppingError('');
           }}
+          onDeleteItem={deleteShoppingItem}
           onToggleItem={toggleShoppingItem}
           resultText={shoppingResultText}
           savedText={originalShoppingText}
@@ -742,6 +749,7 @@ function ShoppingListPage({
   onResetRequest,
   onStartListening,
   onStopListening,
+  onDeleteItem,
   onTextChange,
   onToggleItem,
   resultText,
@@ -764,6 +772,7 @@ function ShoppingListPage({
   onResetRequest: () => void;
   onStartListening: () => void;
   onStopListening: () => void;
+  onDeleteItem: (itemId: string) => void;
   onTextChange: (value: string) => void;
   onToggleItem: (itemId: string) => void;
   resultText: string;
@@ -896,23 +905,33 @@ function ShoppingListPage({
                   <h3>{group.category}</h3>
                   <div className="shopping-check-list">
                     {group.items.map((item) => {
-                      const checkboxId = `shopping-${item.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+                      const checkboxId = item.id;
                       return (
-                        <label
-                          className={`shopping-check-item ${item.completed ? 'is-completed' : ''} ${
-                            highlightedIds.includes(item.id) ? 'is-new' : ''
-                          }`}
-                          htmlFor={checkboxId}
+                        <div
+                          className={`shopping-check-row ${highlightedIds.includes(item.id) ? 'is-new' : ''}`}
                           key={item.id}
                         >
-                          <input
-                            checked={item.completed}
-                            id={checkboxId}
-                            onChange={() => onToggleItem(item.id)}
-                            type="checkbox"
-                          />
-                          <span>{item.name}</span>
-                        </label>
+                          <label
+                            className={`shopping-check-item ${item.completed ? 'is-completed' : ''}`}
+                            htmlFor={checkboxId}
+                          >
+                            <input
+                              checked={item.completed}
+                              id={checkboxId}
+                              onChange={() => onToggleItem(item.id)}
+                              type="checkbox"
+                            />
+                            <span>{item.name}</span>
+                          </label>
+                          <button
+                            aria-label={`${item.name}を削除`}
+                            className="shopping-delete-button"
+                            onClick={() => onDeleteItem(item.id)}
+                            type="button"
+                          >
+                            <Trash2 size={17} />
+                          </button>
+                        </div>
                       );
                     })}
                   </div>

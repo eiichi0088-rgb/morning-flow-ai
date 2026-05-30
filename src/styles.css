@@ -883,23 +883,31 @@ h1 {
   gap: 8px;
 }
 
-.shopping-check-item {
+.shopping-check-row {
   min-height: 50px;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px;
   align-items: center;
-  gap: 11px;
-  padding: 10px 12px;
+  gap: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
-  color: rgba(238, 246, 255, 0.9);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.035)),
     rgba(255, 255, 255, 0.035);
-  cursor: pointer;
+  padding: 8px;
   transition:
     border-color 180ms ease,
     opacity 180ms ease,
     transform 180ms ease;
+}
+
+.shopping-check-item {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: rgba(238, 246, 255, 0.9);
+  cursor: pointer;
 }
 
 .shopping-check-item input {
@@ -922,12 +930,30 @@ h1 {
   text-decoration: line-through;
 }
 
-.shopping-check-item.is-new {
+.shopping-check-row.is-new {
   border-color: rgba(247, 231, 190, 0.48);
   box-shadow:
     0 0 0 1px rgba(247, 231, 190, 0.12),
     0 12px 30px rgba(247, 231, 190, 0.12);
   animation: newScheduleGlow 1.8s ease-in-out infinite;
+}
+
+.shopping-delete-button {
+  width: 42px;
+  height: 42px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(255, 142, 124, 0.18);
+  border-radius: 14px;
+  color: rgba(255, 214, 204, 0.92);
+  background: rgba(126, 35, 29, 0.16);
+  cursor: pointer;
+  transition: transform 160ms ease, background 180ms ease;
+}
+
+.shopping-delete-button:active {
+  transform: scale(0.95);
+  background: rgba(157, 41, 37, 0.32);
 }
 
 .organize-button {

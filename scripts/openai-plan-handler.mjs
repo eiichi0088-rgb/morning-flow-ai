@@ -92,6 +92,32 @@ export async function loadEnvFile(root = process.cwd()) {
   }
 }
 
+export async function readJsonBody(request) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    request.on('data', (chunk) => {
+      body += chunk;
+      if (body.length > 1_000_000) {
+        request.destroy();
+        reject(new Error('Request body is too large.'));
+      }
+    });
+    request.on('end', () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch {
+        reject(new Error('Failed to parse JSON.'));
+      }
+    });
+    request.on('error', reject);
+  });
+}
+
+export function sendJson(response, status, payload) {
+  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  response.end(JSON.stringify(payload));
+}
+
 export async function handlePlanRequest(request, response) {
   if (request.method !== 'POST') {
     sendJson(response, 405, { message: 'POST only.' });
@@ -202,30 +228,4 @@ function extractOutputText(data) {
     ?.map((content) => content.text ?? '')
     ?.join('')
     ?.trim();
-}
-
-function readJsonBody(request) {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    request.on('data', (chunk) => {
-      body += chunk;
-      if (body.length > 1_000_000) {
-        request.destroy();
-        reject(new Error('Request body is too large.'));
-      }
-    });
-    request.on('end', () => {
-      try {
-        resolve(body ? JSON.parse(body) : {});
-      } catch {
-        reject(new Error('Failed to parse JSON.'));
-      }
-    });
-    request.on('error', reject);
-  });
-}
-
-function sendJson(response, status, payload) {
-  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
-  response.end(JSON.stringify(payload));
 }

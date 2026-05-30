@@ -92,11 +92,9 @@ export async function createShoppingPlan(
     };
   }
 
-  const existingByName = new Map(normalizedCurrentItems.map((item) => [normalizeName(item.name), item]));
   const removeMode = /消して|削除|外して|いらない|不要/.test(instruction);
-  const detectedItems = extractShoppingItems(instruction);
-
   if (removeMode) {
+    const detectedItems = extractShoppingItems(instruction);
     const removeNames = new Set(detectedItems.map((item) => normalizeName(item)));
     return {
       items: normalizedCurrentItems.filter((item) => !removeNames.has(normalizeName(item.name))),
@@ -104,29 +102,12 @@ export async function createShoppingPlan(
     };
   }
 
-  const nextItems = [...normalizedCurrentItems];
-
-  detectedItems.forEach((name) => {
-    const normalized = normalizeName(name);
-    if (!normalized || existingByName.has(normalized)) return;
-
-    const category = classifyShoppingItem(name);
-    const item: ShoppingItem = {
-      id: `${Date.now()}-${category}-${normalized}`,
-      name,
-      category,
-      completed: false,
-      addedAt: new Date().toISOString(),
-    };
-
-    existingByName.set(normalized, item);
-    nextItems.push(item);
-  });
-
-  return {
-    items: sortShoppingItems(nextItems),
-    updatedAt: new Date().toISOString(),
-  };
+  try {
+    return await createShoppingPlanWithAi(instruction, normalizedCurrentItems);
+  } catch (error) {
+    console.warn('Shopping AI classification failed. Falling back to local rules.', error);
+    return createShoppingPlanWithLocalRules(instruction, normalizedCurrentItems);
+  }
 }
 
 export function groupShoppingItems(items: ShoppingItem[]) {
@@ -158,6 +139,78 @@ export function classifyShoppingItem(name: string): ShoppingCategory {
   return 'その他';
 }
 
+async function createShoppingPlanWithAi(
+  text: string,
+  currentItems: ShoppingItem[],
+): Promise<ShoppingPlan> {
+  const response = await fetch('/api/shopping', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      currentItems,
+      text,
+    }),
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(payload?.message ?? 'Shopping AI request failed.');
+  }
+
+  return mergeAiItems(currentItems, payload?.plan?.items ?? []);
+}
+
+function createShoppingPlanWithLocalRules(
+  text: string,
+  currentItems: ShoppingItem[],
+): ShoppingPlan {
+  return mergeAiItems(
+    currentItems,
+    extractShoppingItems(text).map((name) => ({
+      name,
+      category: classifyShoppingItem(name),
+    })),
+  );
+}
+
+function mergeAiItems(
+  currentItems: ShoppingItem[],
+  aiItems: Array<{ name: string; category: ShoppingCategory }>,
+): ShoppingPlan {
+  const existingByName = new Map(currentItems.map((item) => [normalizeName(item.name), item]));
+  const nextItems = [...currentItems];
+
+  aiItems.forEach((aiItem) => {
+    const name = String(aiItem.name ?? '').trim();
+    const normalized = normalizeName(name);
+    if (!normalized) return;
+
+    const category = shoppingCategories.includes(aiItem.category) ? aiItem.category : 'その他';
+    const existing = existingByName.get(normalized);
+    if (existing) {
+      existing.category = category;
+      return;
+    }
+
+    const item: ShoppingItem = {
+      id: createShoppingItemId(name),
+      name,
+      category,
+      completed: false,
+      addedAt: new Date().toISOString(),
+    };
+    existingByName.set(normalized, item);
+    nextItems.push(item);
+  });
+
+  return {
+    items: sortShoppingItems(nextItems),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 function extractShoppingItems(text: string) {
   const normalizedText = text
     .replace(/買って|買う|買いたい|購入|追加して|追加|入れて|お願い|あと|それと|それから/g, '、')
@@ -183,6 +236,7 @@ function normalizeStoredItem(item: ShoppingItem): ShoppingItem {
   return {
     ...item,
     category: categoryAliases[item.category] ?? item.category,
+    id: item.id || createShoppingItemId(item.name),
   };
 }
 
@@ -200,4 +254,11 @@ function normalizeForMatching(value: string) {
 
 function normalizeName(name: string) {
   return normalizeForMatching(name).replace(/[。、,，/／・]/g, '');
+}
+
+function createShoppingItemId(name: string) {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `shopping-${crypto.randomUUID()}`;
+  }
+  return `shopping-${Date.now()}-${Math.random().toString(36).slice(2)}-${normalizeName(name)}`;
 }
