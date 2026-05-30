@@ -146,3 +146,13 @@ MORNING FLOW AI の各バージョンの変更内容を記録します。
 - 共有キャンセル時の `AbortError` を通常エラー扱いしないように修正
 - 画面表示を `v2.5` に更新
 - `morning-flow-ai-v2.5.zip` として保存
+## Version 2.6 - 2026-05-30
+
+- Emergency privacy/security patch. New feature development was stopped for this release.
+- Removed personal sample schedule and replaced it with a neutral day-off sample.
+- Added private per-app-start session storage keys for transcript drafts, snapshots, and shopping lists.
+- Removed legacy shared localStorage keys on startup so another user's old data is not loaded.
+- Disabled Google Calendar auto reconnect. Google authentication now starts only from the Google login button.
+- Google login now requests account selection with `select_account consent`.
+- Added a second calendar registration path: open selected events in Google Calendar's new event screen.
+- Updated screen display to `v2.6` and saved as `morning-flow-ai-v2.6.zip`.

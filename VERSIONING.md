@@ -30,3 +30,10 @@
 - ZIP: morning-flow-ai-v2.5.zip
 - 次回予定: Version 2.6
 - 買い物リストで数量・単位を保持し、共有キャンセルをエラー扱いしないように改善
+## Version 2.6 Emergency Privacy Patch - 2026-05-30
+
+- Screen display: v2.6
+- ZIP: morning-flow-ai-v2.6.zip
+- Next planned version: Version 2.7
+- Fixed user data mixing risk by isolating local data per private app-start session.
+- Disabled Google Calendar automatic reconnect; login is manual and account selection is requested every time.

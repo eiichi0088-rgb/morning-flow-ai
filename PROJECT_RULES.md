@@ -41,9 +41,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\git-release.ps1
 ## 髢狗匱閠・Δ繝ｼ繝・
 Developer Mode Marker
 
-迴ｾ蝨ｨ繝舌・繧ｸ繝ｧ繝ｳ: Version 2.5
+迴ｾ蝨ｨ繝舌・繧ｸ繝ｧ繝ｳ: Version 2.6
 
-谺｡蝗樔ｺ亥ｮ壹ヰ繝ｼ繧ｸ繝ｧ繝ｳ: Version 2.6
+谺｡蝗樔ｺ亥ｮ壹ヰ繝ｼ繧ｸ繝ｧ繝ｳ: Version 2.7
 
 譛ｪ螳溯｣・ｩ溯・:
 

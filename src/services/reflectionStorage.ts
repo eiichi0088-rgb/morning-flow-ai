@@ -13,14 +13,14 @@ export interface MorningSnapshot {
   };
 }
 
-const storageKey = 'morning-flow-ai:snapshots:v1';
+const defaultStorageKey = 'morning-flow-ai:snapshots:private-session';
 
-export function loadLatestSnapshot(): MorningSnapshot | null {
-  return loadSnapshots()[0] ?? null;
+export function loadLatestSnapshot(storageKey = defaultStorageKey): MorningSnapshot | null {
+  return loadSnapshots(storageKey)[0] ?? null;
 }
 
-export function saveMorningSnapshot(transcript: string, plan: MorningPlan) {
-  const snapshots = loadSnapshots();
+export function saveMorningSnapshot(transcript: string, plan: MorningPlan, storageKey = defaultStorageKey) {
+  const snapshots = loadSnapshots(storageKey);
   const snapshot: MorningSnapshot = {
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
@@ -28,12 +28,12 @@ export function saveMorningSnapshot(transcript: string, plan: MorningPlan) {
     plan,
   };
 
-  saveSnapshots([snapshot, ...snapshots].slice(0, 30));
+  saveSnapshots([snapshot, ...snapshots].slice(0, 30), storageKey);
   return snapshot;
 }
 
-export function saveReview(snapshotId: string, statuses: Record<string, ReviewStatus>) {
-  const snapshots = loadSnapshots().map((snapshot) =>
+export function saveReview(snapshotId: string, statuses: Record<string, ReviewStatus>, storageKey = defaultStorageKey) {
+  const snapshots = loadSnapshots(storageKey).map((snapshot) =>
     snapshot.id === snapshotId
       ? {
           ...snapshot,
@@ -45,10 +45,10 @@ export function saveReview(snapshotId: string, statuses: Record<string, ReviewSt
       : snapshot,
   );
 
-  saveSnapshots(snapshots);
+  saveSnapshots(snapshots, storageKey);
 }
 
-function loadSnapshots(): MorningSnapshot[] {
+function loadSnapshots(storageKey: string): MorningSnapshot[] {
   try {
     const raw = localStorage.getItem(storageKey);
     if (!raw) return [];
@@ -59,6 +59,6 @@ function loadSnapshots(): MorningSnapshot[] {
   }
 }
 
-function saveSnapshots(snapshots: MorningSnapshot[]) {
+function saveSnapshots(snapshots: MorningSnapshot[], storageKey: string) {
   localStorage.setItem(storageKey, JSON.stringify(snapshots));
 }

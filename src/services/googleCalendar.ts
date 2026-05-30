@@ -18,7 +18,7 @@ interface TokenResponse {
 
 interface TokenClient {
   callback: (response: TokenResponse) => void;
-  requestAccessToken: (options?: { prompt?: '' | 'consent' }) => void;
+  requestAccessToken: (options?: { prompt?: string }) => void;
 }
 
 declare global {
@@ -49,7 +49,7 @@ export function isGoogleCalendarConfigured() {
   return Boolean(getGoogleClientId());
 }
 
-export async function requestGoogleAccessToken(prompt: '' | 'consent' = 'consent') {
+export async function requestGoogleAccessToken(prompt = 'select_account consent') {
   const clientId = getGoogleClientId();
   if (!clientId) {
     throw new Error('Google Client IDが未設定です。.envにVITE_GOOGLE_CLIENT_IDを設定してください。');

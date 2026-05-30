@@ -87,12 +87,16 @@ const SpeechRecognition =
   window.SpeechRecognition ?? window.webkitSpeechRecognition;
 
 const sampleTranscript =
-  '今日は朝9時から仕込みをして、11時から14時まで昼営業。売上目標を達成したい。15時に銀行で手続き、17時に買い物。家族との時間も取りたい。夜22時半にジムへ行って30分運動したい。銀行の営業時間に間に合うように注意したい。';
+  '\u4eca\u65e5\u306f\u4f11\u307f\u306a\u306e\u3067\u3001\u5348\u524d\u4e2d\u306b\u6383\u9664\u3068\u6d17\u6fef\u3092\u6e08\u307e\u305b\u308b\u3002\u5348\u5f8c\u306f\u53cb\u4eba\u3068\u30e9\u30f3\u30c1\u3078\u884c\u304d\u3001\u5915\u65b9\u306b\u8cb7\u3044\u7269\u3092\u3057\u3066\u3001\u591c\u306f\u6620\u753b\u3092\u898b\u306a\u304c\u3089\u3086\u3063\u304f\u308a\u904e\u3054\u3057\u305f\u3044\u3002';
 
-const draftStorageKey = 'morning-flow-ai:transcript-draft:v1';
-const googleLoginStorageKey = 'morning-flow-ai:google-calendar-login:v1';
-const shoppingStorageKey = 'morning-flow-ai:shopping-list:v1';
-
+const legacySharedStorageKeys = [
+  'morning-flow-ai:transcript-draft:v1',
+  'morning-flow-ai:snapshots:v1',
+  'morning-flow-ai:shopping-list:v1',
+  'morning-flow-ai:google-calendar-login:v1',
+  'morning-flow-ai:userProfile:v1',
+  'morning-flow-ai:preferences:v1',
+];
 type CalendarEvent = {
   id: string;
   title: string;
@@ -105,6 +109,12 @@ type CalendarEvent = {
 
 type CaptureMode = 'create' | 'update';
 type AppView = 'morning' | 'shopping';
+
+type PrivateSessionKeys = {
+  draft: string;
+  shopping: string;
+  snapshots: string;
+};
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
   { label: '✓ 完了', value: 'done' },
@@ -119,7 +129,31 @@ const energyOptions: { label: string; value: EnergyMood }[] = [
   { label: '😣 とても疲れている', value: 'exhausted' },
 ];
 
+function createPrivateSessionId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function createPrivateSessionKeys(sessionId: string): PrivateSessionKeys {
+  return {
+    draft: `morning-flow-ai:session:${sessionId}:transcript-draft`,
+    shopping: `morning-flow-ai:session:${sessionId}:shopping-list`,
+    snapshots: `morning-flow-ai:session:${sessionId}:snapshots`,
+  };
+}
+
+function removeLegacySharedStorage(currentSessionId: string) {
+  legacySharedStorageKeys.forEach((key) => localStorage.removeItem(key));
+  Object.keys(localStorage)
+    .filter((key) => key.startsWith('morning-flow-ai:session:') && !key.includes(`:${currentSessionId}:`))
+    .forEach((key) => localStorage.removeItem(key));
+}
+
 function App() {
+  const privateSessionId = React.useMemo(createPrivateSessionId, []);
+  const privateSessionKeys = React.useMemo(() => createPrivateSessionKeys(privateSessionId), [privateSessionId]);
   const [activeView, setActiveView] = React.useState<AppView>('morning');
   const [recognition, setRecognition] = React.useState<SpeechRecognitionLike | null>(null);
   const [isListening, setIsListening] = React.useState(false);
@@ -167,15 +201,16 @@ function App() {
   const hasEditableUpdateInstruction = Boolean(plan && updateInstruction.trim()) && !isListening;
 
   React.useEffect(() => {
-    const snapshot = loadLatestSnapshot();
+    removeLegacySharedStorage(privateSessionId);
+    const snapshot = loadLatestSnapshot(privateSessionKeys.snapshots);
     setPreviousSnapshot(snapshot);
     setReviewStatuses(snapshot?.review?.statuses ?? {});
-    const savedDraft = localStorage.getItem(draftStorageKey);
+    const savedDraft = localStorage.getItem(privateSessionKeys.draft);
     if (savedDraft) {
       setTranscript(savedDraft);
       setOriginalTranscript(savedDraft);
     }
-    const savedShopping = localStorage.getItem(shoppingStorageKey);
+    const savedShopping = localStorage.getItem(privateSessionKeys.shopping);
     if (savedShopping) {
       try {
         const parsed = JSON.parse(savedShopping) as {
@@ -188,18 +223,18 @@ function App() {
         setShoppingItems(Array.isArray(parsed.items) ? parsed.items : []);
         setShoppingUpdatedAt(parsed.updatedAt ?? '');
       } catch {
-        localStorage.removeItem(shoppingStorageKey);
+        localStorage.removeItem(privateSessionKeys.shopping);
       }
     }
-  }, []);
+  }, [privateSessionId, privateSessionKeys]);
 
   React.useEffect(() => {
     if (transcript.trim()) {
-      localStorage.setItem(draftStorageKey, transcript);
+      localStorage.setItem(privateSessionKeys.draft, transcript);
     } else {
-      localStorage.removeItem(draftStorageKey);
+      localStorage.removeItem(privateSessionKeys.draft);
     }
-  }, [transcript]);
+  }, [privateSessionKeys.draft, transcript]);
 
   React.useEffect(() => {
     if (!highlightedScheduleKeys.length) return;
@@ -209,19 +244,19 @@ function App() {
 
   React.useEffect(() => {
     if (!shoppingText.trim() && !shoppingItems.length) {
-      localStorage.removeItem(shoppingStorageKey);
+      localStorage.removeItem(privateSessionKeys.shopping);
       return;
     }
 
     localStorage.setItem(
-      shoppingStorageKey,
+      privateSessionKeys.shopping,
       JSON.stringify({
         items: shoppingItems,
         text: shoppingText,
         updatedAt: shoppingUpdatedAt,
       }),
     );
-  }, [shoppingItems, shoppingText, shoppingUpdatedAt]);
+  }, [privateSessionKeys.shopping, shoppingItems, shoppingText, shoppingUpdatedAt]);
 
   React.useEffect(() => {
     if (!highlightedShoppingIds.length) return;
@@ -376,7 +411,7 @@ function App() {
         setUpdateInstruction('');
         setOriginalUpdateInstruction('');
         setHighlightedScheduleKeys([]);
-        saveMorningSnapshot(transcript, planWithCarryover);
+        saveMorningSnapshot(transcript, planWithCarryover, privateSessionKeys.snapshots);
       })
       .catch((reason: unknown) => {
         console.error(reason);
@@ -405,7 +440,7 @@ function App() {
         setTranscript((current) => `${current.trim()}\n\n追加・修正指示:\n${updateInstruction.trim()}`.trim());
         setUpdateInstruction('');
         setOriginalUpdateInstruction('');
-        saveMorningSnapshot(transcript, mergedPlan);
+        saveMorningSnapshot(transcript, mergedPlan, privateSessionKeys.snapshots);
       })
       .catch((reason: unknown) => {
         console.error(reason);
@@ -596,7 +631,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.5</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.6</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -656,7 +691,7 @@ function App() {
             onStatusChange={(task, status) => {
               const nextStatuses = { ...reviewStatuses, [task]: status };
               setReviewStatuses(nextStatuses);
-              saveReview(previousSnapshot.id, nextStatuses);
+              saveReview(previousSnapshot.id, nextStatuses, privateSessionKeys.snapshots);
             }}
             snapshot={previousSnapshot}
             statuses={reviewStatuses}
@@ -867,7 +902,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.5</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.6</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
@@ -1405,28 +1440,12 @@ function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
     setSelectedEventIds(events.map((event) => event.id));
   }, [events]);
 
-  React.useEffect(() => {
-    if (!isConfigured || localStorage.getItem(googleLoginStorageKey) !== 'connected') return;
-
-    setIsSigningIn(true);
-    requestGoogleAccessToken('')
-      .then((token) => {
-        setAccessToken(token);
-        setStatusMessage('Googleカレンダーに接続済みです。');
-      })
-      .catch(() => {
-        localStorage.removeItem(googleLoginStorageKey);
-      })
-      .finally(() => setIsSigningIn(false));
-  }, [isConfigured]);
-
   const connectGoogle = () => {
     setIsSigningIn(true);
     setStatusMessage('');
-    requestGoogleAccessToken('consent')
+    requestGoogleAccessToken('select_account consent')
       .then((token) => {
         setAccessToken(token);
-        localStorage.setItem(googleLoginStorageKey, 'connected');
         setStatusMessage('Googleカレンダーに接続しました。登録する予定を確認してください。');
       })
       .catch((reason: unknown) => {
@@ -1440,7 +1459,6 @@ function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
       revokeGoogleAccessToken(accessToken);
     }
     setAccessToken('');
-    localStorage.removeItem(googleLoginStorageKey);
     setStatusMessage('Googleカレンダー連携を解除しました。');
   };
 
@@ -1463,6 +1481,13 @@ function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
         setStatusMessage(reason instanceof Error ? reason.message : 'Googleカレンダーへの登録に失敗しました。');
       })
       .finally(() => setIsRegistering(false));
+  };
+
+  const openSelectedEventsInGoogle = () => {
+    selectedEvents.forEach((event) => {
+      window.open(createGoogleCalendarUrl(event), '_blank', 'noopener,noreferrer');
+    });
+    setStatusMessage('選択した予定をGoogleカレンダーの新規作成画面で開きました。登録先アカウントを画面上で確認してください。');
   };
 
   if (!events.length) {
@@ -1570,6 +1595,16 @@ function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
       >
         <CalendarPlus size={18} />
         {isRegistering ? '登録中' : `Googleカレンダーへ登録 (${selectedEvents.length}件)`}
+      </button>
+
+      <button
+        className="calendar-download-button"
+        disabled={!selectedEvents.length}
+        onClick={openSelectedEventsInGoogle}
+        type="button"
+      >
+        <ExternalLink size={18} />
+        Googleカレンダー画面で確認して登録
       </button>
 
       {statusMessage && <p className="calendar-status">{statusMessage}</p>}
