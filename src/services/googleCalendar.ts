@@ -69,7 +69,7 @@ export async function requestGoogleAccessToken(prompt = 'select_account consent'
       scope: calendarScope,
       callback: (response) => {
         if (response.error || !response.access_token) {
-          reject(new Error('Googleログインが完了しませんでした。もう一度お試しください。'));
+          reject(new Error('Googleログインが完了しませんでした。アカウント選択を確認してもう一度お試しください。'));
           return;
         }
         resolve(response.access_token);
@@ -84,10 +84,7 @@ export function revokeGoogleAccessToken(accessToken: string) {
   window.google?.accounts?.oauth2?.revoke(accessToken);
 }
 
-export async function insertGoogleCalendarEvents(
-  accessToken: string,
-  events: GoogleCalendarEventInput[],
-) {
+export async function insertGoogleCalendarEvents(accessToken: string, events: GoogleCalendarEventInput[]) {
   const timeZone = 'Asia/Tokyo';
 
   return Promise.all(
@@ -112,7 +109,7 @@ export async function insertGoogleCalendarEvents(
           extendedProperties: {
             private: {
               priority: event.priority,
-              source: 'MORNING FLOW AI',
+              source: 'MORNING FLOW AI v3.0',
             },
           },
         }),
@@ -120,7 +117,9 @@ export async function insertGoogleCalendarEvents(
 
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
-        const message = payload?.error?.message ?? 'Googleカレンダーへの登録に失敗しました。';
+        const message =
+          payload?.error?.message ??
+          'Googleカレンダーへの登録に失敗しました。ログイン中のGoogleアカウントと権限を確認してください。';
         throw new Error(message);
       }
 

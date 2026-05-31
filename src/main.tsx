@@ -1,31 +1,27 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import {
-  ArrowRight,
   AlertTriangle,
-  Brain,
+  AtSign,
   CalendarClock,
   CalendarPlus,
   CheckCircle2,
-  ChevronRight,
-  Compass,
+  Clock3,
   Download,
   ExternalLink,
-  Flag,
-  HeartPulse,
-  Lightbulb,
-  ListChecks,
-  Loader2,
   Home,
+  Loader2,
+  Mail,
+  MessageCircle,
   Mic,
-  RefreshCw,
-  Route,
   Pencil,
+  Phone,
+  RefreshCw,
   Share2,
+  ShieldCheck,
   ShoppingCart,
   Sparkles,
   Square,
-  Target,
   Trash2,
 } from 'lucide-react';
 import { createAiMorningPlan, type EnergyMood, type MorningPlan } from './services/aiPlanner';
@@ -36,14 +32,9 @@ import {
   revokeGoogleAccessToken,
   type GoogleCalendarPriority,
 } from './services/googleCalendar';
+import { loadLatestSnapshot, saveMorningSnapshot, saveReview, type MorningSnapshot, type ReviewStatus } from './services/reflectionStorage';
 import {
-  loadLatestSnapshot,
-  saveMorningSnapshot,
-  saveReview,
-  type MorningSnapshot,
-  type ReviewStatus,
-} from './services/reflectionStorage';
-import {
+  createManualShoppingItem,
   createShoppingPlan,
   formatShoppingItemLabel,
   groupShoppingItems,
@@ -83,20 +74,25 @@ declare global {
   }
 }
 
-const SpeechRecognition =
-  window.SpeechRecognition ?? window.webkitSpeechRecognition;
+type CaptureMode = 'create' | 'update';
+type AppView = 'morning' | 'shopping' | 'contacts';
+type ContactKind = 'phone' | 'line' | 'mail' | 'sns' | 'other';
 
-const sampleTranscript =
-  '\u4eca\u65e5\u306f\u4f11\u307f\u306a\u306e\u3067\u3001\u5348\u524d\u4e2d\u306b\u6383\u9664\u3068\u6d17\u6fef\u3092\u6e08\u307e\u305b\u308b\u3002\u5348\u5f8c\u306f\u53cb\u4eba\u3068\u30e9\u30f3\u30c1\u3078\u884c\u304d\u3001\u5915\u65b9\u306b\u8cb7\u3044\u7269\u3092\u3057\u3066\u3001\u591c\u306f\u6620\u753b\u3092\u898b\u306a\u304c\u3089\u3086\u3063\u304f\u308a\u904e\u3054\u3057\u305f\u3044\u3002';
+interface ContactReminder {
+  id: string;
+  text: string;
+  kind: ContactKind;
+  completed: boolean;
+  createdAt: string;
+}
 
-const legacySharedStorageKeys = [
-  'morning-flow-ai:transcript-draft:v1',
-  'morning-flow-ai:snapshots:v1',
-  'morning-flow-ai:shopping-list:v1',
-  'morning-flow-ai:google-calendar-login:v1',
-  'morning-flow-ai:userProfile:v1',
-  'morning-flow-ai:preferences:v1',
-];
+type V3PrivateKeys = {
+  draft: string;
+  shopping: string;
+  snapshots: string;
+  contacts: string;
+};
+
 type CalendarEvent = {
   id: string;
   title: string;
@@ -107,156 +103,140 @@ type CalendarEvent = {
   sourceTime: string;
 };
 
-type CaptureMode = 'create' | 'update';
-type AppView = 'morning' | 'shopping';
+const SpeechRecognition = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+const appVersion = 'v3.0';
+const activeProfileKey = 'morning-flow-ai:v3:active-profile';
+const v2AndSharedStorageKeys = [
+  'morning-flow-ai:transcript-draft:v1',
+  'morning-flow-ai:snapshots:v1',
+  'morning-flow-ai:shopping-list:v1',
+  'morning-flow-ai:google-calendar-login:v1',
+  'morning-flow-ai:userProfile:v1',
+  'morning-flow-ai:preferences:v1',
+];
 
-type PrivateSessionKeys = {
-  draft: string;
-  shopping: string;
-  snapshots: string;
-};
+const sampleTranscript =
+  '今日は午前中に資料作成を終わらせる。昼に買い物で牛乳と卵を買う。午後は山田さんに折り返し電話して、LINEの返信も忘れない。夕方に30分歩いて、夜は明日の準備をする。';
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
-  { label: '✓ 完了', value: 'done' },
-  { label: '△ 一部完了', value: 'partial' },
-  { label: '✕ 未達成', value: 'missed' },
+  { label: '完了', value: 'done' },
+  { label: '一部完了', value: 'partial' },
+  { label: '未達成', value: 'missed' },
 ];
 
 const energyOptions: { label: string; value: EnergyMood }[] = [
-  { label: '😊 絶好調', value: 'great' },
-  { label: '🙂 普通', value: 'normal' },
-  { label: '😴 疲れている', value: 'tired' },
-  { label: '😣 とても疲れている', value: 'exhausted' },
+  { label: '絶好調', value: 'great' },
+  { label: '普通', value: 'normal' },
+  { label: '疲れ気味', value: 'tired' },
+  { label: 'かなり疲れている', value: 'exhausted' },
 ];
 
-function createPrivateSessionId() {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+function getOrCreatePrivateProfileId() {
+  const saved = localStorage.getItem(activeProfileKey);
+  if (saved?.startsWith('local-private-')) return saved;
+  const next = `local-private-${createId()}`;
+  localStorage.setItem(activeProfileKey, next);
+  return next;
 }
 
-function createPrivateSessionKeys(sessionId: string): PrivateSessionKeys {
+function createPrivateKeys(ownerId: string): V3PrivateKeys {
+  const base = `morning-flow-ai:v3:owner:${ownerId}`;
   return {
-    draft: `morning-flow-ai:session:${sessionId}:transcript-draft`,
-    shopping: `morning-flow-ai:session:${sessionId}:shopping-list`,
-    snapshots: `morning-flow-ai:session:${sessionId}:snapshots`,
+    draft: `${base}:transcript-draft`,
+    shopping: `${base}:shopping-list`,
+    snapshots: `${base}:snapshots`,
+    contacts: `${base}:contact-reminders`,
   };
 }
 
-function removeLegacySharedStorage(currentSessionId: string) {
-  legacySharedStorageKeys.forEach((key) => localStorage.removeItem(key));
+function clearLegacyAndForeignSessionStorage(ownerId: string) {
+  v2AndSharedStorageKeys.forEach((key) => localStorage.removeItem(key));
   Object.keys(localStorage)
-    .filter((key) => key.startsWith('morning-flow-ai:session:') && !key.includes(`:${currentSessionId}:`))
+    .filter((key) => key.startsWith('morning-flow-ai:session:'))
+    .forEach((key) => localStorage.removeItem(key));
+  Object.keys(localStorage)
+    .filter((key) => key.startsWith('morning-flow-ai:v3:owner:') && !key.includes(`:${ownerId}:`))
     .forEach((key) => localStorage.removeItem(key));
 }
 
 function App() {
-  const privateSessionId = React.useMemo(createPrivateSessionId, []);
-  const privateSessionKeys = React.useMemo(() => createPrivateSessionKeys(privateSessionId), [privateSessionId]);
+  const ownerId = React.useMemo(getOrCreatePrivateProfileId, []);
+  const privateKeys = React.useMemo(() => createPrivateKeys(ownerId), [ownerId]);
   const [activeView, setActiveView] = React.useState<AppView>('morning');
   const [recognition, setRecognition] = React.useState<SpeechRecognitionLike | null>(null);
   const [isListening, setIsListening] = React.useState(false);
+  const [captureMode, setCaptureMode] = React.useState<CaptureMode>('create');
   const [transcript, setTranscript] = React.useState('');
   const [originalTranscript, setOriginalTranscript] = React.useState('');
   const [updateInstruction, setUpdateInstruction] = React.useState('');
-  const [originalUpdateInstruction, setOriginalUpdateInstruction] = React.useState('');
   const [interimTranscript, setInterimTranscript] = React.useState('');
   const [error, setError] = React.useState('');
   const [plan, setPlan] = React.useState<MorningPlan | null>(null);
-  const [captureMode, setCaptureMode] = React.useState<CaptureMode>('create');
-  const [highlightedScheduleKeys, setHighlightedScheduleKeys] = React.useState<string[]>([]);
   const [isOrganizing, setIsOrganizing] = React.useState(false);
-  const [isResetDialogOpen, setIsResetDialogOpen] = React.useState(false);
+  const [previousSnapshot, setPreviousSnapshot] = React.useState<MorningSnapshot | null>(null);
+  const [reviewStatuses, setReviewStatuses] = React.useState<Record<string, ReviewStatus>>({});
+  const [carriedTodos, setCarriedTodos] = React.useState<string[]>([]);
+  const [energy, setEnergy] = React.useState<EnergyMood>('normal');
   const [shoppingText, setShoppingText] = React.useState('');
-  const [originalShoppingText, setOriginalShoppingText] = React.useState('');
   const [shoppingItems, setShoppingItems] = React.useState<ShoppingItem[]>([]);
   const [shoppingUpdatedAt, setShoppingUpdatedAt] = React.useState('');
   const [shoppingError, setShoppingError] = React.useState('');
   const [shoppingShareMessage, setShoppingShareMessage] = React.useState('');
   const [isShoppingOrganizing, setIsShoppingOrganizing] = React.useState(false);
-  const [isShoppingResetDialogOpen, setIsShoppingResetDialogOpen] = React.useState(false);
   const [highlightedShoppingIds, setHighlightedShoppingIds] = React.useState<string[]>([]);
-  const [previousSnapshot, setPreviousSnapshot] = React.useState<MorningSnapshot | null>(null);
-  const [reviewStatuses, setReviewStatuses] = React.useState<Record<string, ReviewStatus>>({});
-  const [carriedTodos, setCarriedTodos] = React.useState<string[]>([]);
-  const [energy, setEnergy] = React.useState<EnergyMood>('normal');
-  const planAnchorRef = React.useRef<HTMLDivElement | null>(null);
-
-  const isSupported = Boolean(SpeechRecognition);
-  const isShoppingView = activeView === 'shopping';
+  const [contacts, setContacts] = React.useState<ContactReminder[]>([]);
+  const [contactDraft, setContactDraft] = React.useState('');
+  const [calendarOpen, setCalendarOpen] = React.useState(false);
   const activeText = captureMode === 'update' ? updateInstruction : transcript;
   const resultText = [activeText, interimTranscript].filter(Boolean).join('\n');
-  const shoppingResultText = [shoppingText, isShoppingView ? interimTranscript : ''].filter(Boolean).join('\n');
-  const canOrganize = Boolean(transcript.trim()) && !isListening && captureMode === 'create';
-  const canUpdatePlan = Boolean(plan && updateInstruction.trim()) && !isListening;
-  const canOrganizeShopping = Boolean(shoppingText.trim()) && !isListening;
-  const canUseNext = canOrganize || canUpdatePlan || Boolean(plan);
-  const nextButtonLabel = isOrganizing
-    ? canUpdatePlan
-      ? 'スケジュールを更新中…'
-      : 'AIが整理中…'
-    : '次へ進む';
-  const hasEditableTranscript = Boolean(transcript.trim()) && !isListening && captureMode === 'create';
-  const hasEditableUpdateInstruction = Boolean(plan && updateInstruction.trim()) && !isListening;
+  const shoppingResultText = [shoppingText, activeView === 'shopping' ? interimTranscript : ''].filter(Boolean).join('\n');
+  const isSupported = Boolean(SpeechRecognition);
+  const canOrganize = Boolean(transcript.trim()) && !isListening && !isOrganizing;
+  const calendarEvents = React.useMemo(() => (plan ? createCalendarEvents(plan) : []), [plan]);
 
   React.useEffect(() => {
-    removeLegacySharedStorage(privateSessionId);
-    const snapshot = loadLatestSnapshot(privateSessionKeys.snapshots);
+    clearLegacyAndForeignSessionStorage(ownerId);
+    const snapshot = loadLatestSnapshot(privateKeys.snapshots);
     setPreviousSnapshot(snapshot);
     setReviewStatuses(snapshot?.review?.statuses ?? {});
-    const savedDraft = localStorage.getItem(privateSessionKeys.draft);
+
+    const savedDraft = localStorage.getItem(privateKeys.draft);
     if (savedDraft) {
       setTranscript(savedDraft);
       setOriginalTranscript(savedDraft);
     }
-    const savedShopping = localStorage.getItem(privateSessionKeys.shopping);
+
+    const savedShopping = readJson<{ items?: ShoppingItem[]; text?: string; updatedAt?: string }>(privateKeys.shopping);
     if (savedShopping) {
-      try {
-        const parsed = JSON.parse(savedShopping) as {
-          items?: ShoppingItem[];
-          text?: string;
-          updatedAt?: string;
-        };
-        setShoppingText(parsed.text ?? '');
-        setOriginalShoppingText(parsed.text ?? '');
-        setShoppingItems(Array.isArray(parsed.items) ? parsed.items : []);
-        setShoppingUpdatedAt(parsed.updatedAt ?? '');
-      } catch {
-        localStorage.removeItem(privateSessionKeys.shopping);
-      }
+      setShoppingText(savedShopping.text ?? '');
+      setShoppingItems(Array.isArray(savedShopping.items) ? savedShopping.items : []);
+      setShoppingUpdatedAt(savedShopping.updatedAt ?? '');
     }
-  }, [privateSessionId, privateSessionKeys]);
+
+    const savedContacts = readJson<ContactReminder[]>(privateKeys.contacts);
+    if (Array.isArray(savedContacts)) {
+      setContacts(savedContacts);
+    }
+  }, [ownerId, privateKeys]);
 
   React.useEffect(() => {
     if (transcript.trim()) {
-      localStorage.setItem(privateSessionKeys.draft, transcript);
+      localStorage.setItem(privateKeys.draft, transcript);
     } else {
-      localStorage.removeItem(privateSessionKeys.draft);
+      localStorage.removeItem(privateKeys.draft);
     }
-  }, [privateSessionKeys.draft, transcript]);
+  }, [privateKeys.draft, transcript]);
 
   React.useEffect(() => {
-    if (!highlightedScheduleKeys.length) return;
-    const timeoutId = window.setTimeout(() => setHighlightedScheduleKeys([]), 7000);
-    return () => window.clearTimeout(timeoutId);
-  }, [highlightedScheduleKeys]);
-
-  React.useEffect(() => {
-    if (!shoppingText.trim() && !shoppingItems.length) {
-      localStorage.removeItem(privateSessionKeys.shopping);
-      return;
-    }
-
     localStorage.setItem(
-      privateSessionKeys.shopping,
-      JSON.stringify({
-        items: shoppingItems,
-        text: shoppingText,
-        updatedAt: shoppingUpdatedAt,
-      }),
+      privateKeys.shopping,
+      JSON.stringify({ items: shoppingItems, text: shoppingText, updatedAt: shoppingUpdatedAt }),
     );
-  }, [privateSessionKeys.shopping, shoppingItems, shoppingText, shoppingUpdatedAt]);
+  }, [privateKeys.shopping, shoppingItems, shoppingText, shoppingUpdatedAt]);
+
+  React.useEffect(() => {
+    localStorage.setItem(privateKeys.contacts, JSON.stringify(contacts));
+  }, [privateKeys.contacts, contacts]);
 
   React.useEffect(() => {
     if (!highlightedShoppingIds.length) return;
@@ -271,989 +251,864 @@ function App() {
     instance.lang = 'ja-JP';
     instance.continuous = true;
     instance.interimResults = true;
-
     instance.onstart = () => {
       setIsListening(true);
-      if (activeView === 'shopping') {
-        setShoppingError('');
-      } else {
-        setError('');
-      }
+      setError('');
+      setShoppingError('');
     };
-
     instance.onend = () => {
       setIsListening(false);
       setInterimTranscript('');
     };
-
     instance.onerror = (event) => {
       setIsListening(false);
       setInterimTranscript('');
-      if (activeView === 'shopping') {
-        setShoppingError(getSpeechErrorMessage(event.error));
-      } else {
-        setError(getSpeechErrorMessage(event.error));
-      }
+      const message = getSpeechErrorMessage(event.error);
+      if (activeView === 'shopping') setShoppingError(message);
+      else setError(message);
     };
-
     instance.onresult = (event) => {
       let finalText = '';
       let interimText = '';
-
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
         const phrase = event.results[index][0].transcript;
-        if (event.results[index].isFinal) {
-          finalText += phrase;
-        } else {
-          interimText += phrase;
-        }
+        if (event.results[index].isFinal) finalText += phrase;
+        else interimText += phrase;
       }
-
-      if (finalText) {
-        const appendText = (current: string) => `${current}${current ? '\n' : ''}${finalText.trim()}`;
-        if (activeView === 'shopping') {
-          setShoppingText((current) => {
-            const nextText = appendText(current);
-            setOriginalShoppingText(nextText);
-            return nextText;
-          });
-        } else if (captureMode === 'update') {
-          setUpdateInstruction((current) => {
-            const nextInstruction = appendText(current);
-            setOriginalUpdateInstruction(nextInstruction);
-            return nextInstruction;
-          });
-        } else {
-          setTranscript((current) => {
-            const nextTranscript = appendText(current);
-            setOriginalTranscript(nextTranscript);
-            return nextTranscript;
-          });
-          setPlan(null);
-          setHighlightedScheduleKeys([]);
-        }
-      }
+      if (finalText) appendRecognizedText(finalText.trim());
       setInterimTranscript(interimText.trim());
     };
 
     setRecognition(instance);
-
-    return () => {
-      instance.abort();
-    };
+    return () => instance.abort();
   }, [activeView, captureMode]);
+
+  const appendRecognizedText = (text: string) => {
+    const append = (current: string) => `${current}${current ? '\n' : ''}${text}`;
+    if (activeView === 'shopping') {
+      setShoppingText((current) => append(current));
+      return;
+    }
+    if (activeView === 'contacts') {
+      setContactDraft((current) => append(current));
+      return;
+    }
+    if (captureMode === 'update') {
+      setUpdateInstruction((current) => append(current));
+      return;
+    }
+    setTranscript((current) => {
+      const next = append(current);
+      setOriginalTranscript(next);
+      return next;
+    });
+    setPlan(null);
+  };
 
   const startListening = () => {
     if (!recognition || isListening) return;
-
-    if (activeView === 'shopping') {
-      setShoppingError('');
-    } else {
-      setError('');
-    }
     try {
       recognition.start();
     } catch {
-      const message = '音声認識を開始できませんでした。少し待ってからもう一度お試しください。';
-      if (activeView === 'shopping') {
-        setShoppingError(message);
-      } else {
-        setError(message);
-      }
+      const message = '音声入力を開始できませんでした。少し待ってからもう一度お試しください。';
+      activeView === 'shopping' ? setShoppingError(message) : setError(message);
     }
   };
 
-  const stopListening = () => {
-    recognition?.stop();
-  };
+  const stopListening = () => recognition?.stop();
 
-  const resetTranscript = () => {
+  const resetPrivateData = () => {
     recognition?.abort();
-    setIsResetDialogOpen(false);
+    [privateKeys.draft, privateKeys.shopping, privateKeys.snapshots, privateKeys.contacts].forEach((key) =>
+      localStorage.removeItem(key),
+    );
     setTranscript('');
     setOriginalTranscript('');
     setUpdateInstruction('');
-    setOriginalUpdateInstruction('');
     setInterimTranscript('');
-    setError('');
-    setIsListening(false);
     setPlan(null);
+    setPreviousSnapshot(null);
+    setReviewStatuses({});
     setCarriedTodos([]);
-    setCaptureMode('create');
-    setHighlightedScheduleKeys([]);
-  };
-
-  const useSample = () => {
-    recognition?.abort();
-    setTranscript(sampleTranscript);
-    setOriginalTranscript(sampleTranscript);
-    setUpdateInstruction('');
-    setOriginalUpdateInstruction('');
-    setInterimTranscript('');
+    setShoppingText('');
+    setShoppingItems([]);
+    setShoppingUpdatedAt('');
+    setContacts([]);
+    setContactDraft('');
     setError('');
-    setIsListening(false);
-    setPlan(null);
+    setShoppingError('');
     setCaptureMode('create');
-    setHighlightedScheduleKeys([]);
   };
 
   const organizeMorning = () => {
-    if (!transcript.trim()) return;
+    const text = captureMode === 'update' ? updateInstruction : transcript;
+    if (!text.trim()) return;
+
+    const contactTexts = contacts.filter((item) => !item.completed).map((item) => item.text);
+    const shoppingLabels = shoppingItems.filter((item) => !item.completed).map(formatShoppingItemLabel);
+    const derivedContacts = extractContactReminders(text);
+    mergeContacts(derivedContacts);
 
     setIsOrganizing(true);
     setError('');
-
-    createAiMorningPlan(transcript, energy)
-      .then((nextPlan) => {
-        const planWithCarryover = addCarryoverToPlan(nextPlan, carriedTodos);
-        setPlan(planWithCarryover);
-        setCaptureMode('update');
-        setUpdateInstruction('');
-        setOriginalUpdateInstruction('');
-        setHighlightedScheduleKeys([]);
-        saveMorningSnapshot(transcript, planWithCarryover, privateSessionKeys.snapshots);
-      })
-      .catch((reason: unknown) => {
-        console.error(reason);
-        setError('うまく処理できませんでした。もう一度お試しください。');
-      })
-      .finally(() => {
-        setIsOrganizing(false);
-      });
-  };
-
-  const applyScheduleUpdate = () => {
-    if (!plan || !updateInstruction.trim()) return;
-
-    const previousPlan = plan;
-    setIsOrganizing(true);
-    setError('');
-
-    createAiMorningPlan(updateInstruction, energy, {
-      currentPlan: previousPlan,
-      mode: 'update',
+    createAiMorningPlan(text, energy, {
+      contactReminders: Array.from(new Set([...contactTexts, ...derivedContacts.map((item) => item.text)])),
+      currentPlan: captureMode === 'update' ? plan : null,
+      mode: captureMode,
+      shoppingItems: shoppingLabels,
     })
       .then((nextPlan) => {
-        const mergedPlan = preserveExistingPlan(previousPlan, nextPlan);
-        setPlan(mergedPlan);
-        setHighlightedScheduleKeys(findNewScheduleKeys(previousPlan, mergedPlan));
-        setTranscript((current) => `${current.trim()}\n\n追加・修正指示:\n${updateInstruction.trim()}`.trim());
+        const mergedPlan = captureMode === 'update' && plan ? preserveExistingPlan(plan, nextPlan) : nextPlan;
+        const planWithCarryover = addCarryoverToPlan(mergedPlan, carriedTodos);
+        setPlan(planWithCarryover);
+        setCalendarOpen(false);
+        setCaptureMode('update');
         setUpdateInstruction('');
-        setOriginalUpdateInstruction('');
-        saveMorningSnapshot(transcript, mergedPlan, privateSessionKeys.snapshots);
+        if (captureMode === 'update') {
+          setTranscript((current) => `${current.trim()}\n\n追加・修正指示:\n${text.trim()}`.trim());
+        }
+        saveMorningSnapshot(transcript || text, planWithCarryover, privateKeys.snapshots, ownerId);
       })
       .catch((reason: unknown) => {
         console.error(reason);
-        setError('うまく処理できませんでした。もう一度お試しください。');
+        setError(reason instanceof Error ? reason.message : 'AI整理に失敗しました。もう一度お試しください。');
       })
-      .finally(() => {
-        setIsOrganizing(false);
-      });
-  };
-
-  const carryOverTodos = (todos: string[]) => {
-    setCarriedTodos(todos);
-    setPlan((currentPlan) => (currentPlan ? addCarryoverToPlan(currentPlan, todos) : currentPlan));
-  };
-
-  const saveEditedTranscript = () => {
-    const normalized = transcript.trim();
-    setTranscript(normalized);
-    setOriginalTranscript(normalized);
-    setPlan(null);
-  };
-
-  const restoreOriginalTranscript = () => {
-    setTranscript(originalTranscript);
-    setPlan(null);
+      .finally(() => setIsOrganizing(false));
   };
 
   const organizeShoppingList = () => {
     if (!shoppingText.trim()) return;
-
     const previousIds = new Set(shoppingItems.map((item) => item.id));
     setIsShoppingOrganizing(true);
     setShoppingError('');
-
     createShoppingPlan(shoppingText, shoppingItems)
       .then((shoppingPlan) => {
         setShoppingItems(shoppingPlan.items);
         setShoppingUpdatedAt(shoppingPlan.updatedAt);
-        setOriginalShoppingText(shoppingText.trim());
         setHighlightedShoppingIds(shoppingPlan.items.filter((item) => !previousIds.has(item.id)).map((item) => item.id));
       })
       .catch((reason: unknown) => {
         console.error(reason);
-        setShoppingError('うまく整理できませんでした。もう一度お試しください。');
+        setShoppingError('買い物リストを整理できませんでした。内容を少し短くしてもう一度お試しください。');
       })
-      .finally(() => {
-        setIsShoppingOrganizing(false);
-      });
+      .finally(() => setIsShoppingOrganizing(false));
   };
 
-  const resetShoppingList = () => {
-    recognition?.abort();
-    setShoppingText('');
-    setOriginalShoppingText('');
-    setShoppingItems([]);
-    setShoppingUpdatedAt('');
-    setShoppingError('');
-    setInterimTranscript('');
-    setIsListening(false);
-    setIsShoppingResetDialogOpen(false);
-    setHighlightedShoppingIds([]);
-  };
-
-  const toggleShoppingItem = (itemId: string) => {
-    setShoppingItems((current) =>
-      current.map((item) => (item.id === itemId ? { ...item, completed: !item.completed } : item)),
-    );
-    setShoppingUpdatedAt(new Date().toISOString());
-  };
-
-  const editShoppingItem = (itemId: string) => {
-    const item = shoppingItems.find((currentItem) => currentItem.id === itemId);
+  const addManualShoppingItem = () => {
+    const item = createManualShoppingItem(shoppingText);
     if (!item) return;
-
-    const nextText = window.prompt('商品名と数量を編集してください', formatShoppingItemLabel(item))?.trim();
-    if (!nextText) return;
-    const parsed = parseShoppingItemInput(nextText);
-    if (!parsed.name) return;
-
-    setShoppingItems((current) =>
-      current.map((currentItem) =>
-        currentItem.id === itemId
-          ? {
-              ...currentItem,
-              name: parsed.name,
-              quantity: parsed.quantity,
-            }
-          : currentItem,
-      ),
-    );
+    setShoppingItems((current) => [...current, item]);
     setShoppingUpdatedAt(new Date().toISOString());
+    setHighlightedShoppingIds([item.id]);
+    setShoppingText('');
   };
 
-  const deleteShoppingItem = (itemId: string) => {
-    setShoppingItems((current) => current.filter((item) => item.id !== itemId));
-    setShoppingUpdatedAt(new Date().toISOString());
+  const addContactReminder = (text = contactDraft) => {
+    const normalized = text.trim();
+    if (!normalized) return;
+    const next = createContactReminder(normalized);
+    mergeContacts([next]);
+    setContactDraft('');
+  };
+
+  const mergeContacts = (items: ContactReminder[]) => {
+    if (!items.length) return;
+    setContacts((current) => {
+      const existing = new Set(current.map((item) => normalizeText(item.text)));
+      const additions = items.filter((item) => !existing.has(normalizeText(item.text)));
+      return [...additions, ...current];
+    });
   };
 
   const shareShoppingList = async () => {
     const shareText = formatShoppingShareText(shoppingItems);
     setShoppingShareMessage('');
-
     try {
       if (navigator.share) {
-        await navigator.share({
-          text: shareText,
-          title: '今日の買い物リスト',
-        });
-        setShoppingShareMessage('共有メニューを開きました。LINEなどを選んで送れます。');
+        await navigator.share({ text: shareText, title: '今日の買い物リスト' });
+        setShoppingShareMessage('共有メニューを開きました。LINEなどで送れます。');
         return;
       }
-
       await navigator.clipboard.writeText(shareText);
-      setShoppingShareMessage('買い物リストをコピーしました。LINEに貼り付けて共有できます。');
-    } catch (error) {
-      if (isShareCancelError(error)) {
-        setShoppingShareMessage('共有をキャンセルしました。');
-        return;
-      }
-
-      console.error(error);
-      setShoppingShareMessage('共有できませんでした。もう一度お試しください。');
+      setShoppingShareMessage('買い物リストをコピーしました。LINEなどに貼り付けて共有できます。');
+    } catch (reason) {
+      setShoppingShareMessage(isShareCancelError(reason) ? '共有をキャンセルしました。' : '共有できませんでした。');
     }
-  };
-
-  const handleNextAction = () => {
-    if (isOrganizing) return;
-
-    if (canUpdatePlan) {
-      applyScheduleUpdate();
-      return;
-    }
-
-    if (!plan && canOrganize) {
-      organizeMorning();
-      return;
-    }
-
-    const target = document.querySelector('.calendar-add-button, .calendar-panel') ?? planAnchorRef.current;
-    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
   return (
     <main className="app-shell">
-      <div className="ambient-layer" aria-hidden="true">
-        <span className="morning-orbit orbit-one" />
-        <span className="morning-orbit orbit-two" />
-        <span className="horizon-line" />
-      </div>
-
-      {isShoppingView ? (
-        <ShoppingListPage
-          canOrganize={canOrganizeShopping}
-          error={shoppingError}
-          highlightedIds={highlightedShoppingIds}
-          isListening={isListening}
-          isOrganizing={isShoppingOrganizing}
-          isResetDialogOpen={isShoppingResetDialogOpen}
-          isSupported={isSupported}
-          items={shoppingItems}
-          onBack={() => {
-            recognition?.abort();
-            setInterimTranscript('');
-            setIsListening(false);
-            setActiveView('morning');
-          }}
-          onCancelReset={() => setIsShoppingResetDialogOpen(false)}
-          onOrganize={organizeShoppingList}
-          onReset={resetShoppingList}
-          onResetRequest={() => setIsShoppingResetDialogOpen(true)}
-          onStartListening={startListening}
-          onStopListening={stopListening}
-          onEditItem={editShoppingItem}
-          onTextChange={(value) => {
-            setShoppingText(value);
-            setShoppingError('');
-          }}
-          onDeleteItem={deleteShoppingItem}
-          onShare={shareShoppingList}
-          onToggleItem={toggleShoppingItem}
-          resultText={shoppingResultText}
-          savedText={originalShoppingText}
-          text={shoppingText}
-          updatedAt={shoppingUpdatedAt}
-          shareMessage={shoppingShareMessage}
-        />
-      ) : (
-      <section className="hero-panel" aria-label="音声入力">
-        <div className="top-bar">
+      <section className="phone-shell" aria-label="MORNING FLOW AI v3.0">
+        <header className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.6</span></p>
-            <h1>話して人生を整える</h1>
+            <p className="eyebrow">MORNING FLOW AI <span>{appVersion}</span></p>
+            <h1>今日を安全に整える</h1>
           </div>
-          <div className="brand-mark" aria-hidden="true">
-            <Sparkles size={21} />
-          </div>
+          <div className="brand-mark" aria-hidden="true"><Sparkles size={20} /></div>
+        </header>
+
+        <div className="privacy-strip">
+          <ShieldCheck size={18} />
+          <span>v3専用の個人プロファイルに保存中。v2共有データは読み込みません。</span>
         </div>
 
-        <div className="focus-area">
-          <div className={`voice-stage ${isListening ? 'is-listening' : ''}`}>
-            <div className="waveform" aria-hidden="true">
-              {Array.from({ length: 17 }).map((_, index) => (
-                <span key={index} style={{ animationDelay: `${index * 72}ms` }} />
-              ))}
-            </div>
+        <nav className="segmented-nav" aria-label="メニュー">
+          <button className={activeView === 'morning' ? 'selected' : ''} onClick={() => setActiveView('morning')} type="button">朝</button>
+          <button className={activeView === 'shopping' ? 'selected' : ''} onClick={() => setActiveView('shopping')} type="button">買い物</button>
+          <button className={activeView === 'contacts' ? 'selected' : ''} onClick={() => setActiveView('contacts')} type="button">連絡</button>
+        </nav>
 
-            <button
-              className={`mic-button ${isListening ? 'is-listening' : ''}`}
-              type="button"
-              onClick={isListening ? stopListening : startListening}
-              disabled={!isSupported}
-              aria-label={isListening ? '音声認識を停止' : '音声認識を開始'}
-            >
-              <span className="pulse-ring ring-one" aria-hidden="true" />
-              <span className="pulse-ring ring-two" aria-hidden="true" />
-              <span className="mic-glass" aria-hidden="true" />
-              {isListening ? <Square size={38} fill="currentColor" /> : <Mic size={56} />}
-            </button>
-          </div>
-
-          <div className="status-row" role="status" aria-live="polite">
-            <span className={`status-dot ${isListening ? 'active' : ''}`} />
-            {getStatusLabel(isSupported, isListening, transcript, plan)}
-          </div>
-        </div>
-
-        {error && <p className="error-message">{error}</p>}
-        {isOrganizing && (
-          <p className="loading-message" role="status" aria-live="polite">
-            AIが整理中です。少しだけお待ちください。
-          </p>
-        )}
-
-        <div className="flow-switcher" aria-label="MORNING FLOW AI menu">
-          <button className="selected" type="button">
-            今日の予定を整理する
-          </button>
-          <button type="button" onClick={() => setActiveView('shopping')}>
-            <ShoppingCart size={18} />
-            買い物リストを作る
-          </button>
-        </div>
-
-        {previousSnapshot && (
-          <ReflectionView
+        {activeView === 'morning' && (
+          <MorningView
+            canOrganize={canOrganize}
+            calendarEvents={calendarEvents}
+            calendarOpen={calendarOpen}
             carriedTodos={carriedTodos}
-            onCarryOver={carryOverTodos}
+            contacts={contacts}
+            energy={energy}
+            error={error}
+            isListening={isListening}
+            isOrganizing={isOrganizing}
+            isSupported={isSupported}
+            onCalendarOpenChange={setCalendarOpen}
+            onCarryOver={(todos) => {
+              setCarriedTodos(todos);
+              setPlan((current) => (current ? addCarryoverToPlan(current, todos) : current));
+            }}
+            onEnergyChange={setEnergy}
+            onOrganize={organizeMorning}
+            onReset={resetPrivateData}
+            onSample={() => {
+              setTranscript(sampleTranscript);
+              setOriginalTranscript(sampleTranscript);
+              setPlan(null);
+              setCaptureMode('create');
+            }}
+            onStartListening={startListening}
             onStatusChange={(task, status) => {
+              if (!previousSnapshot) return;
               const nextStatuses = { ...reviewStatuses, [task]: status };
               setReviewStatuses(nextStatuses);
-              saveReview(previousSnapshot.id, nextStatuses, privateSessionKeys.snapshots);
+              saveReview(previousSnapshot.id, nextStatuses, privateKeys.snapshots);
             }}
-            snapshot={previousSnapshot}
-            statuses={reviewStatuses}
-          />
-        )}
-
-        <div className="transcript-card">
-          <div className="transcript-header">
-            <span>{captureMode === 'update' ? 'Update Instruction' : 'Today Capture'}</span>
-            {interimTranscript && <span className="live-label">Listening</span>}
-          </div>
-          <div className={`transcript-box ${resultText ? 'has-text' : ''}`}>
-            {resultText || '今日の予定、やること、目標、目的をそのまま話してください。'}
-          </div>
-        </div>
-
-        <CaptureModeSwitcher mode={captureMode} onChange={setCaptureMode} planExists={Boolean(plan)} />
-
-        {hasEditableTranscript && (
-          <TranscriptEditor
-            onCancel={restoreOriginalTranscript}
-            onSave={saveEditedTranscript}
+            onStopListening={stopListening}
             onTextChange={(value) => {
-              setTranscript(value);
-              setPlan(null);
+              captureMode === 'update' ? setUpdateInstruction(value) : setTranscript(value);
+              setError('');
             }}
-            savedText={originalTranscript}
-            text={transcript}
+            plan={plan}
+            previousSnapshot={previousSnapshot}
+            resultText={resultText}
+            reviewStatuses={reviewStatuses}
+            shoppingItems={shoppingItems}
+            textChanged={captureMode === 'create' && transcript.trim() !== originalTranscript.trim()}
           />
         )}
 
-        {hasEditableUpdateInstruction && (
-          <TranscriptEditor
-            onCancel={() => {
-              setUpdateInstruction(originalUpdateInstruction);
+        {activeView === 'shopping' && (
+          <ShoppingView
+            error={shoppingError}
+            highlightedIds={highlightedShoppingIds}
+            isListening={isListening}
+            isOrganizing={isShoppingOrganizing}
+            isSupported={isSupported}
+            items={shoppingItems}
+            onAddManual={addManualShoppingItem}
+            onDelete={(id) => {
+              setShoppingItems((current) => current.filter((item) => item.id !== id));
+              setShoppingUpdatedAt(new Date().toISOString());
             }}
-            onSave={() => {
-              const normalized = updateInstruction.trim();
-              setUpdateInstruction(normalized);
-              setOriginalUpdateInstruction(normalized);
+            onEdit={(id, value) => {
+              const parsed = parseShoppingItemInput(value);
+              if (!parsed.name) return;
+              setShoppingItems((current) =>
+                current.map((item) => (item.id === id ? { ...item, name: parsed.name, quantity: parsed.quantity } : item)),
+              );
+              setShoppingUpdatedAt(new Date().toISOString());
             }}
-            onTextChange={setUpdateInstruction}
-            savedText={originalUpdateInstruction}
-            text={updateInstruction}
+            onOrganize={organizeShoppingList}
+            onReset={() => {
+              setShoppingText('');
+              setShoppingItems([]);
+              setShoppingUpdatedAt('');
+            }}
+            onShare={shareShoppingList}
+            onStartListening={startListening}
+            onStopListening={stopListening}
+            onTextChange={setShoppingText}
+            onToggle={(id) => {
+              setShoppingItems((current) =>
+                current.map((item) => (item.id === id ? { ...item, completed: !item.completed } : item)),
+              );
+              setShoppingUpdatedAt(new Date().toISOString());
+            }}
+            resultText={shoppingResultText}
+            shareMessage={shoppingShareMessage}
+            text={shoppingText}
+            updatedAt={shoppingUpdatedAt}
           />
         )}
 
-        <EnergySelector energy={energy} onChange={setEnergy} />
-
-        {canOrganize && (
-          <button
-            className={`organize-button ${isOrganizing ? 'is-organizing' : ''}`}
-            type="button"
-            onClick={organizeMorning}
-            disabled={isOrganizing}
-          >
-            <Brain size={21} />
-            {isOrganizing ? 'AIが整理しています' : 'AI整理'}
-            <Sparkles size={18} />
-          </button>
+        {activeView === 'contacts' && (
+          <ContactsView
+            contacts={contacts}
+            draft={contactDraft}
+            isListening={isListening}
+            isSupported={isSupported}
+            onAdd={() => addContactReminder()}
+            onDelete={(id) => setContacts((current) => current.filter((item) => item.id !== id))}
+            onDraftChange={setContactDraft}
+            onStartListening={startListening}
+            onStopListening={stopListening}
+            onToggle={(id) =>
+              setContacts((current) =>
+                current.map((item) => (item.id === id ? { ...item, completed: !item.completed } : item)),
+              )
+            }
+          />
         )}
-
-        {canUpdatePlan && (
-          <button
-            className={`organize-button update-plan-button ${isOrganizing ? 'is-organizing' : ''}`}
-            type="button"
-            onClick={applyScheduleUpdate}
-            disabled={isOrganizing}
-          >
-            <Brain size={21} />
-            {isOrganizing ? '既存スケジュールを更新中' : 'この内容をスケジュールに反映'}
-            <Sparkles size={18} />
-          </button>
-        )}
-
-        <div ref={planAnchorRef} />
-        {plan && <CoachCard plan={plan} />}
-        {plan && <PlanView highlightedScheduleKeys={highlightedScheduleKeys} plan={plan} />}
-
-        <div className="action-row">
-          <button className="secondary-button" type="button" onClick={() => setIsResetDialogOpen(true)}>
-            <RefreshCw size={19} />
-            やり直し
-          </button>
-          <button className="secondary-button sample-button" type="button" onClick={useSample}>
-            サンプル
-          </button>
-        </div>
       </section>
-      )}
-      {!isShoppingView && (
-      <div className="floating-next-bar" aria-label="次の操作">
-        <button
-          className={`primary-button floating-next-button ${isOrganizing ? 'is-loading' : ''}`}
-          type="button"
-          disabled={isOrganizing || !canUseNext}
-          onClick={handleNextAction}
-        >
-          {nextButtonLabel}
-          {isOrganizing ? <Loader2 className="button-spinner" size={21} /> : <ArrowRight size={21} />}
-        </button>
-      </div>
-      )}
-      {isResetDialogOpen && (
-        <div className="confirm-dialog-backdrop" role="presentation">
-          <section
-            aria-describedby="reset-dialog-description"
-            aria-labelledby="reset-dialog-title"
-            aria-modal="true"
-            className="confirm-dialog"
-            role="dialog"
-          >
-            <div className="confirm-dialog-icon" aria-hidden="true">
-              <AlertTriangle size={23} />
-            </div>
-            <h2 id="reset-dialog-title">本当に最初からやり直しますか？</h2>
-            <p id="reset-dialog-description">
-              現在の音声入力・AI整理結果・スケジュールは削除されます。
-            </p>
-            <div className="confirm-dialog-actions">
-              <button className="secondary-button" type="button" onClick={() => setIsResetDialogOpen(false)}>
-                キャンセル
-              </button>
-              <button className="danger-button" type="button" onClick={resetTranscript}>
-                やり直す
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
     </main>
   );
 }
 
-function ShoppingListPage({
+function MorningView({
+  calendarEvents,
+  calendarOpen,
   canOrganize,
+  carriedTodos,
+  contacts,
+  energy,
+  error,
+  isListening,
+  isOrganizing,
+  isSupported,
+  onCalendarOpenChange,
+  onCarryOver,
+  onEnergyChange,
+  onOrganize,
+  onReset,
+  onSample,
+  onStartListening,
+  onStatusChange,
+  onStopListening,
+  onTextChange,
+  plan,
+  previousSnapshot,
+  resultText,
+  reviewStatuses,
+  shoppingItems,
+}: {
+  calendarEvents: CalendarEvent[];
+  calendarOpen: boolean;
+  canOrganize: boolean;
+  carriedTodos: string[];
+  contacts: ContactReminder[];
+  energy: EnergyMood;
+  error: string;
+  isListening: boolean;
+  isOrganizing: boolean;
+  isSupported: boolean;
+  onCalendarOpenChange: (open: boolean) => void;
+  onCarryOver: (todos: string[]) => void;
+  onEnergyChange: (energy: EnergyMood) => void;
+  onOrganize: () => void;
+  onReset: () => void;
+  onSample: () => void;
+  onStartListening: () => void;
+  onStatusChange: (task: string, status: ReviewStatus) => void;
+  onStopListening: () => void;
+  onTextChange: (value: string) => void;
+  plan: MorningPlan | null;
+  previousSnapshot: MorningSnapshot | null;
+  resultText: string;
+  reviewStatuses: Record<string, ReviewStatus>;
+  shoppingItems: ShoppingItem[];
+  textChanged: boolean;
+}) {
+  const unfinishedContacts = contacts.filter((item) => !item.completed);
+  const unfinishedShopping = shoppingItems.filter((item) => !item.completed);
+
+  return (
+    <div className="view-stack">
+      <VoicePad
+        isListening={isListening}
+        isSupported={isSupported}
+        onStart={onStartListening}
+        onStop={onStopListening}
+        status={isListening ? '音声認識中' : plan ? '今日の流れを整理しました' : '話すだけで予定・買い物・連絡を整理'}
+      />
+
+      <div className="energy-row">
+        {energyOptions.map((option) => (
+          <button className={energy === option.value ? 'selected' : ''} key={option.value} onClick={() => onEnergyChange(option.value)} type="button">
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      {previousSnapshot && (
+        <ReflectionView
+          carriedTodos={carriedTodos}
+          onCarryOver={onCarryOver}
+          onStatusChange={onStatusChange}
+          snapshot={previousSnapshot}
+          statuses={reviewStatuses}
+        />
+      )}
+
+      <section className="panel">
+        <div className="panel-header">
+          <span>Morning Capture</span>
+          <strong>今日の予定・買い物・連絡忘れをまとめて入力</strong>
+        </div>
+        <textarea
+          aria-label="今日の予定を入力"
+          onChange={(event) => onTextChange(event.target.value)}
+          placeholder="例: 10時に資料作成。牛乳と卵を買う。山田さんに折り返し電話。LINE返信も忘れない。"
+          rows={7}
+          value={resultText}
+        />
+        <div className="button-row">
+          <button className="secondary-button" onClick={onSample} type="button">サンプル</button>
+          <button className="secondary-button" onClick={onReset} type="button"><RefreshCw size={16} />個人データ初期化</button>
+        </div>
+        {error && <p className="error-message">{error}</p>}
+        <button className="primary-button" disabled={!canOrganize || isOrganizing} onClick={onOrganize} type="button">
+          {isOrganizing ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
+          {isOrganizing ? 'AIが整理中' : 'AIで今日を整理'}
+        </button>
+      </section>
+
+      {(unfinishedShopping.length > 0 || unfinishedContacts.length > 0) && (
+        <section className="panel compact">
+          <div className="panel-header">
+            <span>Context</span>
+            <strong>AI整理に含める未完了メモ</strong>
+          </div>
+          {unfinishedShopping.length > 0 && <p>買い物: {unfinishedShopping.map(formatShoppingItemLabel).join('、')}</p>}
+          {unfinishedContacts.length > 0 && <p>連絡: {unfinishedContacts.map((item) => item.text).join('、')}</p>}
+        </section>
+      )}
+
+      {plan && <PlanView events={calendarEvents} isCalendarOpen={calendarOpen} onCalendarOpenChange={onCalendarOpenChange} plan={plan} />}
+    </div>
+  );
+}
+
+function ShoppingView({
   error,
   highlightedIds,
   isListening,
   isOrganizing,
-  isResetDialogOpen,
   isSupported,
   items,
-  onBack,
-  onCancelReset,
+  onAddManual,
+  onDelete,
+  onEdit,
   onOrganize,
   onReset,
-  onResetRequest,
+  onShare,
   onStartListening,
   onStopListening,
-  onDeleteItem,
-  onEditItem,
-  onShare,
   onTextChange,
-  onToggleItem,
+  onToggle,
   resultText,
-  savedText,
   shareMessage,
   text,
   updatedAt,
 }: {
-  canOrganize: boolean;
   error: string;
   highlightedIds: string[];
   isListening: boolean;
   isOrganizing: boolean;
-  isResetDialogOpen: boolean;
   isSupported: boolean;
   items: ShoppingItem[];
-  onBack: () => void;
-  onCancelReset: () => void;
+  onAddManual: () => void;
+  onDelete: (id: string) => void;
+  onEdit: (id: string, value: string) => void;
   onOrganize: () => void;
   onReset: () => void;
-  onResetRequest: () => void;
+  onShare: () => void;
   onStartListening: () => void;
   onStopListening: () => void;
-  onDeleteItem: (itemId: string) => void;
-  onEditItem: (itemId: string) => void;
-  onShare: () => void;
   onTextChange: (value: string) => void;
-  onToggleItem: (itemId: string) => void;
+  onToggle: (id: string) => void;
   resultText: string;
-  savedText: string;
   shareMessage: string;
   text: string;
   updatedAt: string;
 }) {
-  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const groups = groupShoppingItems(items);
-  const completedCount = items.filter((item) => item.completed).length;
-  const updatedLabel = updatedAt
-    ? new Date(updatedAt).toLocaleString('ja-JP', {
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        month: 'short',
-      })
-    : '';
-
-  React.useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    textarea.style.height = 'auto';
-    textarea.style.height = `${textarea.scrollHeight}px`;
-  }, [text]);
 
   return (
-    <section className="hero-panel shopping-page" aria-label="買い物リスト">
-      <div className="top-bar">
-        <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.6</span></p>
-          <h1>買い物リスト</h1>
+    <div className="view-stack">
+      <VoicePad
+        isListening={isListening}
+        isSupported={isSupported}
+        onStart={onStartListening}
+        onStop={onStopListening}
+        status={isListening ? '買い物を聞き取り中' : '数量と単位を残してカテゴリ分け'}
+      />
+      <section className="panel">
+        <div className="panel-header">
+          <span>Shopping</span>
+          <strong>音声またはテキストから買い物リスト作成</strong>
         </div>
-        <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
-          <Home size={20} />
-        </button>
-      </div>
-
-      <div className="flow-switcher" aria-label="MORNING FLOW AI menu">
-        <button type="button" onClick={onBack}>
-          今日の予定を整理する
-        </button>
-        <button className="selected" type="button">
-          <ShoppingCart size={18} />
-          買い物リストを作る
-        </button>
-      </div>
-
-      <p className="shopping-lead">買いたい物をマイクに向かって話してください。あとから思い出した物も、そのまま追加できます。</p>
-
-      <div className="focus-area shopping-focus">
-        <div className={`voice-stage ${isListening ? 'is-listening' : ''}`}>
-          <div className="waveform" aria-hidden="true">
-            {Array.from({ length: 17 }).map((_, index) => (
-              <span key={index} style={{ animationDelay: `${index * 72}ms` }} />
-            ))}
-          </div>
-
-          <button
-            aria-label={isListening ? '音声入力を止める' : '買い物リストを音声入力する'}
-            className={`mic-button ${isListening ? 'is-listening' : ''}`}
-            disabled={!isSupported}
-            onClick={isListening ? onStopListening : onStartListening}
-            type="button"
-          >
-            <span className="pulse-ring ring-one" aria-hidden="true" />
-            <span className="pulse-ring ring-two" aria-hidden="true" />
-            <span className="mic-glass" aria-hidden="true" />
-            {isListening ? <Square size={38} fill="currentColor" /> : <Mic size={56} />}
-          </button>
-        </div>
-
-        <div className="status-row" role="status" aria-live="polite">
-          <span className={`status-dot ${isListening ? 'active' : ''}`} />
-          {isListening ? '音声認識中' : items.length ? '買い物リストを保存中' : '話すだけでカテゴリ分けします'}
-        </div>
-      </div>
-
-      {error && <p className="error-message">{error}</p>}
-      {isOrganizing && (
-        <p className="loading-message" role="status" aria-live="polite">
-          AIが買い物リストを整理中です。カテゴリ分けしています。
-        </p>
-      )}
-
-      <section className="editor-card shopping-editor" aria-label="買い物メモ編集">
-        <div className="editor-header">
-          <span>Shopping Capture</span>
-          <strong>AIで整理する前に編集できます</strong>
-        </div>
-        {text.trim() !== savedText.trim() && (
-          <p className="editor-live-note">入力中の内容はこのままAI整理に反映されます。</p>
-        )}
         <textarea
-          aria-label="買いたい物のテキストを編集"
-          className="transcript-editor"
+          aria-label="買い物メモ"
           onChange={(event) => onTextChange(event.target.value)}
-          placeholder="例：牛乳、卵、ネギ、洗剤、子供のお菓子、ジム用の水"
-          ref={textareaRef}
+          placeholder="例: 牛乳1本、卵1パック、炭酸水2L、洗剤"
           rows={5}
-          value={resultText}
+          value={resultText || text}
         />
-        <button
-          className={`organize-button ${isOrganizing ? 'is-organizing' : ''}`}
-          disabled={!canOrganize || isOrganizing}
-          onClick={onOrganize}
-          type="button"
-        >
-          <Brain size={21} />
-          {isOrganizing ? '買い物リストを整理中…' : '買い物リストを整理する'}
-          {isOrganizing ? <Loader2 className="button-spinner" size={18} /> : <Sparkles size={18} />}
-        </button>
+        {error && <p className="error-message">{error}</p>}
+        <div className="button-row">
+          <button className="primary-button" disabled={!text.trim() || isOrganizing} onClick={onOrganize} type="button">
+            {isOrganizing ? <Loader2 className="spin" size={18} /> : <ShoppingCart size={18} />}
+            AIで分類
+          </button>
+          <button className="secondary-button" disabled={!text.trim()} onClick={onAddManual} type="button">手動追加</button>
+        </div>
       </section>
 
-      <section className="plan-card shopping-result-card" aria-label="整理結果">
-        <div className="plan-title">
-          <span><ListChecks size={18} /></span>
-          <h2>整理結果</h2>
+      <section className="panel">
+        <div className="panel-header">
+          <span>{updatedAt ? new Date(updatedAt).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'List'}</span>
+          <strong>{items.length}件の買い物</strong>
         </div>
-
-        {items.length ? (
-          <>
-            <div className="shopping-summary">
-              <strong>{completedCount}/{items.length} 完了</strong>
-              {updatedLabel && <span>最終更新 {updatedLabel}</span>}
-            </div>
-            <button className="shopping-share-button" type="button" onClick={onShare}>
-              <Share2 size={18} />
-              家族に共有
-            </button>
-            {shareMessage && <p className="shopping-share-message">{shareMessage}</p>}
-            <div className="shopping-category-list">
-              {groups.map((group) => (
-                <div className="shopping-category" key={group.category}>
-                  <h3>{group.category}</h3>
-                  <div className="shopping-check-list">
-                    {group.items.map((item) => {
-                      const checkboxId = item.id;
-                      return (
-                        <div
-                          className={`shopping-check-row ${highlightedIds.includes(item.id) ? 'is-new' : ''}`}
-                          key={item.id}
-                        >
-                          <label
-                            className={`shopping-check-item ${item.completed ? 'is-completed' : ''}`}
-                            htmlFor={checkboxId}
-                          >
-                            <input
-                              checked={item.completed}
-                              id={checkboxId}
-                              onChange={() => onToggleItem(item.id)}
-                              type="checkbox"
-                            />
-                            <span>{formatShoppingItemLabel(item)}</span>
-                          </label>
-                          <button
-                            aria-label={`${formatShoppingItemLabel(item)}を編集`}
-                            className="shopping-icon-button"
-                            onClick={() => onEditItem(item.id)}
-                            type="button"
-                          >
-                            <Pencil size={17} />
-                          </button>
-                          <button
-                            aria-label={`${formatShoppingItemLabel(item)}を削除`}
-                            className="shopping-icon-button shopping-delete-button"
-                            onClick={() => onDeleteItem(item.id)}
-                            type="button"
-                          >
-                            <Trash2 size={17} />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+        {groups.length ? (
+          groups.map((group) => (
+            <div className="list-group" key={group.category}>
+              <h3>{group.category}</h3>
+              {group.items.map((item) => (
+                <ShoppingRow
+                  highlighted={highlightedIds.includes(item.id)}
+                  item={item}
+                  key={item.id}
+                  onDelete={onDelete}
+                  onEdit={onEdit}
+                  onToggle={onToggle}
+                />
               ))}
             </div>
-          </>
+          ))
         ) : (
-          <p className="calendar-empty">まだ買い物リストはありません。マイクで話すか、テキストで入力してください。</p>
+          <p className="empty-text">買い物リストはまだありません。</p>
+        )}
+        <div className="button-row">
+          <button className="secondary-button" disabled={!items.length} onClick={onShare} type="button"><Share2 size={16} />共有文を作る</button>
+          <button className="danger-button" disabled={!items.length} onClick={onReset} type="button"><Trash2 size={16} />クリア</button>
+        </div>
+        {shareMessage && <p className="success-message">{shareMessage}</p>}
+      </section>
+    </div>
+  );
+}
+
+function ContactsView({
+  contacts,
+  draft,
+  isListening,
+  isSupported,
+  onAdd,
+  onDelete,
+  onDraftChange,
+  onStartListening,
+  onStopListening,
+  onToggle,
+}: {
+  contacts: ContactReminder[];
+  draft: string;
+  isListening: boolean;
+  isSupported: boolean;
+  onAdd: () => void;
+  onDelete: (id: string) => void;
+  onDraftChange: (value: string) => void;
+  onStartListening: () => void;
+  onStopListening: () => void;
+  onToggle: (id: string) => void;
+}) {
+  const unfinished = contacts.filter((item) => !item.completed);
+
+  return (
+    <div className="view-stack">
+      <VoicePad
+        isListening={isListening}
+        isSupported={isSupported}
+        onStart={onStartListening}
+        onStop={onStopListening}
+        status={isListening ? '連絡忘れを聞き取り中' : '電話・LINE・メール・SNS返信を保存'}
+      />
+      <section className="panel">
+        <div className="panel-header">
+          <span>Reply Check</span>
+          <strong>未完了の連絡を次回起動時にも確認</strong>
+        </div>
+        <textarea
+          aria-label="連絡忘れ"
+          onChange={(event) => onDraftChange(event.target.value)}
+          placeholder="例: 山田さんに折り返し電話 / 佐藤さんへLINE返信 / 請求書メール返信"
+          rows={4}
+          value={draft}
+        />
+        <button className="primary-button" disabled={!draft.trim()} onClick={onAdd} type="button">
+          <CheckCircle2 size={18} />未完了リストに追加
+        </button>
+      </section>
+      <section className="panel">
+        <div className="panel-header">
+          <span>{unfinished.length} pending</span>
+          <strong>連絡忘れリスト</strong>
+        </div>
+        {contacts.length ? (
+          <div className="contact-list">
+            {contacts.map((item) => (
+              <ContactRow item={item} key={item.id} onDelete={onDelete} onToggle={onToggle} />
+            ))}
+          </div>
+        ) : (
+          <p className="empty-text">未完了の連絡はありません。</p>
         )}
       </section>
+    </div>
+  );
+}
 
-      <div className="action-row">
-        <button className="secondary-button" type="button" onClick={onResetRequest}>
-          <RefreshCw size={19} />
-          やり直し
+function VoicePad({
+  isListening,
+  isSupported,
+  onStart,
+  onStop,
+  status,
+}: {
+  isListening: boolean;
+  isSupported: boolean;
+  onStart: () => void;
+  onStop: () => void;
+  status: string;
+}) {
+  return (
+    <section className="voice-pad">
+      <button
+        aria-label={isListening ? '音声入力を停止' : '音声入力を開始'}
+        className={`mic-button ${isListening ? 'is-listening' : ''}`}
+        disabled={!isSupported}
+        onClick={isListening ? onStop : onStart}
+        type="button"
+      >
+        {isListening ? <Square fill="currentColor" size={34} /> : <Mic size={48} />}
+      </button>
+      <p>{isSupported ? status : 'このブラウザは音声入力に対応していません'}</p>
+    </section>
+  );
+}
+
+function PlanView({
+  events,
+  isCalendarOpen,
+  onCalendarOpenChange,
+  plan,
+}: {
+  events: CalendarEvent[];
+  isCalendarOpen: boolean;
+  onCalendarOpenChange: (open: boolean) => void;
+  plan: MorningPlan;
+}) {
+  return (
+    <section className="plan-stack">
+      <PlanCard icon={<Sparkles size={17} />} title="目的"><p className="purpose-text">{plan.purpose}</p></PlanCard>
+      <PlanCard icon={<CheckCircle2 size={17} />} title="今日やること">
+        <ul>{plan.todos.map((todo) => <li key={todo}>{todo}</li>)}</ul>
+      </PlanCard>
+      <PlanCard icon={<Clock3 size={17} />} title="推奨タイムスケジュール">
+        <div className="schedule-list">
+          {plan.schedule.map((item) => (
+            <div className="schedule-item" key={`${item.time}-${item.task}`}>
+              <time>{item.time}</time>
+              <span>{item.task}</span>
+            </div>
+          ))}
+        </div>
+        <button className="secondary-button full" disabled={!events.length} onClick={() => onCalendarOpenChange(!isCalendarOpen)} type="button">
+          <CalendarPlus size={17} />登録前確認を開く
         </button>
-        <button className="secondary-button" type="button" onClick={onBack}>
-          <Home size={18} />
-          トップページへ戻る
+        {isCalendarOpen && <GoogleCalendarExportPanel events={events} />}
+      </PlanCard>
+      <PlanCard icon={<ShoppingCart size={17} />} title="買い物候補">
+        {plan.shoppingCandidates.length ? <ul>{plan.shoppingCandidates.map((item) => <li key={item}>{item}</li>)}</ul> : <p>買い物候補はありません。</p>}
+      </PlanCard>
+      <PlanCard icon={<MessageCircle size={17} />} title="連絡忘れ">
+        {plan.contactReminders.length ? <ul>{plan.contactReminders.map((item) => <li key={item}>{item}</li>)}</ul> : <p>連絡忘れはありません。</p>}
+      </PlanCard>
+      <PlanCard icon={<CalendarClock size={17} />} title="優先順位">
+        <div className="priority-grid">
+          <p><strong>最優先</strong>{plan.priorities.highest.join('、') || 'なし'}</p>
+          <p><strong>重要</strong>{plan.priorities.important.join('、') || 'なし'}</p>
+          <p><strong>余裕があれば</strong>{plan.priorities.optional.join('、') || 'なし'}</p>
+        </div>
+      </PlanCard>
+    </section>
+  );
+}
+
+function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
+  const [accessToken, setAccessToken] = React.useState('');
+  const [selectedEventIds, setSelectedEventIds] = React.useState(() => events.map((event) => event.id));
+  const [statusMessage, setStatusMessage] = React.useState('');
+  const [isSigningIn, setIsSigningIn] = React.useState(false);
+  const [isRegistering, setIsRegistering] = React.useState(false);
+  const [isConfirmOpen, setIsConfirmOpen] = React.useState(false);
+  const isConfigured = isGoogleCalendarConfigured();
+  const selectedEvents = events.filter((event) => selectedEventIds.includes(event.id));
+
+  React.useEffect(() => {
+    setSelectedEventIds(events.map((event) => event.id));
+  }, [events]);
+
+  const connectGoogle = () => {
+    setIsSigningIn(true);
+    setStatusMessage('');
+    requestGoogleAccessToken('select_account consent')
+      .then((token) => {
+        setAccessToken(token);
+        setStatusMessage('Googleに接続しました。登録前に予定とアカウント選択画面を必ず確認してください。');
+      })
+      .catch((reason: unknown) => {
+        setStatusMessage(reason instanceof Error ? reason.message : 'Googleログインに失敗しました。');
+      })
+      .finally(() => setIsSigningIn(false));
+  };
+
+  const disconnectGoogle = () => {
+    if (accessToken) revokeGoogleAccessToken(accessToken);
+    setAccessToken('');
+    setStatusMessage('Google連携を解除しました。自動再接続はしません。');
+  };
+
+  const registerSelectedEvents = () => {
+    if (!accessToken || !selectedEvents.length) return;
+    setIsRegistering(true);
+    setStatusMessage('');
+    insertGoogleCalendarEvents(accessToken, selectedEvents)
+      .then(() => {
+        setStatusMessage(`${selectedEvents.length}件をGoogleカレンダーへ登録しました。`);
+        setIsConfirmOpen(false);
+      })
+      .catch((reason: unknown) => {
+        setStatusMessage(reason instanceof Error ? reason.message : '登録に失敗しました。Googleアカウントと権限を確認してください。');
+      })
+      .finally(() => setIsRegistering(false));
+  };
+
+  return (
+    <div className="calendar-panel">
+      <div className="panel-header">
+        <span>Google Calendar</span>
+        <strong>登録前に予定を確認</strong>
+      </div>
+      {!isConfigured && <p className="warning-message">.envにVITE_GOOGLE_CLIENT_IDを設定すると直接登録できます。</p>}
+      <div className="calendar-safe-card">
+        <ShieldCheck size={17} />
+        <span>自動再接続なし。毎回アカウント選択を要求します。</span>
+      </div>
+      {events.map((event) => (
+        <label className="calendar-event" key={event.id}>
+          <input
+            checked={selectedEventIds.includes(event.id)}
+            onChange={() =>
+              setSelectedEventIds((current) =>
+                current.includes(event.id) ? current.filter((id) => id !== event.id) : [...current, event.id],
+              )
+            }
+            type="checkbox"
+          />
+          <span><time>{formatEventTime(event.start)} - {formatEventTime(event.end)}</time>{event.title}</span>
+        </label>
+      ))}
+      <div className="button-row">
+        {accessToken ? (
+          <button className="secondary-button" onClick={disconnectGoogle} type="button">ログアウト</button>
+        ) : (
+          <button className="secondary-button" disabled={!isConfigured || isSigningIn} onClick={connectGoogle} type="button">
+            {isSigningIn ? '接続中' : 'Googleログイン'}
+          </button>
+        )}
+        <button className="primary-button" disabled={!accessToken || !selectedEvents.length} onClick={() => setIsConfirmOpen(true)} type="button">
+          <CalendarPlus size={17} />登録確認
         </button>
       </div>
-
-      {isResetDialogOpen && (
+      <button className="secondary-button full" disabled={!selectedEvents.length} onClick={() => selectedEvents.forEach((event) => window.open(createGoogleCalendarUrl(event), '_blank', 'noopener,noreferrer'))} type="button">
+        <ExternalLink size={17} />Google画面で確認して登録
+      </button>
+      <button className="secondary-button full" onClick={() => downloadIcs(events)} type="button"><Download size={17} />Appleカレンダー用ファイル保存</button>
+      {statusMessage && <p className="success-message">{statusMessage}</p>}
+      {isConfirmOpen && (
         <div className="confirm-dialog-backdrop" role="presentation">
-          <section
-            aria-describedby="shopping-reset-dialog-description"
-            aria-labelledby="shopping-reset-dialog-title"
-            aria-modal="true"
-            className="confirm-dialog"
-            role="dialog"
-          >
-            <div className="confirm-dialog-icon" aria-hidden="true">
-              <AlertTriangle size={23} />
-            </div>
-            <h2 id="shopping-reset-dialog-title">本当に買い物リストを最初から作り直しますか？</h2>
-            <p id="shopping-reset-dialog-description">現在の買い物リストは削除されます。</p>
-            <div className="confirm-dialog-actions">
-              <button className="secondary-button" type="button" onClick={onCancelReset}>
-                キャンセル
-              </button>
-              <button className="danger-button" type="button" onClick={onReset}>
-                やり直す
+          <section aria-modal="true" className="confirm-dialog" role="dialog">
+            <AlertTriangle size={22} />
+            <h2>このGoogleアカウントへ登録しますか？</h2>
+            <p>Googleのアカウント選択画面で、登録先が自分のアカウントであることを確認してください。</p>
+            <ul>{selectedEvents.map((event) => <li key={event.id}>{event.title}</li>)}</ul>
+            <div className="button-row">
+              <button className="secondary-button" onClick={() => setIsConfirmOpen(false)} type="button">キャンセル</button>
+              <button className="primary-button" disabled={isRegistering} onClick={registerSelectedEvents} type="button">
+                {isRegistering ? <Loader2 className="spin" size={17} /> : <CalendarPlus size={17} />}登録する
               </button>
             </div>
           </section>
         </div>
       )}
-    </section>
-  );
-}
-
-function CaptureModeSwitcher({
-  mode,
-  onChange,
-  planExists,
-}: {
-  mode: CaptureMode;
-  onChange: (mode: CaptureMode) => void;
-  planExists: boolean;
-}) {
-  return (
-    <div className="capture-mode-card" aria-label="音声入力モード">
-      <button
-        className={mode === 'create' ? 'selected' : ''}
-        onClick={() => onChange('create')}
-        type="button"
-      >
-        新規スケジュール作成
-      </button>
-      <button
-        className={mode === 'update' ? 'selected' : ''}
-        disabled={!planExists}
-        onClick={() => onChange('update')}
-        type="button"
-      >
-        既存スケジュールへの追加・修正
-      </button>
     </div>
   );
 }
 
-function EnergySelector({
-  energy,
-  onChange,
-}: {
-  energy: EnergyMood;
-  onChange: (energy: EnergyMood) => void;
-}) {
+function PlanCard({ children, icon, title }: { children: React.ReactNode; icon: React.ReactNode; title: string }) {
   return (
-    <section className="energy-card" aria-label="朝の気分">
-      <div className="energy-header">
-        <span>Energy Check</span>
-        <strong>今朝の気分</strong>
-      </div>
-      <div className="energy-options">
-        {energyOptions.map((option) => (
-          <button
-            className={energy === option.value ? 'selected' : ''}
-            key={option.value}
-            onClick={() => onChange(option.value)}
-            type="button"
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    </section>
+    <article className="panel plan-card">
+      <div className="plan-title"><span>{icon}</span><h2>{title}</h2></div>
+      {children}
+    </article>
   );
 }
 
-function TranscriptEditor({
-  onCancel,
-  onSave,
-  onTextChange,
-  savedText,
-  text,
+function ShoppingRow({
+  highlighted,
+  item,
+  onDelete,
+  onEdit,
+  onToggle,
 }: {
-  onCancel: () => void;
-  onSave: () => void;
-  onTextChange: (value: string) => void;
-  savedText: string;
-  text: string;
+  highlighted: boolean;
+  item: ShoppingItem;
+  onDelete: (id: string) => void;
+  onEdit: (id: string, value: string) => void;
+  onToggle: (id: string) => void;
 }) {
-  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
-  const isDirty = text.trim() !== savedText.trim();
-
-  React.useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    textarea.style.height = 'auto';
-    textarea.style.height = `${textarea.scrollHeight}px`;
-  }, [text]);
-
   return (
-    <section className="editor-card" aria-label="文字起こし編集">
-      <div className="editor-header">
-        <span>Editable Transcript</span>
-        <strong>AI整理前に修正できます</strong>
-      </div>
-      {isDirty && <p className="editor-live-note">編集中の内容はそのままAI整理に反映されます。</p>}
-      <textarea
-        aria-label="認識されたテキストを編集"
-        className="transcript-editor"
-        onChange={(event) => onTextChange(event.target.value)}
-        placeholder="AI整理へ渡す内容をここで修正できます。"
-        ref={textareaRef}
-        rows={4}
-        value={text}
-      />
-      <div className="editor-actions">
-        <button className="secondary-button" onClick={onCancel} type="button">
-          元に戻す
-        </button>
-        <button className="primary-button" disabled={!text.trim()} onClick={onSave} type="button">
-          修正を保存
-        </button>
-      </div>
-    </section>
+    <div className={`item-row ${highlighted ? 'is-new' : ''}`}>
+      <label>
+        <input checked={item.completed} onChange={() => onToggle(item.id)} type="checkbox" />
+        <span>{formatShoppingItemLabel(item)}</span>
+      </label>
+      <button aria-label="編集" onClick={() => {
+        const next = window.prompt('商品名と数量を編集してください', formatShoppingItemLabel(item))?.trim();
+        if (next) onEdit(item.id, next);
+      }} type="button"><Pencil size={15} /></button>
+      <button aria-label="削除" onClick={() => onDelete(item.id)} type="button"><Trash2 size={15} /></button>
+    </div>
   );
 }
 
-function CoachCard({ plan }: { plan: MorningPlan }) {
-  const conditions = plan.coach.successConditions.length
-    ? plan.coach.successConditions
-    : plan.todos.slice(0, 3);
-
+function ContactRow({ item, onDelete, onToggle }: { item: ContactReminder; onDelete: (id: string) => void; onToggle: (id: string) => void }) {
   return (
-    <section className="coach-card" aria-label="AI Morning Coach">
-      <div className="coach-top">
-        <div>
-          <span>AI Morning Coach</span>
-          <h2>今日の最重要ミッション</h2>
-        </div>
-        <Compass size={24} />
-      </div>
-
-      <p className="mission-text">{plan.coach.mission}</p>
-
-      <div className="focus-three">
-        <div>
-          <span>① 最重要</span>
-          <strong>{plan.coach.focusItems.highest}</strong>
-        </div>
-        <div>
-          <span>② 重要</span>
-          <strong>{plan.coach.focusItems.important}</strong>
-        </div>
-        <div>
-          <span>③ できれば実施</span>
-          <strong>{plan.coach.focusItems.optional}</strong>
-        </div>
-      </div>
-
-      <div className="coach-advice">
-        <Lightbulb size={17} />
-        <span>{plan.coach.morningAdvice}</span>
-      </div>
-
-      <div className="success-conditions">
-        <span>今日の成功条件</span>
-        {conditions.map((condition) => (
-          <div key={condition}>
-            <CheckCircle2 size={16} />
-            <strong>{condition}</strong>
-          </div>
-        ))}
-        <p>この3つを達成すれば、今日は成功です。</p>
-      </div>
-    </section>
+    <div className="item-row">
+      <label>
+        <input checked={item.completed} onChange={() => onToggle(item.id)} type="checkbox" />
+        <span>{getContactIcon(item.kind)}{item.text}</span>
+      </label>
+      <button aria-label="削除" onClick={() => onDelete(item.id)} type="button"><Trash2 size={15} /></button>
+    </div>
   );
 }
 
@@ -1271,521 +1126,32 @@ function ReflectionView({
   statuses: Record<string, ReviewStatus>;
 }) {
   const todos = snapshot.plan.todos;
-  const completed = todos.filter((todo) => statuses[todo] === 'done').length;
-  const partial = todos.filter((todo) => statuses[todo] === 'partial').length;
-  const reviewed = todos.filter((todo) => statuses[todo]).length;
-  const score = todos.length ? Math.round(((completed + partial * 0.5) / todos.length) * 100) : 0;
-  const unfinished = todos.filter((todo) => statuses[todo] === 'partial' || statuses[todo] === 'missed');
-  const reflection = createReflectionMessage(statuses, todos);
-
-  const carryUnfinished = () => {
-    onCarryOver(Array.from(new Set([...carriedTodos, ...unfinished])));
-  };
+  const unfinished = todos.filter((todo) => statuses[todo] === 'missed' || statuses[todo] === 'partial');
+  if (!todos.length) return null;
 
   return (
-    <section className="reflection-card" aria-label="昨日の振り返り">
-      <div className="reflection-header">
-        <div>
-          <span>昨日の振り返り</span>
-          <strong>今日につなげる</strong>
-        </div>
-        <div className="score-ring">
-          <b>{score}%</b>
-          <small>{completed}件完了</small>
-        </div>
+    <section className="panel compact">
+      <div className="panel-header">
+        <span>Yesterday</span>
+        <strong>前回の未完了を確認</strong>
       </div>
-
-      <p className="reflection-purpose">{snapshot.plan.purpose}</p>
-
-      <div className="review-list">
-        {todos.map((todo) => (
-          <div className="review-item" key={todo}>
-            <span>{todo}</span>
-            <div className="review-buttons" aria-label={`${todo}の達成状況`}>
-              {reviewOptions.map((option) => (
-                <button
-                  className={statuses[todo] === option.value ? 'selected' : ''}
-                  key={option.value}
-                  onClick={() => onStatusChange(todo, option.value)}
-                  type="button"
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+      {todos.slice(0, 4).map((todo) => (
+        <div className="review-row" key={todo}>
+          <span>{todo}</span>
+          <div>
+            {reviewOptions.map((option) => (
+              <button className={statuses[todo] === option.value ? 'selected' : ''} key={option.value} onClick={() => onStatusChange(todo, option.value)} type="button">
+                {option.label}
+              </button>
+            ))}
           </div>
-        ))}
-      </div>
-
-      <div className="reflection-insight">
-        <Lightbulb size={17} />
-        <span>{reflection}</span>
-      </div>
-
-      <div className="reflection-footer">
-        <span>{todos.length}件中{completed}件完了</span>
-        <button disabled={!unfinished.length} onClick={carryUnfinished} type="button">
-          今日へ繰り越す
-          <ChevronRight size={17} />
-        </button>
-      </div>
-
-      {carriedTodos.length > 0 && (
-        <p className="carryover-note">{carriedTodos.length}件を今日のAI整理に反映します。</p>
-      )}
-    </section>
-  );
-}
-
-function PlanView({
-  highlightedScheduleKeys,
-  plan,
-}: {
-  highlightedScheduleKeys: string[];
-  plan: MorningPlan;
-}) {
-  const [isCalendarOpen, setIsCalendarOpen] = React.useState(false);
-  const calendarEvents = React.useMemo(() => createCalendarEvents(plan), [plan]);
-
-  return (
-    <section className="plan-stack" aria-label="AI整理結果">
-      <PlanSection icon={<Flag size={18} />} title="今日の目的">
-        <p className="purpose-text">{plan.purpose}</p>
-      </PlanSection>
-
-      <PlanSection icon={<Target size={18} />} title="今日の目標">
-        <ul className="clean-list">
-          {plan.goals.map((goal) => (
-            <li key={goal}>{goal}</li>
-          ))}
-        </ul>
-      </PlanSection>
-
-      <PlanSection icon={<ListChecks size={18} />} title="やることリスト">
-        <div className="todo-list">
-          {plan.todos.map((todo) => (
-            <label key={todo} className="todo-item">
-              <input type="checkbox" />
-              <span>{todo}</span>
-            </label>
-          ))}
         </div>
-      </PlanSection>
-
-      <PlanSection icon={<HeartPulse size={18} />} title="4カテゴリー分類">
-        <div className="category-grid">
-          <CategoryColumn title="仕事" items={plan.categories.work} />
-          <CategoryColumn title="健康" items={plan.categories.health} />
-          <CategoryColumn title="家族" items={plan.categories.family} />
-          <CategoryColumn title="学習" items={plan.categories.learning} />
-        </div>
-      </PlanSection>
-
-      <PlanSection icon={<Route size={18} />} title="優先順位">
-        <div className="priority-grid">
-          <PriorityColumn title="1. 最優先" items={plan.priorities.highest} />
-          <PriorityColumn title="2. 重要" items={plan.priorities.important} />
-          <PriorityColumn title="3. 時間があれば" items={plan.priorities.optional} />
-        </div>
-      </PlanSection>
-
-      <PlanSection icon={<CalendarClock size={18} />} title="推奨タイムスケジュール">
-        <div className="schedule-list">
-          {plan.schedule.map((item) => (
-            <div
-              className={`schedule-item ${highlightedScheduleKeys.includes(getScheduleKey(item)) ? 'is-new' : ''}`}
-              key={`${item.time}-${item.task}`}
-            >
-              <time>{item.time}</time>
-              <span>{item.task}</span>
-            </div>
-          ))}
-        </div>
-        <button
-          className="calendar-add-button"
-          disabled={!calendarEvents.length}
-          onClick={() => setIsCalendarOpen((current) => !current)}
-          type="button"
-        >
-          <CalendarPlus size={19} />
-          カレンダーへ追加
-        </button>
-        {isCalendarOpen && <GoogleCalendarExportPanel events={calendarEvents} />}
-      </PlanSection>
-
-      <PlanSection icon={<Lightbulb size={18} />} title="AIアドバイス">
-        <ul className="advice-list">
-          {plan.advice.map((advice) => (
-            <li key={advice}>
-              <CheckCircle2 size={16} />
-              <span>{advice}</span>
-            </li>
-          ))}
-        </ul>
-      </PlanSection>
-    </section>
-  );
-}
-
-function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
-  const [accessToken, setAccessToken] = React.useState('');
-  const [selectedEventIds, setSelectedEventIds] = React.useState(() => events.map((event) => event.id));
-  const [statusMessage, setStatusMessage] = React.useState('');
-  const [isSigningIn, setIsSigningIn] = React.useState(false);
-  const [isRegistering, setIsRegistering] = React.useState(false);
-  const isConfigured = isGoogleCalendarConfigured();
-  const selectedEvents = events.filter((event) => selectedEventIds.includes(event.id));
-
-  React.useEffect(() => {
-    setSelectedEventIds(events.map((event) => event.id));
-  }, [events]);
-
-  const connectGoogle = () => {
-    setIsSigningIn(true);
-    setStatusMessage('');
-    requestGoogleAccessToken('select_account consent')
-      .then((token) => {
-        setAccessToken(token);
-        setStatusMessage('Googleカレンダーに接続しました。登録する予定を確認してください。');
-      })
-      .catch((reason: unknown) => {
-        setStatusMessage(reason instanceof Error ? reason.message : 'Googleログインに失敗しました。');
-      })
-      .finally(() => setIsSigningIn(false));
-  };
-
-  const disconnectGoogle = () => {
-    if (accessToken) {
-      revokeGoogleAccessToken(accessToken);
-    }
-    setAccessToken('');
-    setStatusMessage('Googleカレンダー連携を解除しました。');
-  };
-
-  const toggleEvent = (eventId: string) => {
-    setSelectedEventIds((current) =>
-      current.includes(eventId) ? current.filter((id) => id !== eventId) : [...current, eventId],
-    );
-  };
-
-  const registerSelectedEvents = () => {
-    if (!accessToken || !selectedEvents.length) return;
-
-    setIsRegistering(true);
-    setStatusMessage('');
-    insertGoogleCalendarEvents(accessToken, selectedEvents)
-      .then(() => {
-        setStatusMessage(`${selectedEvents.length}件の予定をGoogleカレンダーへ登録しました。`);
-      })
-      .catch((reason: unknown) => {
-        setStatusMessage(reason instanceof Error ? reason.message : 'Googleカレンダーへの登録に失敗しました。');
-      })
-      .finally(() => setIsRegistering(false));
-  };
-
-  const openSelectedEventsInGoogle = () => {
-    selectedEvents.forEach((event) => {
-      window.open(createGoogleCalendarUrl(event), '_blank', 'noopener,noreferrer');
-    });
-    setStatusMessage('選択した予定をGoogleカレンダーの新規作成画面で開きました。登録先アカウントを画面上で確認してください。');
-  };
-
-  if (!events.length) {
-    return (
-      <div className="calendar-panel">
-        <div className="calendar-panel-header">
-          <span>Calendar Export</span>
-          <strong>登録できる予定がありません</strong>
-        </div>
-        <p className="calendar-empty">
-          タイムスケジュールに「9:00」「11:00-14:00」のような時刻が入ると予定化できます。
-        </p>
-      </div>
-    );
-  }
-
-  const dateLabel = events[0].start.toLocaleDateString('ja-JP', {
-    month: 'long',
-    day: 'numeric',
-    weekday: 'short',
-  });
-
-  return (
-    <div className="calendar-panel" aria-label="予定一覧確認画面">
-      <div className="calendar-panel-header">
-        <span>Google Calendar</span>
-        <strong>予定一覧確認画面</strong>
-      </div>
-
-      <p className="calendar-date">{dateLabel} の予定として作成します。登録しない予定はチェックを外せます。</p>
-
-      <div className="google-connect-card">
-        <div>
-          <span>Google OAuth</span>
-          <strong>{accessToken ? '接続済み' : '初回のみログイン'}</strong>
-        </div>
-        {accessToken ? (
-          <button className="calendar-mini-button" onClick={disconnectGoogle} type="button">
-            ログアウト
-          </button>
-        ) : (
-          <button
-            className="calendar-mini-button"
-            disabled={!isConfigured || isSigningIn}
-            onClick={connectGoogle}
-            type="button"
-          >
-            {isSigningIn ? '接続中' : 'Googleログイン'}
-          </button>
-        )}
-      </div>
-
-      {!isConfigured && (
-        <p className="calendar-status is-warning">
-          .envにVITE_GOOGLE_CLIENT_IDを設定するとGoogleカレンダーへ直接登録できます。
-        </p>
-      )}
-
-      <div className="calendar-event-list">
-        {events.map((event) => {
-          const checkboxId = `calendar-event-${event.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
-          return (
-          <article className="calendar-event" key={event.id}>
-            <label className="calendar-event-check" htmlFor={checkboxId}>
-              <input
-                aria-label={`${event.title}をGoogleカレンダー登録対象にする`}
-                checked={selectedEventIds.includes(event.id)}
-                id={checkboxId}
-                onChange={() => toggleEvent(event.id)}
-                type="checkbox"
-              />
-              <div>
-                <time dateTime={event.start.toISOString()}>
-                  {formatEventTime(event.start)} - {formatEventTime(event.end)}
-                </time>
-                <strong>{event.title}</strong>
-                <p>{event.memo}</p>
-                <small>優先度: {event.priority}</small>
-              </div>
-            </label>
-            <a
-              className="calendar-link"
-              href={createGoogleCalendarUrl(event)}
-              aria-label={`${event.title}をGoogleカレンダーで編集して登録`}
-              rel="noreferrer"
-              title="編集して登録"
-              target="_blank"
-            >
-              Googleで開く
-              <ExternalLink size={15} />
-            </a>
-          </article>
-          );
-        })}
-      </div>
-
-      <p className="calendar-primary-note">メイン操作: 選択した予定をまとめてGoogleカレンダーへ登録します。</p>
-
-      <button
-        className="calendar-register-button"
-        disabled={!accessToken || !selectedEvents.length || isRegistering}
-        onClick={registerSelectedEvents}
-        aria-label="選択した予定をGoogleカレンダーへ一括登録"
-        type="button"
-      >
-        <CalendarPlus size={18} />
-        {isRegistering ? '登録中' : `Googleカレンダーへ登録 (${selectedEvents.length}件)`}
-      </button>
-
-      <button
-        className="calendar-download-button"
-        disabled={!selectedEvents.length}
-        onClick={openSelectedEventsInGoogle}
-        type="button"
-      >
-        <ExternalLink size={18} />
-        Googleカレンダー画面で確認して登録
-      </button>
-
-      {statusMessage && <p className="calendar-status">{statusMessage}</p>}
-
-      <button className="calendar-download-button" onClick={() => downloadIcs(events)} type="button">
-        <Download size={18} />
-        Appleカレンダー用ファイルを保存
-      </button>
-    </div>
-  );
-}
-
-function CalendarExportPanel({ events }: { events: CalendarEvent[] }) {
-  if (!events.length) {
-    return (
-      <div className="calendar-panel">
-        <div className="calendar-panel-header">
-          <span>Calendar Export</span>
-          <strong>登録できる予定がありません</strong>
-        </div>
-        <p className="calendar-empty">
-          タイムスケジュールに「9:00」「11:00〜14:00」のような時刻が入ると予定化できます。
-        </p>
-      </div>
-    );
-  }
-
-  const dateLabel = events[0].start.toLocaleDateString('ja-JP', {
-    month: 'long',
-    day: 'numeric',
-    weekday: 'short',
-  });
-
-  return (
-    <div className="calendar-panel" aria-label="登録する予定を確認">
-      <div className="calendar-panel-header">
-        <span>Calendar Export</span>
-        <strong>登録する予定を確認</strong>
-      </div>
-
-      <p className="calendar-date">{dateLabel} の予定として作成します</p>
-
-      <div className="calendar-event-list">
-        {events.map((event) => (
-          <article className="calendar-event" key={event.id}>
-            <div>
-              <time dateTime={event.start.toISOString()}>
-                {formatEventTime(event.start)} - {formatEventTime(event.end)}
-              </time>
-              <strong>{event.title}</strong>
-              <p>{event.memo}</p>
-            </div>
-            <a
-              className="calendar-link"
-              href={createGoogleCalendarUrl(event)}
-              rel="noreferrer"
-              target="_blank"
-            >
-              Googleで開く
-              <ExternalLink size={15} />
-            </a>
-          </article>
-        ))}
-      </div>
-
-      <button className="calendar-download-button" onClick={() => downloadIcs(events)} type="button">
-        <Download size={18} />
-        Appleカレンダー用ファイルを保存
-      </button>
-    </div>
-  );
-}
-
-function PlanSection({
-  children,
-  icon,
-  title,
-}: {
-  children: React.ReactNode;
-  icon: React.ReactNode;
-  title: string;
-}) {
-  return (
-    <article className="plan-card">
-      <div className="plan-title">
-        <span>{icon}</span>
-        <h2>{title}</h2>
-      </div>
-      {children}
-    </article>
-  );
-}
-
-function PriorityColumn({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div className="priority-column">
-      <h3>{title}</h3>
-      {items.map((item) => (
-        <span key={item}>{item}</span>
       ))}
-    </div>
+      <button className="secondary-button full" disabled={!unfinished.length} onClick={() => onCarryOver(unfinished)} type="button">
+        {carriedTodos.length ? `${carriedTodos.length}件を反映中` : '未完了を今日へ繰り越す'}
+      </button>
+    </section>
   );
-}
-
-function CategoryColumn({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div className="category-column">
-      <h3>{title}</h3>
-      {items.length ? (
-        items.map((item) => <span key={item}>{item}</span>)
-      ) : (
-        <span className="muted-category">該当なし</span>
-      )}
-    </div>
-  );
-}
-
-function formatShoppingShareText(items: ShoppingItem[]) {
-  const groups = groupShoppingItems(items).filter((group) => group.items.length > 0);
-  const body = groups
-    .map((group) => {
-      const lines = group.items.map((item) => `・${formatShoppingItemLabel(item)}`);
-      return [`■ ${group.category}`, ...lines].join('\n');
-    })
-    .join('\n\n');
-
-  return ['【今日の買い物リスト】', '', body || '買い物リストはまだありません。', '', '買い物よろしくお願いします。'].join('\n');
-}
-
-function isShareCancelError(error: unknown) {
-  if (!(error instanceof DOMException || error instanceof Error)) return false;
-  return error.name === 'AbortError' || /cancel|abort|キャンセル/i.test(error.message);
-}
-
-function preserveExistingPlan(previousPlan: MorningPlan, nextPlan: MorningPlan): MorningPlan {
-  const schedule = sortScheduleByTime(mergeSchedule(previousPlan.schedule, nextPlan.schedule));
-  const todos = mergeStrings(previousPlan.todos, nextPlan.todos);
-  const goals = mergeStrings(previousPlan.goals, nextPlan.goals);
-
-  return {
-    ...nextPlan,
-    goals,
-    todos,
-    schedule,
-    priorities: {
-      highest: mergeStrings(previousPlan.priorities.highest, nextPlan.priorities.highest),
-      important: mergeStrings(previousPlan.priorities.important, nextPlan.priorities.important),
-      optional: mergeStrings(previousPlan.priorities.optional, nextPlan.priorities.optional),
-    },
-  };
-}
-
-function mergeSchedule(
-  previousSchedule: MorningPlan['schedule'],
-  nextSchedule: MorningPlan['schedule'],
-) {
-  const byKey = new Map<string, MorningPlan['schedule'][number]>();
-  previousSchedule.forEach((item) => byKey.set(getScheduleKey(item), item));
-  nextSchedule.forEach((item) => byKey.set(getScheduleKey(item), item));
-  return Array.from(byKey.values());
-}
-
-function findNewScheduleKeys(previousPlan: MorningPlan, nextPlan: MorningPlan) {
-  const previousKeys = new Set(previousPlan.schedule.map(getScheduleKey));
-  return nextPlan.schedule.map(getScheduleKey).filter((key) => !previousKeys.has(key));
-}
-
-function getScheduleKey(item: MorningPlan['schedule'][number]) {
-  return `${item.time.trim()}::${item.task.trim()}`;
-}
-
-function mergeStrings(previousItems: string[], nextItems: string[]) {
-  return Array.from(new Set([...previousItems, ...nextItems].map((item) => item.trim()).filter(Boolean)));
-}
-
-function sortScheduleByTime(schedule: MorningPlan['schedule']) {
-  return [...schedule].sort((a, b) => getScheduleStartMinutes(a.time) - getScheduleStartMinutes(b.time));
-}
-
-function getScheduleStartMinutes(timeText: string) {
-  return parseScheduleTime(timeText)?.startMinutes ?? Number.MAX_SAFE_INTEGER;
 }
 
 function createCalendarEvents(plan: MorningPlan): CalendarEvent[] {
@@ -1796,19 +1162,13 @@ function createCalendarEvents(plan: MorningPlan): CalendarEvent[] {
     .map((item, index) => {
       const range = parseScheduleTime(item.time);
       if (!range) return null;
-
       const start = new Date(today);
       start.setHours(Math.floor(range.startMinutes / 60), range.startMinutes % 60, 0, 0);
-
-      const endMinutes = range.endMinutes ?? range.startMinutes + 60;
       const end = new Date(today);
+      const endMinutes = range.endMinutes ?? range.startMinutes + 60;
       end.setHours(Math.floor(endMinutes / 60), endMinutes % 60, 0, 0);
-      if (end <= start) {
-        end.setTime(start.getTime() + 60 * 60 * 1000);
-      }
-
+      if (end <= start) end.setTime(start.getTime() + 60 * 60 * 1000);
       const title = item.task.trim() || 'MORNING FLOW AI 予定';
-
       return {
         id: `${index}-${item.time}-${title}`,
         title,
@@ -1816,7 +1176,7 @@ function createCalendarEvents(plan: MorningPlan): CalendarEvent[] {
         end,
         priority: getSchedulePriority(title, plan),
         sourceTime: item.time,
-        memo: `MORNING FLOW AIで整理した予定: ${item.time} ${title}\n今日の目的: ${plan.purpose}`,
+        memo: `MORNING FLOW AI v3.0で整理した予定: ${item.time} ${title}\n今日の目的: ${plan.purpose}`,
       };
     })
     .filter((event): event is CalendarEvent => Boolean(event));
@@ -1829,25 +1189,8 @@ function getSchedulePriority(title: string, plan: MorningPlan): GoogleCalendarPr
   return '通常';
 }
 
-function includesSimilarTask(tasks: string[], title: string) {
-  const normalizedTitle = normalizeTaskText(title);
-  return tasks.some((task) => {
-    const normalizedTask = normalizeTaskText(task);
-    return normalizedTask.includes(normalizedTitle) || normalizedTitle.includes(normalizedTask);
-  });
-}
-
-function normalizeTaskText(value: string) {
-  return value.replace(/\s/g, '').toLowerCase();
-}
-
 function parseScheduleTime(timeText: string) {
-  const matches = Array.from(
-    timeText
-      .replace(/：/g, ':')
-      .matchAll(/(\d{1,2})(?::(\d{2})|時(?:\s*(\d{1,2})\s*分?)?)/g),
-  );
-
+  const matches = Array.from(timeText.replace(/：/g, ':').matchAll(/(\d{1,2})(?::(\d{2})|時(?:\s*(\d{1,2})\s*分?)?)/g));
   const times = matches
     .map((match) => {
       const hour = Number(match[1]);
@@ -1856,13 +1199,8 @@ function parseScheduleTime(timeText: string) {
       return hour * 60 + minute;
     })
     .filter((minutes): minutes is number => minutes !== null);
-
   if (!times.length) return null;
-
-  return {
-    startMinutes: times[0],
-    endMinutes: times[1],
-  };
+  return { startMinutes: times[0], endMinutes: times[1] };
 }
 
 function createGoogleCalendarUrl(event: CalendarEvent) {
@@ -1873,7 +1211,6 @@ function createGoogleCalendarUrl(event: CalendarEvent) {
     details: event.memo,
     text: event.title,
   });
-
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
@@ -1882,11 +1219,11 @@ function downloadIcs(events: CalendarEvent[]) {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//MORNING FLOW AI//Calendar Export//JA',
+    'PRODID:-//MORNING FLOW AI v3.0//Calendar Export//JA',
     'CALSCALE:GREGORIAN',
     ...events.flatMap((event, index) => [
       'BEGIN:VEVENT',
-      `UID:morning-flow-ai-${Date.now()}-${index}@local`,
+      `UID:morning-flow-ai-v3-${Date.now()}-${index}@local`,
       `DTSTAMP:${now}`,
       `DTSTART;TZID=Asia/Tokyo:${toLocalCalendarTimestamp(event.start)}`,
       `DTEND;TZID=Asia/Tokyo:${toLocalCalendarTimestamp(event.end)}`,
@@ -1900,11 +1237,109 @@ function downloadIcs(events: CalendarEvent[]) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = 'morning-flow-ai-schedule.ics';
+  link.download = 'morning-flow-ai-v3-schedule.ics';
   document.body.appendChild(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+function formatShoppingShareText(items: ShoppingItem[]) {
+  const groups = groupShoppingItems(items).filter((group) => group.items.length > 0);
+  const body = groups
+    .map((group) => [`■ ${group.category}`, ...group.items.map((item) => `・${formatShoppingItemLabel(item)}`)].join('\n'))
+    .join('\n\n');
+  return ['【今日の買い物リスト】', '', body || '買い物リストはまだありません。', '', '買い物よろしくお願いします。'].join('\n');
+}
+
+function extractContactReminders(text: string): ContactReminder[] {
+  return text
+    .split(/[。\n、,]/)
+    .map((value) => value.trim())
+    .filter((value) => /(折り返し|電話|LINE|ライン|メール|返信|SNS|DM|連絡)/i.test(value))
+    .map(createContactReminder);
+}
+
+function createContactReminder(text: string): ContactReminder {
+  return {
+    id: `contact-${createId()}`,
+    text,
+    kind: detectContactKind(text),
+    completed: false,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function detectContactKind(text: string): ContactKind {
+  if (/電話|折り返し/.test(text)) return 'phone';
+  if (/LINE|ライン/i.test(text)) return 'line';
+  if (/メール|mail/i.test(text)) return 'mail';
+  if (/SNS|DM|Instagram|X|Twitter/i.test(text)) return 'sns';
+  return 'other';
+}
+
+function getContactIcon(kind: ContactKind) {
+  const props = { size: 15, 'aria-hidden': true };
+  if (kind === 'phone') return <Phone {...props} />;
+  if (kind === 'line') return <MessageCircle {...props} />;
+  if (kind === 'mail') return <Mail {...props} />;
+  if (kind === 'sns') return <AtSign {...props} />;
+  return <Home {...props} />;
+}
+
+function preserveExistingPlan(previousPlan: MorningPlan, nextPlan: MorningPlan): MorningPlan {
+  return {
+    ...nextPlan,
+    goals: mergeStrings(previousPlan.goals, nextPlan.goals),
+    todos: mergeStrings(previousPlan.todos, nextPlan.todos),
+    schedule: sortScheduleByTime(mergeSchedule(previousPlan.schedule, nextPlan.schedule)),
+    shoppingCandidates: mergeStrings(previousPlan.shoppingCandidates, nextPlan.shoppingCandidates),
+    contactReminders: mergeStrings(previousPlan.contactReminders, nextPlan.contactReminders),
+    priorities: {
+      highest: mergeStrings(previousPlan.priorities.highest, nextPlan.priorities.highest),
+      important: mergeStrings(previousPlan.priorities.important, nextPlan.priorities.important),
+      optional: mergeStrings(previousPlan.priorities.optional, nextPlan.priorities.optional),
+    },
+  };
+}
+
+function mergeSchedule(previousSchedule: MorningPlan['schedule'], nextSchedule: MorningPlan['schedule']) {
+  const byKey = new Map<string, MorningPlan['schedule'][number]>();
+  previousSchedule.forEach((item) => byKey.set(`${item.time.trim()}::${item.task.trim()}`, item));
+  nextSchedule.forEach((item) => byKey.set(`${item.time.trim()}::${item.task.trim()}`, item));
+  return Array.from(byKey.values());
+}
+
+function addCarryoverToPlan(plan: MorningPlan, carriedTodos: string[]): MorningPlan {
+  if (!carriedTodos.length) return plan;
+  return {
+    ...plan,
+    todos: mergeStrings(carriedTodos, plan.todos),
+    priorities: {
+      ...plan.priorities,
+      highest: mergeStrings(carriedTodos, plan.priorities.highest),
+    },
+  };
+}
+
+function sortScheduleByTime(schedule: MorningPlan['schedule']) {
+  return [...schedule].sort((a, b) => (parseScheduleTime(a.time)?.startMinutes ?? 99999) - (parseScheduleTime(b.time)?.startMinutes ?? 99999));
+}
+
+function mergeStrings(previousItems: string[], nextItems: string[]) {
+  return Array.from(new Set([...previousItems, ...nextItems].map((item) => item.trim()).filter(Boolean)));
+}
+
+function includesSimilarTask(tasks: string[], title: string) {
+  const normalizedTitle = normalizeText(title);
+  return tasks.some((task) => {
+    const normalizedTask = normalizeText(task);
+    return normalizedTask.includes(normalizedTitle) || normalizedTitle.includes(normalizedTask);
+  });
+}
+
+function normalizeText(value: string) {
+  return value.replace(/\s/g, '').toLowerCase();
 }
 
 function toCalendarTimestamp(date: Date) {
@@ -1922,76 +1357,42 @@ function toLocalCalendarTimestamp(date: Date) {
 }
 
 function escapeIcsText(value: string) {
-  return value
-    .replace(/\\/g, '\\\\')
-    .replace(/\n/g, '\\n')
-    .replace(/,/g, '\\,')
-    .replace(/;/g, '\\;');
+  return value.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
 }
 
 function formatEventTime(date: Date) {
-  return date.toLocaleTimeString('ja-JP', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
 }
 
-function addCarryoverToPlan(plan: MorningPlan, carriedTodos: string[]): MorningPlan {
-  if (!carriedTodos.length) return plan;
-
-  const todos = Array.from(new Set([...carriedTodos, ...plan.todos]));
-  return {
-    ...plan,
-    todos,
-    priorities: {
-      ...plan.priorities,
-      highest: Array.from(new Set([...carriedTodos, ...plan.priorities.highest])),
-    },
-    advice: Array.from(new Set([`昨日の未完了タスクを今日の前半に置くと、流れを取り戻しやすくなります。`, ...plan.advice])),
-  };
+function readJson<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    localStorage.removeItem(key);
+    return null;
+  }
 }
 
-function createReflectionMessage(statuses: Record<string, ReviewStatus>, todos: string[]) {
-  const missed = todos.filter((todo) => statuses[todo] === 'missed');
-  const partial = todos.filter((todo) => statuses[todo] === 'partial');
-  const done = todos.filter((todo) => statuses[todo] === 'done');
-
-  if (missed.length > 0) {
-    return `${missed[0]}が未達成でした。優先順位が低かった可能性があります。今日に繰り越しますか？`;
-  }
-  if (partial.length > 0) {
-    return `${partial[0]}は一部完了です。小さく分けて今日の前半に置くと進めやすくなります。`;
-  }
-  if (done.length === todos.length && todos.length > 0) {
-    return '昨日より前進しています。無理なく継続しましょう。';
-  }
-  return '昨日の結果を選ぶと、AIが今日へのつなげ方を提案します。';
-}
-
-function getStatusLabel(
-  isSupported: boolean,
-  isListening: boolean,
-  transcript: string,
-  plan: MorningPlan | null,
-) {
-  if (!isSupported) return 'このブラウザは音声入力に対応していません';
-  if (isListening) return '音声認識中';
-  if (plan) return '今日の流れを整理しました';
-  if (transcript) return 'AI整理を押すと今日の計画を生成します';
-  return 'タップして話しはじめる';
+function isShareCancelError(error: unknown) {
+  if (!(error instanceof DOMException || error instanceof Error)) return false;
+  return error.name === 'AbortError' || /cancel|abort|キャンセル/i.test(error.message);
 }
 
 function getSpeechErrorMessage(error: string) {
   if (error === 'not-allowed' || error === 'service-not-allowed') {
-    return 'マイクの使用が許可されていません。ブラウザの設定からマイクを許可してください。';
+    return 'マイクの使用が許可されていません。ブラウザ設定からマイクを許可してください。';
   }
-  if (error === 'no-speech') {
-    return '音声が聞き取れませんでした。もう一度、少し近くで話してみてください。';
-  }
-  if (error === 'network') {
-    return '音声認識サービスに接続できませんでした。通信状況を確認してください。';
-  }
+  if (error === 'no-speech') return '音声が聞き取れませんでした。もう一度お試しください。';
+  if (error === 'network') return '音声認識サービスに接続できませんでした。通信状況を確認してください。';
   return '音声認識で問題が起きました。もう一度お試しください。';
+}
+
+function createId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

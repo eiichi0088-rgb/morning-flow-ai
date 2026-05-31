@@ -12,6 +12,8 @@ export default {
       const energy = normalizeEnergy(body.energy);
       const mode = body.mode === 'update' ? 'update' : 'create';
       const currentPlan = body.currentPlan ?? null;
+      const shoppingItems = Array.isArray(body.shoppingItems) ? body.shoppingItems.map(String) : [];
+      const contactReminders = Array.isArray(body.contactReminders) ? body.contactReminders.map(String) : [];
 
       if (!transcript) {
         return Response.json({ message: '文字起こし内容が空です。' }, { status: 400 });
@@ -24,7 +26,12 @@ export default {
         );
       }
 
-      const plan = await createPlanFromTranscript(transcript, energy, { currentPlan, mode });
+      const plan = await createPlanFromTranscript(transcript, energy, {
+        contactReminders,
+        currentPlan,
+        mode,
+        shoppingItems,
+      });
       return Response.json({ plan });
     } catch (error) {
       return Response.json(

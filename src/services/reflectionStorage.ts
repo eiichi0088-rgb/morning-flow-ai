@@ -4,6 +4,7 @@ export type ReviewStatus = 'done' | 'partial' | 'missed';
 
 export interface MorningSnapshot {
   id: string;
+  ownerId?: string;
   createdAt: string;
   transcript: string;
   plan: MorningPlan;
@@ -13,16 +14,22 @@ export interface MorningSnapshot {
   };
 }
 
-const defaultStorageKey = 'morning-flow-ai:snapshots:private-session';
+const defaultStorageKey = 'morning-flow-ai:v3:private:snapshots';
 
 export function loadLatestSnapshot(storageKey = defaultStorageKey): MorningSnapshot | null {
   return loadSnapshots(storageKey)[0] ?? null;
 }
 
-export function saveMorningSnapshot(transcript: string, plan: MorningPlan, storageKey = defaultStorageKey) {
+export function saveMorningSnapshot(
+  transcript: string,
+  plan: MorningPlan,
+  storageKey = defaultStorageKey,
+  ownerId = 'local-private',
+) {
   const snapshots = loadSnapshots(storageKey);
   const snapshot: MorningSnapshot = {
-    id: crypto.randomUUID(),
+    id: createId(),
+    ownerId,
     createdAt: new Date().toISOString(),
     transcript,
     plan,
@@ -61,4 +68,11 @@ function loadSnapshots(storageKey: string): MorningSnapshot[] {
 
 function saveSnapshots(snapshots: MorningSnapshot[], storageKey: string) {
   localStorage.setItem(storageKey, JSON.stringify(snapshots));
+}
+
+function createId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }

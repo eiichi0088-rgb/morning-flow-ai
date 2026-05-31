@@ -7,7 +7,18 @@ const defaultModel = 'gpt-5.4-mini';
 const planSchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['purpose', 'goals', 'todos', 'priorities', 'schedule', 'advice', 'categories', 'coach'],
+  required: [
+    'purpose',
+    'goals',
+    'todos',
+    'priorities',
+    'schedule',
+    'advice',
+    'categories',
+    'shoppingCandidates',
+    'contactReminders',
+    'coach',
+  ],
   properties: {
     purpose: { type: 'string' },
     goals: { type: 'array', items: { type: 'string' } },
@@ -46,6 +57,8 @@ const planSchema = {
         learning: { type: 'array', items: { type: 'string' } },
       },
     },
+    shoppingCandidates: { type: 'array', items: { type: 'string' } },
+    contactReminders: { type: 'array', items: { type: 'string' } },
     coach: {
       type: 'object',
       additionalProperties: false,
@@ -64,10 +77,7 @@ const planSchema = {
           },
         },
         morningAdvice: { type: 'string' },
-        successConditions: {
-          type: 'array',
-          items: { type: 'string' },
-        },
+        successConditions: { type: 'array', items: { type: 'string' } },
       },
     },
   },
@@ -81,14 +91,11 @@ export async function loadEnvFile(root = process.cwd()) {
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) continue;
-
     const index = trimmed.indexOf('=');
     const key = trimmed.slice(0, index).trim();
     const rawValue = trimmed.slice(index + 1).trim();
     const value = rawValue.replace(/^["']|["']$/g, '');
-    if (key && process.env[key] === undefined) {
-      process.env[key] = value;
-    }
+    if (key && process.env[key] === undefined) process.env[key] = value;
   }
 }
 
@@ -130,6 +137,8 @@ export async function handlePlanRequest(request, response) {
     const energy = normalizeEnergy(body.energy);
     const mode = body.mode === 'update' ? 'update' : 'create';
     const currentPlan = body.currentPlan ?? null;
+    const shoppingItems = Array.isArray(body.shoppingItems) ? body.shoppingItems.map(String) : [];
+    const contactReminders = Array.isArray(body.contactReminders) ? body.contactReminders.map(String) : [];
 
     if (!transcript) {
       sendJson(response, 400, { message: 'Transcript is empty.' });
@@ -137,13 +146,16 @@ export async function handlePlanRequest(request, response) {
     }
 
     if (!process.env.OPENAI_API_KEY) {
-      sendJson(response, 500, {
-        message: 'Please set OPENAI_API_KEY in .env.',
-      });
+      sendJson(response, 500, { message: 'Please set OPENAI_API_KEY in .env.' });
       return;
     }
 
-    const plan = await createPlanFromTranscript(transcript, energy, { currentPlan, mode });
+    const plan = await createPlanFromTranscript(transcript, energy, {
+      contactReminders,
+      currentPlan,
+      mode,
+      shoppingItems,
+    });
     sendJson(response, 200, { plan });
   } catch (error) {
     sendJson(response, 500, {
@@ -155,25 +167,32 @@ export async function handlePlanRequest(request, response) {
 export async function createPlanFromTranscript(transcript, energy = 'normal', context = {}) {
   const mode = context.mode === 'update' ? 'update' : 'create';
   const currentPlan = context.currentPlan ?? null;
+  const shoppingItems = Array.isArray(context.shoppingItems) ? context.shoppingItems : [];
+  const contactReminders = Array.isArray(context.contactReminders) ? context.contactReminders : [];
   const systemText = [
-    'You are MORNING FLOW AI, a Japanese morning planning coach.',
-    'Return a concise Japanese day plan in the requested JSON schema.',
-    'Use the user transcript, energy level, and context to organize purpose, goals, todos, priorities, schedule, advice, categories, and coach.',
+    'You are MORNING FLOW AI v3.0, a Japanese personal morning planning coach.',
+    'Return concise Japanese JSON in the requested schema.',
+    'Organize today into purpose, goals, todos, priorities, schedule, advice, categories, shoppingCandidates, contactReminders, and coach.',
+    'Treat phone callbacks, LINE replies, email replies, SNS replies, and DM replies as contactReminders and also include important ones in todos.',
+    'Treat shopping needs as shoppingCandidates and also place urgent shopping in todos or schedule.',
     'If mode is update, integrate the new instruction into the current plan. Keep existing schedules and tasks unless the user clearly asks to change them.',
-    'Do not drop existing items when adding new items. Insert new schedule items at a reasonable time between existing items when possible.',
   ].join(' ');
-  const userText = mode === 'update'
-    ? [
-        `Mode: update`,
-        `Morning energy: ${energy}`,
-        '',
-        'Current MORNING FLOW AI plan JSON:',
-        JSON.stringify(currentPlan, null, 2),
-        '',
-        'Additional or correction instruction:',
-        transcript,
-      ].join('\n')
-    : `Mode: create\nMorning energy: ${energy}\n\nTranscript:\n${transcript}`;
+  const userText = [
+    `Mode: ${mode}`,
+    `Morning energy: ${energy}`,
+    '',
+    'Current MORNING FLOW AI plan JSON:',
+    JSON.stringify(currentPlan, null, 2),
+    '',
+    'Known unfinished shopping items:',
+    shoppingItems.map((item) => `- ${item}`).join('\n') || '- none',
+    '',
+    'Known unfinished contact reminders:',
+    contactReminders.map((item) => `- ${item}`).join('\n') || '- none',
+    '',
+    mode === 'update' ? 'Additional or correction instruction:' : 'Transcript:',
+    transcript,
+  ].join('\n');
 
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
@@ -184,19 +203,13 @@ export async function createPlanFromTranscript(transcript, energy = 'normal', co
     body: JSON.stringify({
       model: process.env.OPENAI_MODEL || defaultModel,
       input: [
-        {
-          role: 'system',
-          content: [{ type: 'input_text', text: systemText }],
-        },
-        {
-          role: 'user',
-          content: [{ type: 'input_text', text: userText }],
-        },
+        { role: 'system', content: [{ type: 'input_text', text: systemText }] },
+        { role: 'user', content: [{ type: 'input_text', text: userText }] },
       ],
       text: {
         format: {
           type: 'json_schema',
-          name: 'morning_plan',
+          name: 'morning_plan_v3',
           strict: true,
           schema: planSchema,
         },
@@ -205,16 +218,9 @@ export async function createPlanFromTranscript(transcript, energy = 'normal', co
   });
 
   const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data?.error?.message ?? 'OpenAI API request failed.');
-  }
-
+  if (!response.ok) throw new Error(data?.error?.message ?? 'OpenAI API request failed.');
   const text = data.output_text ?? extractOutputText(data);
-  if (!text) {
-    throw new Error('OpenAI API returned no plan text.');
-  }
-
+  if (!text) throw new Error('OpenAI API returned no plan text.');
   return JSON.parse(text);
 }
 

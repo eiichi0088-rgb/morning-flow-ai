@@ -6,15 +6,6 @@ $version = ([string]$packageJson.version) -replace '\.0$', ''
 $date = Get-Date -Format 'yyyy-MM-dd'
 $path = Join-Path $root 'CHANGELOG.md'
 
-if (!(Test-Path -LiteralPath $path)) {
-  @'
-# CHANGELOG
-
-このファイルには MORNING FLOW AI の各バージョンの変更内容を記録します。
-
-'@ | Set-Content -LiteralPath $path -Encoding UTF8
-}
-
 $content = Get-Content -LiteralPath $path -Raw
 $heading = "## Version $version - $date"
 
@@ -22,7 +13,11 @@ if ($content -notmatch [regex]::Escape("## Version $version")) {
 $entry = @"
 $heading
 
-- 変更内容を記録
+- v3専用の個人プロファイル保存へ移行し、v2.x共有localStorageを読み込まないように変更
+- Googleカレンダーは自動再接続せず、毎回アカウント選択と登録前確認を行うように強化
+- 買い物リストの音声/テキスト入力、AIカテゴリ分け、数量保持、編集/削除/共有文を改善
+- 電話・LINE・メール・SNS返信の連絡忘れチェックを追加
+- 朝のAI整理に買い物候補と連絡忘れを含めるように強化
 - `morning-flow-ai-v$version.zip` として保存
 
 "@

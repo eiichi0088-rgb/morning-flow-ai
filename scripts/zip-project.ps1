@@ -15,9 +15,7 @@ if (Test-Path -LiteralPath $zipPath) {
 $excludedNames = @(
   'node_modules',
   '.npm-cache',
-  '.env',
-  'morning-flow-ai-mvp.zip',
-  'morning-flow-ai-v1.2.zip'
+  '.env'
 )
 
 $items = Get-ChildItem -LiteralPath $root -Force |

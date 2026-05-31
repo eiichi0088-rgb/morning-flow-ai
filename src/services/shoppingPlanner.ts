@@ -23,45 +23,20 @@ export interface ShoppingPlan {
   updatedAt: string;
 }
 
-type CategoryRule = {
-  category: ShoppingCategory;
-  patterns: RegExp[];
-};
-
 type ParsedShoppingInput = {
   name: string;
   quantity: string;
 };
 
-const categoryAliases: Record<string, ShoppingCategory> = {
-  '食品・調味料': '食品',
-  '野菜・果物': '食品',
-  '肉・魚・冷凍食品': '食品',
-  '店舗・仕込み関連': '食品',
-  '家族・子供用品': '子供用品',
-};
-
-const localCategoryRules: CategoryRule[] = [
-  {
-    category: '子供用品',
-    patterns: [/子供|こども|子ども|娘|息子|おむつ|オムツ|ベビー|学校|保育|チーちゃん|アズキ|子供用|こども用|子ども用/],
-  },
-  {
-    category: 'ジム・外出用品',
-    patterns: [/ジム|運動|外出|プロテイン|タオル|水筒|スポーツ|トレーニング|着替え|汗拭き/],
-  },
-  {
-    category: '飲み物',
-    patterns: [/炭酸水|ミネラルウォーター|水|お茶|茶|コーヒー|珈琲|ジュース|飲み物|ドリンク|炭酸/],
-  },
-  {
-    category: '日用品',
-    patterns: [/洗剤|ラップ|トイレットペーパー|ティッシュ|キッチンペーパー|ゴミ袋|電池|掃除|シャンプー|石鹸|せっけん|歯ブラシ|歯磨き|歯磨き粉/],
-  },
+const localCategoryRules: Array<{ category: ShoppingCategory; patterns: RegExp[] }> = [
+  { category: '子供用品', patterns: [/子供|こども|子ども|娘|息子|おむつ|オムツ|ベビー|学校|保育|お菓子/] },
+  { category: 'ジム・外出用品', patterns: [/ジム|運動|外出|プロテイン|タオル|水筒|スポーツ|着替え/] },
+  { category: '飲み物', patterns: [/炭酸水|水|お茶|茶|コーヒー|珈琲|ジュース|飲み物|ドリンク|500ml|2l/i] },
+  { category: '日用品', patterns: [/洗剤|ラップ|トイレットペーパー|ティッシュ|ゴミ袋|電池|掃除|シャンプー|石鹸|歯ブラシ|歯磨き/] },
   {
     category: '食品',
     patterns: [
-      /卵|たまご|パン|米|ご飯|小麦粉|粉|チーズ|牛乳|豆乳|ヨーグルト|豆腐|納豆|調味料|砂糖|塩|醤油|味噌|しょうが|生姜|お菓子/,
+      /卵|たまご|パン|米|小麦粉|チーズ|牛乳|豆乳|ヨーグルト|豆腐|納豆|調味料|砂糖|塩|醤油|味噌|生姜|お菓子/,
       /ネギ|ねぎ|玉ねぎ|玉葱|人参|にんじん|じゃがいも|キャベツ|レタス|トマト|きゅうり|りんご|バナナ|野菜|果物/,
       /豚肉|牛肉|鶏肉|肉|魚|刺身|鮭|さば|サバ|まぐろ|ツナ|冷凍|ハム|ベーコン/,
       /パスタ|うどん|そば|素麺|そうめん|カップ麺|インスタントラーメン|ラーメン|中華麺|麺/,
@@ -69,25 +44,13 @@ const localCategoryRules: CategoryRule[] = [
   },
 ];
 
-export async function createShoppingPlan(
-  text: string,
-  currentItems: ShoppingItem[] = [],
-): Promise<ShoppingPlan> {
+export async function createShoppingPlan(text: string, currentItems: ShoppingItem[] = []): Promise<ShoppingPlan> {
   const instruction = text.trim();
   const normalizedCurrentItems = currentItems.map(normalizeStoredItem);
 
   if (!instruction) {
     return {
       items: normalizedCurrentItems,
-      updatedAt: new Date().toISOString(),
-    };
-  }
-
-  const removeMode = /消して|削除|外して|いらない|不要/.test(instruction);
-  if (removeMode) {
-    const removeNames = new Set(extractShoppingItems(instruction).map((item) => normalizeName(item.name)));
-    return {
-      items: normalizedCurrentItems.filter((item) => !removeNames.has(normalizeName(item.name))),
       updatedAt: new Date().toISOString(),
     };
   }
@@ -112,7 +75,7 @@ export function groupShoppingItems(items: ShoppingItem[]) {
 }
 
 export function classifyShoppingItem(name: string): ShoppingCategory {
-  const itemText = normalizeForMatching(name);
+  const itemText = name.replace(/\s/g, '').toLowerCase();
 
   for (const rule of localCategoryRules) {
     if (rule.patterns.some((pattern) => pattern.test(itemText))) {
@@ -148,16 +111,24 @@ export function parseShoppingItemInput(value: string): ParsedShoppingInput {
     .replace(/(?:が|を|は)$/g, '')
     .trim();
 
+  return { name, quantity };
+}
+
+export function createManualShoppingItem(text: string): ShoppingItem | null {
+  const parsed = parseShoppingItemInput(text);
+  if (!parsed.name) return null;
+
   return {
-    name,
-    quantity,
+    id: createShoppingItemId(),
+    name: parsed.name,
+    quantity: parsed.quantity,
+    category: classifyShoppingItem(parsed.name),
+    completed: false,
+    addedAt: new Date().toISOString(),
   };
 }
 
-async function createShoppingPlanWithAi(
-  text: string,
-  currentItems: ShoppingItem[],
-): Promise<ShoppingPlan> {
+async function createShoppingPlanWithAi(text: string, currentItems: ShoppingItem[]): Promise<ShoppingPlan> {
   const response = await fetch('/api/shopping', {
     method: 'POST',
     headers: {
@@ -177,10 +148,7 @@ async function createShoppingPlanWithAi(
   return mergeAiItems(currentItems, payload?.plan?.items ?? []);
 }
 
-function createShoppingPlanWithLocalRules(
-  text: string,
-  currentItems: ShoppingItem[],
-): ShoppingPlan {
+function createShoppingPlanWithLocalRules(text: string, currentItems: ShoppingItem[]): ShoppingPlan {
   return mergeAiItems(
     currentItems,
     extractShoppingItems(text).map((item) => ({
@@ -204,7 +172,7 @@ function mergeAiItems(
     const normalized = normalizeName(name);
     if (!normalized) return;
 
-    const category = normalizeCategory(aiItem.category);
+    const category = shoppingCategories.includes(aiItem.category) ? aiItem.category : classifyShoppingItem(name);
     const existing = existingByName.get(normalized);
     if (existing) {
       existing.category = category;
@@ -260,14 +228,9 @@ function normalizeStoredItem(item: ShoppingItem): ShoppingItem {
     ...item,
     name: parsed.name || item.name,
     quantity: normalizeQuantity(parsed.quantity || item.quantity || ''),
-    category: normalizeCategory(item.category),
+    category: shoppingCategories.includes(item.category) ? item.category : classifyShoppingItem(item.name),
     id: item.id?.startsWith('shopping-') ? item.id : createShoppingItemId(),
   };
-}
-
-function normalizeCategory(category: string): ShoppingCategory {
-  if (shoppingCategories.includes(category as ShoppingCategory)) return category as ShoppingCategory;
-  return categoryAliases[category] ?? 'その他';
 }
 
 function sortShoppingItems(items: ShoppingItem[]) {
@@ -289,12 +252,8 @@ function normalizeQuantity(value: string) {
     .replace(/\s+/g, '');
 }
 
-function normalizeForMatching(value: string) {
-  return value.replace(/\s/g, '').toLowerCase();
-}
-
 function normalizeName(name: string) {
-  return normalizeForMatching(name).replace(/[。、，,]/g, '');
+  return name.replace(/\s/g, '').replace(/[。、，,]/g, '').toLowerCase();
 }
 
 function createShoppingItemId() {

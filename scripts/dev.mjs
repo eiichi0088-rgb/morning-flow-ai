@@ -34,5 +34,5 @@ createServer(async (request, response) => {
     response.end('Not found');
   });
 }).listen(port, host, () => {
-  console.log(`MORNING FLOW AI v1.3 is running at http://${host}:${port}/`);
+  console.log(`MORNING FLOW AI v3.0 is running at http://${host}:${port}/`);
 });

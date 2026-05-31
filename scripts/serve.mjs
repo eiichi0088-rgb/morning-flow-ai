@@ -44,9 +44,7 @@ createServer(async (request, response) => {
 
   try {
     const data = await readFile(filePath);
-    response.writeHead(200, {
-      'Content-Type': contentTypes[extname(filePath)] ?? 'application/octet-stream',
-    });
+    response.writeHead(200, { 'Content-Type': contentTypes[extname(filePath)] ?? 'application/octet-stream' });
     response.end(data);
   } catch {
     const fallback = await readFile(join(root, 'index.html'));
@@ -54,5 +52,5 @@ createServer(async (request, response) => {
     response.end(fallback);
   }
 }).listen(port, '0.0.0.0', () => {
-  console.log(`MORNING FLOW AI is running at http://localhost:${port}`);
+  console.log(`MORNING FLOW AI v3.0 is running at http://localhost:${port}`);
 });
