@@ -45,7 +45,9 @@ export async function createAiMorningPlan(
 ): Promise<MorningPlan> {
   const response = await fetch('/api/plan', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify({
       contactReminders: context.contactReminders ?? [],
       currentPlan: context.currentPlan,
@@ -57,16 +59,17 @@ export async function createAiMorningPlan(
   });
 
   const payload = await response.json().catch(() => null);
+
   if (!response.ok) {
-    throw new Error(payload?.message ?? 'AI整理に失敗しました。Vercelの環境変数とAPI設定を確認してください。');
+    throw new Error(payload?.message ?? 'AI整理に失敗しました。設定を確認してください。');
   }
 
-  return normalizePlan(payload?.plan);
+  return normalizePlan(payload.plan);
 }
 
-export function normalizePlan(plan: Partial<MorningPlan> | null | undefined): MorningPlan {
+function normalizePlan(plan: Partial<MorningPlan> | null | undefined): MorningPlan {
   return {
-    purpose: String(plan?.purpose || '今日を安全に整理する'),
+    purpose: plan?.purpose || '今日を落ち着いて整える',
     goals: safeArray(plan?.goals),
     todos: safeArray(plan?.todos),
     priorities: {
@@ -77,7 +80,7 @@ export function normalizePlan(plan: Partial<MorningPlan> | null | undefined): Mo
     schedule: Array.isArray(plan?.schedule)
       ? plan.schedule.map((item) => ({
           time: String(item.time ?? '時間調整'),
-          task: String(item.task ?? '予定を整理'),
+          task: String(item.task ?? '予定'),
         }))
       : [],
     advice: safeArray(plan?.advice),
@@ -90,14 +93,30 @@ export function normalizePlan(plan: Partial<MorningPlan> | null | undefined): Mo
     shoppingCandidates: safeArray(plan?.shoppingCandidates),
     contactReminders: safeArray(plan?.contactReminders),
     coach: {
-      energy: isEnergyMood(plan?.coach?.energy) ? plan.coach.energy : 'normal',
-      mission: String(plan?.coach?.mission || plan?.todos?.[0] || '一番大切なことから始める'),
+      energy: plan?.coach?.energy || 'normal',
+      mission:
+        plan?.coach?.mission ||
+        plan?.priorities?.highest?.[0] ||
+        plan?.todos?.[0] ||
+        '今日を整える',
       focusItems: {
-        highest: String(plan?.coach?.focusItems?.highest || plan?.priorities?.highest?.[0] || '最優先タスクを1つ進める'),
-        important: String(plan?.coach?.focusItems?.important || plan?.priorities?.important?.[0] || '重要な予定を守る'),
-        optional: String(plan?.coach?.focusItems?.optional || plan?.priorities?.optional?.[0] || '余力があれば整える'),
+        highest:
+          plan?.coach?.focusItems?.highest ||
+          plan?.priorities?.highest?.[0] ||
+          '最重要タスクを進める',
+        important:
+          plan?.coach?.focusItems?.important ||
+          plan?.priorities?.important?.[0] ||
+          '重要な予定を守る',
+        optional:
+          plan?.coach?.focusItems?.optional ||
+          plan?.priorities?.optional?.[0] ||
+          '余裕があれば整える',
       },
-      morningAdvice: String(plan?.coach?.morningAdvice || plan?.advice?.[0] || '迷ったら、最初の15分だけ着手しましょう。'),
+      morningAdvice:
+        plan?.coach?.morningAdvice ||
+        plan?.advice?.[0] ||
+        '一番重い予定を先に決めると、今日が動き出します。',
       successConditions: safeArray(plan?.coach?.successConditions).slice(0, 3),
     },
   };
@@ -105,8 +124,4 @@ export function normalizePlan(plan: Partial<MorningPlan> | null | undefined): Mo
 
 function safeArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map(String).map((item) => item.trim()).filter(Boolean) : [];
-}
-
-function isEnergyMood(value: unknown): value is EnergyMood {
-  return value === 'great' || value === 'normal' || value === 'tired' || value === 'exhausted';
 }

@@ -32,12 +32,12 @@ if ($changelog -notmatch [regex]::Escape("## Version $version")) {
   throw "CHANGELOG entry was not found: Version $version"
 }
 
-if ($versioning -notmatch 'Version 3\.1' -or $versioning -notmatch 'Version 3\.2') {
-  throw "VERSIONING.md must include Version 3.1 and next planned Version 3.2."
+if ($versioning -notmatch 'Version 3\.0' -or $versioning -notmatch 'Version 3\.1') {
+  throw "VERSIONING.md must include Version 3.0 and next planned Version 3.1."
 }
 
-if ($nextVersion -notmatch 'Version 3\.2') {
-  throw "NEXT_VERSION.md must point to Version 3.2."
+if ($nextVersion -notmatch 'Version 3\.1') {
+  throw "NEXT_VERSION.md must point to Version 3.1."
 }
 
 Write-Host "VERSION_VERIFIED: Version $version"

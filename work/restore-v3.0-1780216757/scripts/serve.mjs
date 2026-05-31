@@ -1,4 +1,4 @@
-﻿import { createServer } from 'node:http';
+import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { handlePlanRequest, loadEnvFile } from './openai-plan-handler.mjs';
@@ -52,6 +52,5 @@ createServer(async (request, response) => {
     response.end(fallback);
   }
 }).listen(port, '0.0.0.0', () => {
-  console.log(`MORNING FLOW AI v3.1 is running at http://localhost:${port}`);
+  console.log(`MORNING FLOW AI v3.0 is running at http://localhost:${port}`);
 });
-

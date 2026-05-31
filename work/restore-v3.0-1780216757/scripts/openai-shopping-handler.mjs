@@ -42,7 +42,7 @@ export async function handleShoppingRequest(request, response) {
     }
 
     if (!process.env.OPENAI_API_KEY) {
-      sendJson(response, 500, { message: 'Please set OPENAI_API_KEY in Vercel Environment Variables.' });
+      sendJson(response, 500, { message: 'Please set OPENAI_API_KEY in .env.' });
       return;
     }
 
@@ -56,6 +56,25 @@ export async function handleShoppingRequest(request, response) {
 }
 
 export async function createShoppingPlanFromTranscript(text, currentItems = []) {
+  const systemText = [
+    'You are MORNING FLOW AI v3.0 shopping organizer.',
+    'Classify Japanese shopping items into simple categories anyone can use.',
+    'Return the complete merged shopping list: include relevant existing items plus the new items.',
+    'Merge duplicates into one item.',
+    'Very important: preserve quantities and units such as 3キロ, 1.5キロ, 1本, 3パック, 1袋, 2個, 500ml, 2L.',
+    'Separate item name and quantity. Do not mix quantity into name.',
+    'If an item has no quantity, return quantity as an empty string.',
+    'Use only these categories: 食品, 飲み物, 日用品, 子供用品, ジム・外出用品, その他.',
+  ].join(' ');
+
+  const userText = [
+    'Current shopping list JSON:',
+    JSON.stringify(currentItems, null, 2),
+    '',
+    'New shopping input:',
+    text,
+  ].join('\n');
+
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
@@ -65,43 +84,13 @@ export async function createShoppingPlanFromTranscript(text, currentItems = []) 
     body: JSON.stringify({
       model: process.env.OPENAI_SHOPPING_MODEL || process.env.OPENAI_MODEL || defaultShoppingModel,
       input: [
-        {
-          role: 'system',
-          content: [
-            {
-              type: 'input_text',
-              text: [
-                'You are MORNING FLOW AI v3.1 shopping organizer.',
-                'Classify Japanese shopping items into the allowed categories.',
-                'Return a complete merged list, preserving quantities and units.',
-                'Separate item name and quantity. If quantity is unknown, use an empty string.',
-              ].join(' '),
-            },
-          ],
-        },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'input_text',
-              text: [
-                'Allowed categories:',
-                shoppingCategories.join(', '),
-                '',
-                'Current shopping list JSON:',
-                JSON.stringify(currentItems, null, 2),
-                '',
-                'New shopping input:',
-                text,
-              ].join('\n'),
-            },
-          ],
-        },
+        { role: 'system', content: [{ type: 'input_text', text: systemText }] },
+        { role: 'user', content: [{ type: 'input_text', text: userText }] },
       ],
       text: {
         format: {
           type: 'json_schema',
-          name: 'shopping_list_v3_1',
+          name: 'shopping_list_v3',
           strict: true,
           schema: shoppingSchema,
         },
@@ -109,13 +98,11 @@ export async function createShoppingPlanFromTranscript(text, currentItems = []) 
     }),
   });
 
-  const data = await response.json().catch(() => null);
+  const data = await response.json();
   if (!response.ok) throw new Error(data?.error?.message ?? 'OpenAI shopping request failed.');
-
-  const outputText = data?.output_text ?? extractOutputText(data);
+  const outputText = data.output_text ?? extractOutputText(data);
   if (!outputText) throw new Error('OpenAI API returned no shopping list text.');
-
-  return normalizeShoppingPayload(parseOpenAiJson(outputText));
+  return normalizeShoppingPayload(JSON.parse(outputText));
 }
 
 function normalizeShoppingPayload(payload) {
@@ -144,18 +131,4 @@ function extractOutputText(data) {
     ?.map((content) => content.text ?? '')
     ?.join('')
     ?.trim();
-}
-
-function parseOpenAiJson(outputText) {
-  try {
-    return JSON.parse(outputText);
-  } catch {
-    const match = outputText.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('OpenAI API returned invalid shopping JSON.');
-    try {
-      return JSON.parse(match[0]);
-    } catch {
-      throw new Error('OpenAI API returned invalid shopping JSON.');
-    }
-  }
 }

@@ -1,8 +1,8 @@
-﻿import { readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-const defaultModel = 'gpt-4o-mini';
+const defaultModel = 'gpt-5.4-mini';
 
 const planSchema = {
   type: 'object',
@@ -170,7 +170,7 @@ export async function createPlanFromTranscript(transcript, energy = 'normal', co
   const shoppingItems = Array.isArray(context.shoppingItems) ? context.shoppingItems : [];
   const contactReminders = Array.isArray(context.contactReminders) ? context.contactReminders : [];
   const systemText = [
-    'You are MORNING FLOW AI v3.1, a Japanese personal morning planning coach.',
+    'You are MORNING FLOW AI v3.0, a Japanese personal morning planning coach.',
     'Return concise Japanese JSON in the requested schema.',
     'Organize today into purpose, goals, todos, priorities, schedule, advice, categories, shoppingCandidates, contactReminders, and coach.',
     'Treat phone callbacks, LINE replies, email replies, SNS replies, and DM replies as contactReminders and also include important ones in todos.',
@@ -217,9 +217,9 @@ export async function createPlanFromTranscript(transcript, energy = 'normal', co
     }),
   });
 
-  const data = await response.json().catch(() => null);
+  const data = await response.json();
   if (!response.ok) throw new Error(data?.error?.message ?? 'OpenAI API request failed.');
-  const text = data?.output_text ?? extractOutputText(data);
+  const text = data.output_text ?? extractOutputText(data);
   if (!text) throw new Error('OpenAI API returned no plan text.');
   return JSON.parse(text);
 }
@@ -235,4 +235,3 @@ function extractOutputText(data) {
     ?.join('')
     ?.trim();
 }
-

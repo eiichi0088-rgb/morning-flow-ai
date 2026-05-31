@@ -1,26 +1,18 @@
 # CHANGELOG
 
-## Version 3.1 - 2026-05-31
-
-- Security & Stability Patchとして、新機能追加を行わず安定化のみを実施
-- snapshots保存キーを固定キーから `morning-flow-ai:v3.1:user:{userProfileId}:snapshots` に変更
-- draft、shopping、contact、snapshotの保存キーをすべて `userProfileId` 別に統一
-- 旧v2共有キー、旧v3 ownerキー、固定snapshotキー、別userProfileIdのv3.1キーを起動時に読み込まないよう整理
-- `/api/shopping` と `/api/plan` をVercelのNode API Route形式へ修正
-- 買い物AIのOpenAIレスポンスJSON解析とエラーハンドリングを強化
-- 画面表示、package version、リリースZIP名を v3.1 に更新
-
 ## Version 3.0 - 2026-05-31
 
 - Version 2.x 系を終了し、MORNING FLOW AI v3.0 として開発を開始
 - 画面表示、package version、リリースZIP名を v3.0 に統一
 - v3専用の個人プロファイル保存へ移行し、v2.x共有localStorageと起動ごとの旧セッションキーを読み込まないように変更
 - transcript drafts、snapshots、買い物リスト、連絡忘れを `morning-flow-ai:v3:owner:{ownerId}:...` の名前空間に分離
+- 将来のGoogleユーザー単位/DB保存へ移行しやすいよう、保存キーをセッション単位ではなく owner 単位の設計に変更
 - Googleカレンダーは自動再接続せず、毎回 `select_account consent` でアカウント選択を要求
-- Googleカレンダー登録前に確認ダイアログを表示
-- 買い物リストで音声入力、テキスト入力、AIカテゴリ分け、数量保持、編集、削除、共有文作成を追加
-- 電話、LINE、メール、SNS/DMの連絡忘れチェックを追加
-- 朝のAI整理に買い物候補と連絡忘れを含めるように強化
+- Googleカレンダー登録前に選択予定の確認ダイアログを表示し、誤登録リスクを低減
+- 登録失敗時にGoogleアカウントと権限を確認できるエラーメッセージへ改善
+- 買い物リストで音声入力/テキスト入力、AIカテゴリ分け、数量・単位保持、チェック、編集、削除、共有文作成を整理
+- 電話折り返し、LINE返信、メール返信、SNS/DM返信を未完了リストとして保存する連絡忘れチェックを追加
+- 朝のAI整理に買い物候補と連絡忘れを含めて、今日やること・目的・優先順位・推奨タイムスケジュールへ反映
 - `morning-flow-ai-v3.0.zip` として保存
 
 ## Version 2.6 - 2026-05-30

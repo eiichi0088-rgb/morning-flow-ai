@@ -4,7 +4,7 @@ export type ReviewStatus = 'done' | 'partial' | 'missed';
 
 export interface MorningSnapshot {
   id: string;
-  userProfileId: string;
+  ownerId?: string;
   createdAt: string;
   transcript: string;
   plan: MorningPlan;
@@ -14,32 +14,22 @@ export interface MorningSnapshot {
   };
 }
 
-export function createSnapshotStorageKey(userProfileId: string) {
-  const normalized = userProfileId.trim();
-  if (!normalized) {
-    throw new Error('userProfileId is required for snapshot storage.');
-  }
-  return `morning-flow-ai:v3.1:user:${normalized}:snapshots`;
-}
+const defaultStorageKey = 'morning-flow-ai:v3:private:snapshots';
 
-export function loadLatestSnapshot(storageKey: string): MorningSnapshot | null {
+export function loadLatestSnapshot(storageKey = defaultStorageKey): MorningSnapshot | null {
   return loadSnapshots(storageKey)[0] ?? null;
 }
 
 export function saveMorningSnapshot(
   transcript: string,
   plan: MorningPlan,
-  storageKey: string,
-  userProfileId: string,
+  storageKey = defaultStorageKey,
+  ownerId = 'local-private',
 ) {
-  if (!storageKey.includes(`:user:${userProfileId}:snapshots`)) {
-    throw new Error('Snapshot storage key must include the active userProfileId.');
-  }
-
   const snapshots = loadSnapshots(storageKey);
   const snapshot: MorningSnapshot = {
     id: createId(),
-    userProfileId,
+    ownerId,
     createdAt: new Date().toISOString(),
     transcript,
     plan,
@@ -49,7 +39,7 @@ export function saveMorningSnapshot(
   return snapshot;
 }
 
-export function saveReview(snapshotId: string, statuses: Record<string, ReviewStatus>, storageKey: string) {
+export function saveReview(snapshotId: string, statuses: Record<string, ReviewStatus>, storageKey = defaultStorageKey) {
   const snapshots = loadSnapshots(storageKey).map((snapshot) =>
     snapshot.id === snapshotId
       ? {

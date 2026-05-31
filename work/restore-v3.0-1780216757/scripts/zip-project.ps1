@@ -15,9 +15,7 @@ if (Test-Path -LiteralPath $zipPath) {
 $excludedNames = @(
   'node_modules',
   '.npm-cache',
-  '.env',
-  'work',
-  'outputs'
+  '.env'
 )
 
 $items = Get-ChildItem -LiteralPath $root -Force |
