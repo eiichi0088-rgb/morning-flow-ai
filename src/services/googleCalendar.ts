@@ -11,6 +11,9 @@ export interface GoogleCalendarEventInput {
 interface TokenResponse {
   access_token?: string;
   error?: string;
+  expires_in?: number;
+  scope?: string;
+  token_type?: string;
 }
 
 interface TokenClient {
@@ -48,7 +51,9 @@ export function isGoogleCalendarConfigured() {
 
 export async function requestGoogleAccessToken(prompt = 'select_account consent') {
   const clientId = getGoogleClientId();
-  if (!clientId) throw new Error('VITE_GOOGLE_CLIENT_ID が設定されていません。');
+  if (!clientId) {
+    throw new Error('Google Client IDが未設定です。.envにVITE_GOOGLE_CLIENT_IDを設定してください。');
+  }
 
   await loadGoogleIdentityServices();
 
@@ -64,7 +69,7 @@ export async function requestGoogleAccessToken(prompt = 'select_account consent'
       scope: calendarScope,
       callback: (response) => {
         if (response.error || !response.access_token) {
-          reject(new Error('Googleログインが完了しませんでした。アカウント選択を確認してもう一度お試しください。'));
+          reject(new Error('Googleログインが完了しませんでした。もう一度お試しください。'));
           return;
         }
         resolve(response.access_token);
@@ -79,7 +84,10 @@ export function revokeGoogleAccessToken(accessToken: string) {
   window.google?.accounts?.oauth2?.revoke(accessToken);
 }
 
-export async function insertGoogleCalendarEvents(accessToken: string, events: GoogleCalendarEventInput[]) {
+export async function insertGoogleCalendarEvents(
+  accessToken: string,
+  events: GoogleCalendarEventInput[],
+) {
   const timeZone = 'Asia/Tokyo';
 
   return Promise.all(
@@ -93,12 +101,18 @@ export async function insertGoogleCalendarEvents(accessToken: string, events: Go
         body: JSON.stringify({
           summary: event.title,
           description: `${event.memo}\n\n優先度: ${event.priority}`,
-          start: { dateTime: toTokyoDateTime(event.start), timeZone },
-          end: { dateTime: toTokyoDateTime(event.end), timeZone },
+          start: {
+            dateTime: toTokyoDateTime(event.start),
+            timeZone,
+          },
+          end: {
+            dateTime: toTokyoDateTime(event.end),
+            timeZone,
+          },
           extendedProperties: {
             private: {
               priority: event.priority,
-              source: 'MORNING FLOW AI v3.1',
+              source: 'MORNING FLOW AI',
             },
           },
         }),
@@ -106,10 +120,8 @@ export async function insertGoogleCalendarEvents(accessToken: string, events: Go
 
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
-        throw new Error(
-          payload?.error?.message ??
-            'Googleカレンダーへの登録に失敗しました。ログイン中のGoogleアカウントと権限を確認してください。',
-        );
+        const message = payload?.error?.message ?? 'Googleカレンダーへの登録に失敗しました。';
+        throw new Error(message);
       }
 
       return response.json();
@@ -128,7 +140,9 @@ function toTokyoDateTime(date: Date) {
 }
 
 function loadGoogleIdentityServices() {
-  if (window.google?.accounts?.oauth2) return Promise.resolve();
+  if (window.google?.accounts?.oauth2) {
+    return Promise.resolve();
+  }
 
   return new Promise<void>((resolve, reject) => {
     const existingScript = document.getElementById(googleIdentityScriptId) as HTMLScriptElement | null;

@@ -1,4 +1,4 @@
-﻿import { createServer } from 'node:http';
+import { createServer } from 'node:http';
 import { createServer as createViteServer } from 'vite';
 import { handlePlanRequest, loadEnvFile } from './openai-plan-handler.mjs';
 import { handleShoppingRequest } from './openai-shopping-handler.mjs';
@@ -34,6 +34,5 @@ createServer(async (request, response) => {
     response.end('Not found');
   });
 }).listen(port, host, () => {
-  console.log(`MORNING FLOW AI v3.1 is running at http://${host}:${port}/`);
+  console.log(`MORNING FLOW AI v1.3 is running at http://${host}:${port}/`);
 });
-

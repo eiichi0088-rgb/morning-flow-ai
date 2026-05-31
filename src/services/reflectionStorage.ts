@@ -4,7 +4,6 @@ export type ReviewStatus = 'done' | 'partial' | 'missed';
 
 export interface MorningSnapshot {
   id: string;
-  userProfileId: string;
   createdAt: string;
   transcript: string;
   plan: MorningPlan;
@@ -14,32 +13,16 @@ export interface MorningSnapshot {
   };
 }
 
-export function createSnapshotStorageKey(userProfileId: string) {
-  const normalized = userProfileId.trim();
-  if (!normalized) {
-    throw new Error('userProfileId is required for snapshot storage.');
-  }
-  return `morning-flow-ai:v3.1:user:${normalized}:snapshots`;
-}
+const defaultStorageKey = 'morning-flow-ai:snapshots:private-session';
 
-export function loadLatestSnapshot(storageKey: string): MorningSnapshot | null {
+export function loadLatestSnapshot(storageKey = defaultStorageKey): MorningSnapshot | null {
   return loadSnapshots(storageKey)[0] ?? null;
 }
 
-export function saveMorningSnapshot(
-  transcript: string,
-  plan: MorningPlan,
-  storageKey: string,
-  userProfileId: string,
-) {
-  if (!storageKey.includes(`:user:${userProfileId}:snapshots`)) {
-    throw new Error('Snapshot storage key must include the active userProfileId.');
-  }
-
+export function saveMorningSnapshot(transcript: string, plan: MorningPlan, storageKey = defaultStorageKey) {
   const snapshots = loadSnapshots(storageKey);
   const snapshot: MorningSnapshot = {
-    id: createId(),
-    userProfileId,
+    id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
     transcript,
     plan,
@@ -49,7 +32,7 @@ export function saveMorningSnapshot(
   return snapshot;
 }
 
-export function saveReview(snapshotId: string, statuses: Record<string, ReviewStatus>, storageKey: string) {
+export function saveReview(snapshotId: string, statuses: Record<string, ReviewStatus>, storageKey = defaultStorageKey) {
   const snapshots = loadSnapshots(storageKey).map((snapshot) =>
     snapshot.id === snapshotId
       ? {
@@ -78,11 +61,4 @@ function loadSnapshots(storageKey: string): MorningSnapshot[] {
 
 function saveSnapshots(snapshots: MorningSnapshot[], storageKey: string) {
   localStorage.setItem(storageKey, JSON.stringify(snapshots));
-}
-
-function createId() {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }

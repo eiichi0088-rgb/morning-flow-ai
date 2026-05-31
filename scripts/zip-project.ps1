@@ -16,8 +16,8 @@ $excludedNames = @(
   'node_modules',
   '.npm-cache',
   '.env',
-  'work',
-  'outputs'
+  'morning-flow-ai-mvp.zip',
+  'morning-flow-ai-v1.2.zip'
 )
 
 $items = Get-ChildItem -LiteralPath $root -Force |

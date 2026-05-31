@@ -2,7 +2,14 @@ import { readJsonBody, sendJson } from './openai-plan-handler.mjs';
 
 const defaultShoppingModel = 'gpt-4o-mini';
 
-export const shoppingCategories = ['食品', '飲み物', '日用品', '子供用品', 'ジム・外出用品', 'その他'];
+export const shoppingCategories = [
+  '食品',
+  '飲み物',
+  '日用品',
+  '子供用品',
+  'ジム・外出用品',
+  'その他',
+];
 
 const shoppingSchema = {
   type: 'object',
@@ -42,7 +49,7 @@ export async function handleShoppingRequest(request, response) {
     }
 
     if (!process.env.OPENAI_API_KEY) {
-      sendJson(response, 500, { message: 'Please set OPENAI_API_KEY in Vercel Environment Variables.' });
+      sendJson(response, 500, { message: 'Please set OPENAI_API_KEY in .env.' });
       return;
     }
 
@@ -56,6 +63,40 @@ export async function handleShoppingRequest(request, response) {
 }
 
 export async function createShoppingPlanFromTranscript(text, currentItems = []) {
+  const systemText = [
+    'You are MORNING FLOW AI shopping organizer.',
+    'Classify Japanese shopping items into simple categories anyone can use.',
+    'Return only JSON that matches the schema.',
+    'Return the complete merged shopping list: include relevant existing items plus the new items.',
+    'Merge duplicates into one item.',
+    'Very important: preserve quantities and units. Never delete quantities such as 3キロ, 1.5キロ, 1本, 3パック, 1袋, 1つ, 2個, 500ml, 2L.',
+    'Separate item name and quantity. Do not mix quantity into name.',
+    'If an item has no quantity, return quantity as an empty string.',
+    'Use only these categories: 食品, 飲み物, 日用品, 子供用品, ジム・外出用品, その他.',
+    'Do not create categories for store use, household use, office use, or prep use.',
+    'Do not classify an item as store use just because it contains 麺.',
+    '牛乳, 卵, 玉ねぎ, 生姜, キャベツ, 小麦粉, パスタ, うどん, そば, 素麺, カップ麺, and インスタントラーメン are 食品.',
+    '炭酸水, 水, お茶, コーヒー, ジュース, and ミネラルウォーター are 飲み物 unless clearly gym/outdoor use.',
+    '歯磨き粉, 洗剤, ラップ, トイレットペーパー, and ティッシュ are 日用品.',
+    'プロテイン, タオル, 水筒, and gym items are ジム・外出用品.',
+    '子供, 娘, 息子, おむつ, and school/kids items are 子供用品.',
+    'If unsure, choose その他 rather than forcing a category.',
+  ].join(' ');
+
+  const userText = [
+    'Categories:',
+    shoppingCategories.map((category) => `- ${category}`).join('\n'),
+    '',
+    'Current shopping list JSON:',
+    JSON.stringify(currentItems, null, 2),
+    '',
+    'New shopping input:',
+    text,
+    '',
+    'Return JSON like:',
+    '{"items":[{"name":"玉ねぎ","quantity":"3キロ","category":"食品"}]}',
+  ].join('\n');
+
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
@@ -67,41 +108,17 @@ export async function createShoppingPlanFromTranscript(text, currentItems = []) 
       input: [
         {
           role: 'system',
-          content: [
-            {
-              type: 'input_text',
-              text: [
-                'You are MORNING FLOW AI v3.1 shopping organizer.',
-                'Classify Japanese shopping items into the allowed categories.',
-                'Return a complete merged list, preserving quantities and units.',
-                'Separate item name and quantity. If quantity is unknown, use an empty string.',
-              ].join(' '),
-            },
-          ],
+          content: [{ type: 'input_text', text: systemText }],
         },
         {
           role: 'user',
-          content: [
-            {
-              type: 'input_text',
-              text: [
-                'Allowed categories:',
-                shoppingCategories.join(', '),
-                '',
-                'Current shopping list JSON:',
-                JSON.stringify(currentItems, null, 2),
-                '',
-                'New shopping input:',
-                text,
-              ].join('\n'),
-            },
-          ],
+          content: [{ type: 'input_text', text: userText }],
         },
       ],
       text: {
         format: {
           type: 'json_schema',
-          name: 'shopping_list_v3_1',
+          name: 'shopping_list',
           strict: true,
           schema: shoppingSchema,
         },
@@ -109,13 +126,18 @@ export async function createShoppingPlanFromTranscript(text, currentItems = []) 
     }),
   });
 
-  const data = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(data?.error?.message ?? 'OpenAI shopping request failed.');
+  const data = await response.json();
 
-  const outputText = data?.output_text ?? extractOutputText(data);
-  if (!outputText) throw new Error('OpenAI API returned no shopping list text.');
+  if (!response.ok) {
+    throw new Error(data?.error?.message ?? 'OpenAI shopping request failed.');
+  }
 
-  return normalizeShoppingPayload(parseOpenAiJson(outputText));
+  const outputText = data.output_text ?? extractOutputText(data);
+  if (!outputText) {
+    throw new Error('OpenAI API returned no shopping list text.');
+  }
+
+  return normalizeShoppingPayload(JSON.parse(outputText));
 }
 
 function normalizeShoppingPayload(payload) {
@@ -144,18 +166,4 @@ function extractOutputText(data) {
     ?.map((content) => content.text ?? '')
     ?.join('')
     ?.trim();
-}
-
-function parseOpenAiJson(outputText) {
-  try {
-    return JSON.parse(outputText);
-  } catch {
-    const match = outputText.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('OpenAI API returned invalid shopping JSON.');
-    try {
-      return JSON.parse(match[0]);
-    } catch {
-      throw new Error('OpenAI API returned invalid shopping JSON.');
-    }
-  }
 }

@@ -8,13 +8,12 @@ $zipPath = Join-Path $root $zipName
 $mainPath = Join-Path $root 'src/main.tsx'
 $distPath = Join-Path $root 'dist'
 $changelogPath = Join-Path $root 'CHANGELOG.md'
-$versioningPath = Join-Path $root 'VERSIONING.md'
+$rulesPath = Join-Path $root 'PROJECT_RULES.md'
 $nextVersionPath = Join-Path $root 'NEXT_VERSION.md'
 
 $main = Get-Content -LiteralPath $mainPath -Raw
 $changelog = Get-Content -LiteralPath $changelogPath -Raw
-$versioning = Get-Content -LiteralPath $versioningPath -Raw
-$nextVersion = Get-Content -LiteralPath $nextVersionPath -Raw
+$rules = Get-Content -LiteralPath $rulesPath -Raw
 
 if ($main -notmatch [regex]::Escape("v$version")) {
   throw "Version label v$version was not found in src/main.tsx."
@@ -32,12 +31,12 @@ if ($changelog -notmatch [regex]::Escape("## Version $version")) {
   throw "CHANGELOG entry was not found: Version $version"
 }
 
-if ($versioning -notmatch 'Version 3\.1' -or $versioning -notmatch 'Version 3\.2') {
-  throw "VERSIONING.md must include Version 3.1 and next planned Version 3.2."
+if (!$rules.Contains("Developer Mode Marker")) {
+  throw "PROJECT_RULES developer mode section was not found."
 }
 
-if ($nextVersion -notmatch 'Version 3\.2') {
-  throw "NEXT_VERSION.md must point to Version 3.2."
+if (!(Test-Path -LiteralPath $nextVersionPath)) {
+  throw "NEXT_VERSION.md was not found."
 }
 
 Write-Host "VERSION_VERIFIED: Version $version"

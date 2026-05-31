@@ -1,19 +1,24 @@
 # MORNING FLOW AI
 
-MORNING FLOW AI v3.1 は、Version 3.0 のSecurity & Stability Patchです。新機能追加ではなく、保存分離、買い物AI API、Vercel API Routeの安定化を目的にしています。
+MORNING FLOW AI は、朝に話すだけで頭の中を整理し、今日の行動を明確にするAIです。
 
 ## 現在のバージョン
 
-Version 3.1
+Version 2.0
 
-## 主な確認点
+## 主な機能
 
-- 画面表示は `MORNING FLOW AI v3.1`
-- draft、shopping、contact、snapshotはすべて `morning-flow-ai:v3.1:user:{userProfileId}:...` に保存
-- snapshotsは `morning-flow-ai:v3.1:user:{userProfileId}:snapshots` に固定
-- 旧v2共有キー、旧v3 ownerキー、固定snapshotキーは起動時に読み込まない
-- `/api/shopping` はVercel Node API Route形式
-- Googleカレンダーは自動再接続せず、毎回アカウント選択と登録前確認を行う
+- 音声入力
+- 文字起こし
+- 文字起こし内容の編集
+- OpenAI API によるAI整理
+- 今日の目的、目標、TODO、優先順位、推奨タイムスケジュール生成
+- AI Morning Coach
+- 昨日の振り返り
+- Googleカレンダー自動連携
+- Appleカレンダー用 `.ics` 出力
+- LocalStorage保存
+- スマホファーストUI
 
 ## ローカル起動
 
@@ -22,8 +27,7 @@ Version 3.1
 
 ```env
 OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
-OPENAI_SHOPPING_MODEL=gpt-4o-mini
+OPENAI_MODEL=gpt-5.4-mini
 VITE_GOOGLE_CLIENT_ID=Google OAuth Client ID
 ```
 
@@ -33,16 +37,43 @@ VITE_GOOGLE_CLIENT_ID=Google OAuth Client ID
 npm.cmd run dev
 ```
 
-## build
+4. ブラウザで開く
+
+```text
+http://127.0.0.1:5173/
+```
+
+## Googleカレンダー連携
+
+Google Cloud ConsoleでOAuthクライアントIDを作成し、`.env` の `VITE_GOOGLE_CLIENT_ID` に設定します。
+
+ローカル確認時は、OAuthクライアントの承認済みJavaScript生成元に以下を追加してください。
+
+```text
+http://127.0.0.1:5173
+```
+
+Vercel公開後は、Vercelの本番URLも承認済みJavaScript生成元に追加してください。
+
+アクセストークンはアプリ内の一時状態で扱い、`.env` やZIPには保存しません。
+
+## 本番ビルド
 
 ```powershell
 npm.cmd run build
 ```
 
-## release
+成功すると `dist` が作成されます。
+
+## リリース
 
 ```powershell
 npm.cmd run release
 ```
 
-生成ZIP: `morning-flow-ai-v3.1.zip`
+release は以下を実行します。
+
+1. build
+2. ZIP作成
+3. CHANGELOG更新
+4. VERSION確認
