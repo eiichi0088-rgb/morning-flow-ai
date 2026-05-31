@@ -140,7 +140,7 @@ function createPrivateSessionKeys(sessionId: string): PrivateSessionKeys {
   return {
     draft: `morning-flow-ai:session:${sessionId}:transcript-draft`,
     shopping: `morning-flow-ai:session:${sessionId}:shopping-list`,
-    snapshots: `morning-flow-ai:session:${sessionId}:snapshots`,
+    snapshots: `morning-flow-ai:v2.7:session:${sessionId}:snapshots`,
   };
 }
 
@@ -148,6 +148,12 @@ function removeLegacySharedStorage(currentSessionId: string) {
   legacySharedStorageKeys.forEach((key) => localStorage.removeItem(key));
   Object.keys(localStorage)
     .filter((key) => key.startsWith('morning-flow-ai:session:') && !key.includes(`:${currentSessionId}:`))
+    .forEach((key) => localStorage.removeItem(key));
+  Object.keys(localStorage)
+    .filter((key) => key.startsWith('morning-flow-ai:snapshots:private-session'))
+    .forEach((key) => localStorage.removeItem(key));
+  Object.keys(localStorage)
+    .filter((key) => key.startsWith('morning-flow-ai:v2.7:session:') && !key.includes(`:${currentSessionId}:`))
     .forEach((key) => localStorage.removeItem(key));
 }
 
@@ -631,7 +637,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.6</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.7</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -902,7 +908,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.6</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.7</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">

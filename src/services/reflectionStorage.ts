@@ -13,13 +13,11 @@ export interface MorningSnapshot {
   };
 }
 
-const defaultStorageKey = 'morning-flow-ai:snapshots:private-session';
-
-export function loadLatestSnapshot(storageKey = defaultStorageKey): MorningSnapshot | null {
+export function loadLatestSnapshot(storageKey: string): MorningSnapshot | null {
   return loadSnapshots(storageKey)[0] ?? null;
 }
 
-export function saveMorningSnapshot(transcript: string, plan: MorningPlan, storageKey = defaultStorageKey) {
+export function saveMorningSnapshot(transcript: string, plan: MorningPlan, storageKey: string) {
   const snapshots = loadSnapshots(storageKey);
   const snapshot: MorningSnapshot = {
     id: crypto.randomUUID(),
@@ -32,7 +30,7 @@ export function saveMorningSnapshot(transcript: string, plan: MorningPlan, stora
   return snapshot;
 }
 
-export function saveReview(snapshotId: string, statuses: Record<string, ReviewStatus>, storageKey = defaultStorageKey) {
+export function saveReview(snapshotId: string, statuses: Record<string, ReviewStatus>, storageKey: string) {
   const snapshots = loadSnapshots(storageKey).map((snapshot) =>
     snapshot.id === snapshotId
       ? {

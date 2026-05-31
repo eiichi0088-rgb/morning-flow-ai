@@ -126,18 +126,18 @@ export async function createShoppingPlanFromTranscript(text, currentItems = []) 
     }),
   });
 
-  const data = await response.json();
+  const data = await response.json().catch(() => null);
 
   if (!response.ok) {
     throw new Error(data?.error?.message ?? 'OpenAI shopping request failed.');
   }
 
-  const outputText = data.output_text ?? extractOutputText(data);
+  const outputText = data?.output_text ?? extractOutputText(data);
   if (!outputText) {
     throw new Error('OpenAI API returned no shopping list text.');
   }
 
-  return normalizeShoppingPayload(JSON.parse(outputText));
+  return normalizeShoppingPayload(parseOpenAiJson(outputText));
 }
 
 function normalizeShoppingPayload(payload) {
@@ -166,4 +166,18 @@ function extractOutputText(data) {
     ?.map((content) => content.text ?? '')
     ?.join('')
     ?.trim();
+}
+
+function parseOpenAiJson(outputText) {
+  try {
+    return JSON.parse(outputText);
+  } catch {
+    const match = outputText.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('OpenAI API returned invalid shopping JSON.');
+    try {
+      return JSON.parse(match[0]);
+    } catch {
+      throw new Error('OpenAI API returned invalid shopping JSON.');
+    }
+  }
 }
