@@ -662,7 +662,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.11.3</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.11.4</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -933,7 +933,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.11.3</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.11.4</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
@@ -2248,7 +2248,7 @@ function createGoogleCalendarUrl(event: CalendarEvent) {
   const params = new URLSearchParams({
     action: 'TEMPLATE',
     ctz: 'Asia/Tokyo',
-    dates: `${toLocalCalendarTimestamp(event.start)}/${toLocalCalendarTimestamp(event.end)}`,
+    dates: `${toGoogleCalendarRenderTimestamp(event.start)}/${toGoogleCalendarRenderTimestamp(event.end)}`,
     details: event.memo,
     text: event.title,
   });
@@ -2290,6 +2290,13 @@ function toCalendarTimestamp(date: Date) {
   return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 }
 
+function toGoogleCalendarRenderTimestamp(date: Date) {
+  return [
+    `${date.getFullYear()}${padCalendarPart(date.getMonth() + 1)}${padCalendarPart(date.getDate())}`,
+    `${padCalendarPart(date.getHours())}${padCalendarPart(date.getMinutes())}${padCalendarPart(date.getSeconds())}`,
+  ].join('T');
+}
+
 function toLocalCalendarTimestamp(date: Date) {
   const formatter = new Intl.DateTimeFormat('sv-SE', {
     dateStyle: 'short',
@@ -2298,6 +2305,10 @@ function toLocalCalendarTimestamp(date: Date) {
     timeZone: 'Asia/Tokyo',
   });
   return formatter.format(date).replace(/[-: ]/g, '');
+}
+
+function padCalendarPart(value: number) {
+  return String(value).padStart(2, '0');
 }
 
 function escapeIcsText(value: string) {

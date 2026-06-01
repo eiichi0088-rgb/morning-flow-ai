@@ -1,6 +1,12 @@
 ﻿# CHANGELOG
 
 
+## Version 2.11.4 - 2026-06-02
+
+- Google Calendar confirmation screen URL time fix.
+- The confirmation URL now sends dates as YYYYMMDDTHHMMSS with ctz=Asia/Tokyo so the Google Calendar creation screen matches the MORNING FLOW AI display time.
+- Google Calendar API registration logic was not changed.
+
 ## Version 2.11.3 - 2026-06-02
 
 - Google Calendar multiple-event error handling improvement.
