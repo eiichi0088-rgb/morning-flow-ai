@@ -1,6 +1,12 @@
 ﻿# CHANGELOG
 
 
+## Version 2.11.5 - 2026-06-02
+
+- Removed the UPDATE INSTRUCTION flow from the main screen.
+- The morning flow is now microphone input, Editable Transcript, then AI organization.
+- Google Calendar, Apple Calendar export, shopping list, future events, session storage, and data storage are preserved.
+
 ## Version 2.11.4 - 2026-06-02
 
 - Google Calendar confirmation screen URL time fix.

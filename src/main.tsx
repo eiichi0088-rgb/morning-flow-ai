@@ -192,11 +192,10 @@ function App() {
 
   const isSupported = Boolean(SpeechRecognition);
   const isShoppingView = activeView === 'shopping';
-  const activeText = captureMode === 'update' ? updateInstruction : transcript;
-  const resultText = [activeText, interimTranscript].filter(Boolean).join('\n');
+  const resultText = [transcript, interimTranscript].filter(Boolean).join('\n');
   const shoppingResultText = [shoppingText, isShoppingView ? interimTranscript : ''].filter(Boolean).join('\n');
   const canOrganize = Boolean(transcript.trim()) && !isListening && captureMode === 'create';
-  const canUpdatePlan = Boolean(plan && updateInstruction.trim()) && !isListening;
+  const canUpdatePlan = false;
   const canOrganizeShopping = Boolean(shoppingText.trim()) && !isListening;
   const canUseNext = canOrganize || canUpdatePlan || Boolean(plan);
   const nextButtonLabel = isOrganizing
@@ -205,7 +204,6 @@ function App() {
       : 'AIが整理中…'
     : '次へ進む';
   const hasEditableTranscript = Boolean(transcript.trim()) && !isListening && captureMode === 'create';
-  const hasEditableUpdateInstruction = Boolean(plan && updateInstruction.trim()) && !isListening;
 
   React.useEffect(() => {
     removeLegacySharedStorage(privateSessionId);
@@ -422,7 +420,7 @@ function App() {
         setOriginalShoppingText(transcript.trim());
         setShoppingItems(classifiedShoppingItems);
         setShoppingUpdatedAt(shoppingPlan.updatedAt);
-        setCaptureMode('update');
+        setCaptureMode('create');
         setUpdateInstruction('');
         setOriginalUpdateInstruction('');
         setHighlightedScheduleKeys([]);
@@ -661,7 +659,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.11.4</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.11.5</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -732,15 +730,13 @@ function App() {
 
         <div className="transcript-card">
           <div className="transcript-header">
-            <span>{captureMode === 'update' ? 'Update Instruction' : 'Today Capture'}</span>
+            <span>Today Capture</span>
             {interimTranscript && <span className="live-label">Listening</span>}
           </div>
           <div className={`transcript-box ${resultText ? 'has-text' : ''}`}>
             {resultText || '今日の予定、やること、目標、目的をそのまま話してください。'}
           </div>
         </div>
-
-        <CaptureModeSwitcher mode={captureMode} onChange={setCaptureMode} planExists={Boolean(plan)} />
 
         {hasEditableTranscript && (
           <TranscriptEditor
@@ -752,22 +748,6 @@ function App() {
             }}
             savedText={originalTranscript}
             text={transcript}
-          />
-        )}
-
-        {hasEditableUpdateInstruction && (
-          <TranscriptEditor
-            onCancel={() => {
-              setUpdateInstruction(originalUpdateInstruction);
-            }}
-            onSave={() => {
-              const normalized = updateInstruction.trim();
-              setUpdateInstruction(normalized);
-              setOriginalUpdateInstruction(normalized);
-            }}
-            onTextChange={setUpdateInstruction}
-            savedText={originalUpdateInstruction}
-            text={updateInstruction}
           />
         )}
 
@@ -784,9 +764,9 @@ function App() {
           </button>
         )}
 
-        {canUpdatePlan && (
+        {false && (
           <button
-            className={`organize-button update-plan-button ${isOrganizing ? 'is-organizing' : ''}`}
+            className={`organize-button ${isOrganizing ? 'is-organizing' : ''}`}
             type="button"
             onClick={applyScheduleUpdate}
             disabled={isOrganizing}
@@ -932,7 +912,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.11.4</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.11.5</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">

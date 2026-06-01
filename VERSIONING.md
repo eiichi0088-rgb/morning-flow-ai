@@ -5,10 +5,19 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.11.4 is based on v2.11.3 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.11.5 is based on v2.11.4 normal UI. Do not mix v3.0 or v3.1 UI.
 
 
 
+
+
+## Version 2.11.5 Update Instruction Removal Patch - 2026-06-02
+
+- Screen display: v2.11.5
+- ZIP: morning-flow-ai-v2.11.5.zip
+- Next planned version: Version 2.11.6
+- UPDATE INSTRUCTION section and update-mode UI are removed.
+- Microphone, Editable Transcript, AI organization, Google Calendar, Apple Calendar export, shopping, future events, snapshots, and session behavior are preserved.
 
 ## Version 2.11.4 Google Calendar Confirmation URL Patch - 2026-06-02
 
