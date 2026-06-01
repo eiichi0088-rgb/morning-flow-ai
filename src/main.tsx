@@ -637,7 +637,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.8</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.9</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -908,7 +908,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.8</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.9</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
@@ -1577,7 +1577,7 @@ function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
               />
               <div>
                 <time dateTime={event.start.toISOString()}>
-                  {formatEventTime(event.start)} - {formatEventTime(event.end)}
+                  {formatEventDateTime(event.start)} - {formatEventTime(event.end)}
                 </time>
                 <strong>{event.title}</strong>
                 <p>{event.memo}</p>
@@ -1668,7 +1668,7 @@ function CalendarExportPanel({ events }: { events: CalendarEvent[] }) {
           <article className="calendar-event" key={event.id}>
             <div>
               <time dateTime={event.start.toISOString()}>
-                {formatEventTime(event.start)} - {formatEventTime(event.end)}
+                {formatEventDateTime(event.start)} - {formatEventTime(event.end)}
               </time>
               <strong>{event.title}</strong>
               <p>{event.memo}</p>
@@ -1813,12 +1813,13 @@ function createCalendarEvents(plan: MorningPlan): CalendarEvent[] {
       const range = parseScheduleTime(item.time);
       const fallbackStartMinutes = 9 * 60 + index * 60;
       const startMinutes = range?.startMinutes ?? fallbackStartMinutes;
+      const targetDate = parseScheduleDate(`${item.time} ${item.task}`, today);
 
-      const start = new Date(today);
+      const start = new Date(targetDate);
       start.setHours(Math.floor(startMinutes / 60), startMinutes % 60, 0, 0);
 
       const endMinutes = range?.endMinutes ?? startMinutes + 60;
-      const end = new Date(today);
+      const end = new Date(targetDate);
       end.setHours(Math.floor(endMinutes / 60), endMinutes % 60, 0, 0);
       if (end <= start) {
         end.setTime(start.getTime() + 60 * 60 * 1000);
@@ -1880,6 +1881,100 @@ function parseScheduleTime(timeText: string) {
     startMinutes: times[0],
     endMinutes: times[1],
   };
+}
+
+function parseScheduleDate(dateText: string, baseDate: Date) {
+  const normalizedText = normalizeJapaneseDateText(dateText);
+  const today = startOfLocalDay(baseDate);
+  const explicitDate = parseExplicitMonthDay(normalizedText, today);
+  if (explicitDate) return explicitDate;
+
+  if (normalizedText.includes('\u660e\u5f8c\u65e5')) return addDays(today, 2);
+  if (normalizedText.includes('\u660e\u65e5') || normalizedText.includes('\u3042\u3057\u305f')) {
+    return addDays(today, 1);
+  }
+  if (normalizedText.includes('\u4eca\u65e5')) return today;
+
+  const nextWeekday = parseNextWeekday(normalizedText, today);
+  if (nextWeekday) return nextWeekday;
+
+  return today;
+}
+
+function normalizeJapaneseDateText(value: string) {
+  return value
+    .replace(/[０-９]/g, (digit) => String.fromCharCode(digit.charCodeAt(0) - 0xfee0))
+    .replace(/\s/g, '');
+}
+
+function parseExplicitMonthDay(value: string, today: Date) {
+  const match = value.match(/(\d{1,2})(?:\u6708|\/)(\d{1,2})(?:\u65e5)?/);
+  if (!match) return null;
+
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+  const target = new Date(today);
+  target.setMonth(month - 1, day);
+  if (target.getMonth() !== month - 1 || target.getDate() !== day) return null;
+
+  if (target.getTime() < today.getTime() - 12 * 60 * 60 * 1000) {
+    target.setFullYear(target.getFullYear() + 1);
+  }
+  return target;
+}
+
+function parseNextWeekday(value: string, today: Date) {
+  if (!value.includes('\u6765\u9031')) return null;
+
+  const weekdayIndex = getJapaneseWeekdayIndex(value);
+  if (weekdayIndex === null) return null;
+
+  const currentMondayIndex = (today.getDay() + 6) % 7;
+  const daysUntilNextMonday = 7 - currentMondayIndex;
+  return addDays(today, daysUntilNextMonday + weekdayIndex);
+}
+
+function getJapaneseWeekdayIndex(value: string) {
+  const weekdays = [
+    '\u6708\u66dc\u65e5',
+    '\u706b\u66dc\u65e5',
+    '\u6c34\u66dc\u65e5',
+    '\u6728\u66dc\u65e5',
+    '\u91d1\u66dc\u65e5',
+    '\u571f\u66dc\u65e5',
+    '\u65e5\u66dc\u65e5',
+    '\u6708\u66dc',
+    '\u706b\u66dc',
+    '\u6c34\u66dc',
+    '\u6728\u66dc',
+    '\u91d1\u66dc',
+    '\u571f\u66dc',
+    '\u65e5\u66dc',
+    '\u6708',
+    '\u706b',
+    '\u6c34',
+    '\u6728',
+    '\u91d1',
+    '\u571f',
+    '\u65e5',
+  ];
+  const match = weekdays.find((weekday) => value.includes(weekday));
+  if (!match) return null;
+  return weekdays.indexOf(match) % 7;
+}
+
+function startOfLocalDay(date: Date) {
+  const result = new Date(date);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+function addDays(date: Date, days: number) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
 }
 
 function createGoogleCalendarUrl(event: CalendarEvent) {
@@ -1951,6 +2046,14 @@ function formatEventTime(date: Date) {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function formatEventDateTime(date: Date) {
+  return `${date.toLocaleDateString('ja-JP', {
+    month: 'numeric',
+    day: 'numeric',
+    weekday: 'short',
+  })} ${formatEventTime(date)}`;
 }
 
 function addCarryoverToPlan(plan: MorningPlan, carriedTodos: string[]): MorningPlan {

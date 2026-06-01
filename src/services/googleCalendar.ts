@@ -133,7 +133,7 @@ export async function insertGoogleCalendarEvents(accessToken: string, events: Go
           extendedProperties: {
             private: {
               priority: event.priority,
-              source: 'MORNING FLOW AI v2.8',
+              source: 'MORNING FLOW AI v2.9',
             },
           },
         }),

@@ -5,7 +5,16 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.8 is based on v2.7 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.9 is based on v2.8 normal UI. Do not mix v3.0 or v3.1 UI.
+
+## Version 2.9 Google Calendar Date Patch - 2026-06-01
+
+- Screen display: v2.9
+- ZIP: morning-flow-ai-v2.9.zip
+- Next planned version: Version 2.10
+- Version 2.8 UI, microphone button, layout, button placement, and CSS are preserved.
+- Improved date parsing for Google Calendar registration.
+- Registration preview shows date and time before sending events to Google Calendar.
 
 ## Version 2.8 Google Calendar Patch - 2026-06-01
 

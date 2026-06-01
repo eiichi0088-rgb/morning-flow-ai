@@ -1,5 +1,11 @@
 ﻿# CHANGELOG
 
+## Version 2.9 - 2026-06-01
+
+- Version 2.8 UIを維持したGoogle Calendar日付解析修正。
+- 「6月3日仕事」「明日病院」「来週月曜日会議」のような日付表現をGoogleカレンダー登録日に反映。
+- Googleカレンダー登録前の予定一覧に日付と時刻を表示。
+
 ## Version 2.8 - 2026-06-01
 
 - Version 2.7 UIを維持したGoogle Calendar修正。
