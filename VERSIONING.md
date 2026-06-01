@@ -5,7 +5,15 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.10 is based on v2.9 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.11 is based on v2.10 normal UI. Do not mix v3.0 or v3.1 UI.
+
+## Version 2.11 Simple Morning View Patch - 2026-06-01
+
+- Screen display: v2.11
+- ZIP: morning-flow-ai-v2.11.zip
+- Next planned version: Version 2.12
+- Version 2.10 Google Calendar, date parsing, session ID, snapshots, shopping list, and microphone behavior are preserved.
+- Initial AI result view is shortened for daily morning use.
 
 ## Version 2.10 Storage Stability Patch - 2026-06-01
 

@@ -645,7 +645,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.10</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.11</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -916,7 +916,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.10</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.11</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
@@ -1359,25 +1359,25 @@ function PlanView({
   plan: MorningPlan;
 }) {
   const [isCalendarOpen, setIsCalendarOpen] = React.useState(false);
+  const [showDetails, setShowDetails] = React.useState(false);
   const calendarEvents = React.useMemo(() => createCalendarEvents(plan), [plan]);
+  const topTask = plan.priorities.highest[0] ?? plan.todos[0] ?? plan.goals[0] ?? plan.purpose;
+  const visibleTodos = plan.todos.slice(0, 3);
+  const visibleSchedule = plan.schedule.slice(0, 3);
 
   return (
-    <section className="plan-stack" aria-label="AI整理結果">
-      <PlanSection icon={<Flag size={18} />} title="今日の目的">
+    <section className="plan-stack" aria-label="AI organized result">
+      <PlanSection icon={<Flag size={18} />} title={'\u4eca\u65e5\u306e\u76ee\u7684'}>
         <p className="purpose-text">{plan.purpose}</p>
       </PlanSection>
 
-      <PlanSection icon={<Target size={18} />} title="今日の目標">
-        <ul className="clean-list">
-          {plan.goals.map((goal) => (
-            <li key={goal}>{goal}</li>
-          ))}
-        </ul>
+      <PlanSection icon={<Target size={18} />} title={'\u4eca\u65e5\u306e\u6700\u512a\u5148\u30bf\u30b9\u30af'}>
+        <p className="purpose-text">{topTask}</p>
       </PlanSection>
 
-      <PlanSection icon={<ListChecks size={18} />} title="やることリスト">
+      <PlanSection icon={<ListChecks size={18} />} title={'\u3084\u308b\u3053\u3068\u30ea\u30b9\u30c8'}>
         <div className="todo-list">
-          {plan.todos.map((todo) => (
+          {visibleTodos.map((todo) => (
             <label key={todo} className="todo-item">
               <input type="checkbox" />
               <span>{todo}</span>
@@ -1386,26 +1386,9 @@ function PlanView({
         </div>
       </PlanSection>
 
-      <PlanSection icon={<HeartPulse size={18} />} title="4カテゴリー分類">
-        <div className="category-grid">
-          <CategoryColumn title="仕事" items={plan.categories.work} />
-          <CategoryColumn title="健康" items={plan.categories.health} />
-          <CategoryColumn title="家族" items={plan.categories.family} />
-          <CategoryColumn title="学習" items={plan.categories.learning} />
-        </div>
-      </PlanSection>
-
-      <PlanSection icon={<Route size={18} />} title="優先順位">
-        <div className="priority-grid">
-          <PriorityColumn title="1. 最優先" items={plan.priorities.highest} />
-          <PriorityColumn title="2. 重要" items={plan.priorities.important} />
-          <PriorityColumn title="3. 時間があれば" items={plan.priorities.optional} />
-        </div>
-      </PlanSection>
-
-      <PlanSection icon={<CalendarClock size={18} />} title="推奨タイムスケジュール">
+      <PlanSection icon={<CalendarClock size={18} />} title={'\u63a8\u5968\u30bf\u30a4\u30e0\u30b9\u30b1\u30b8\u30e5\u30fc\u30eb'}>
         <div className="schedule-list">
-          {plan.schedule.map((item) => (
+          {visibleSchedule.map((item) => (
             <div
               className={`schedule-item ${highlightedScheduleKeys.includes(getScheduleKey(item)) ? 'is-new' : ''}`}
               key={`${item.time}-${item.task}`}
@@ -1422,21 +1405,54 @@ function PlanView({
           type="button"
         >
           <CalendarPlus size={19} />
-          カレンダーへ追加
+          {'\u30ab\u30ec\u30f3\u30c0\u30fc\u3078\u8ffd\u52a0'}
         </button>
         {isCalendarOpen && <GoogleCalendarExportPanel events={calendarEvents} />}
       </PlanSection>
 
-      <PlanSection icon={<Lightbulb size={18} />} title="AIアドバイス">
-        <ul className="advice-list">
-          {plan.advice.map((advice) => (
-            <li key={advice}>
-              <CheckCircle2 size={16} />
-              <span>{advice}</span>
-            </li>
-          ))}
-        </ul>
-      </PlanSection>
+      <button className="calendar-download-button" onClick={() => setShowDetails((current) => !current)} type="button">
+        {showDetails ? '\u8a73\u7d30\u3092\u9589\u3058\u308b' : '\u8a73\u3057\u304f\u898b\u308b'}
+      </button>
+
+      {showDetails && (
+        <>
+          <PlanSection icon={<Target size={18} />} title={'\u4eca\u65e5\u306e\u76ee\u6a19'}>
+            <ul className="clean-list">
+              {plan.goals.map((goal) => (
+                <li key={goal}>{goal}</li>
+              ))}
+            </ul>
+          </PlanSection>
+
+          <PlanSection icon={<HeartPulse size={18} />} title={'4\u30ab\u30c6\u30b4\u30ea\u30fc\u5206\u985e'}>
+            <div className="category-grid">
+              <CategoryColumn title={'\u4ed5\u4e8b'} items={plan.categories.work} />
+              <CategoryColumn title={'\u5065\u5eb7'} items={plan.categories.health} />
+              <CategoryColumn title={'\u5bb6\u65cf'} items={plan.categories.family} />
+              <CategoryColumn title={'\u5b66\u7fd2'} items={plan.categories.learning} />
+            </div>
+          </PlanSection>
+
+          <PlanSection icon={<Route size={18} />} title={'\u512a\u5148\u9806\u4f4d'}>
+            <div className="priority-grid">
+              <PriorityColumn title={'1. \u6700\u512a\u5148'} items={plan.priorities.highest} />
+              <PriorityColumn title={'2. \u91cd\u8981'} items={plan.priorities.important} />
+              <PriorityColumn title={'3. \u6642\u9593\u304c\u3042\u308c\u3070'} items={plan.priorities.optional} />
+            </div>
+          </PlanSection>
+
+          <PlanSection icon={<Lightbulb size={18} />} title={'AI\u30a2\u30c9\u30d0\u30a4\u30b9'}>
+            <ul className="advice-list">
+              {plan.advice.map((advice) => (
+                <li key={advice}>
+                  <CheckCircle2 size={16} />
+                  <span>{advice}</span>
+                </li>
+              ))}
+            </ul>
+          </PlanSection>
+        </>
+      )}
     </section>
   );
 }
