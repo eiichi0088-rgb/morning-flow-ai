@@ -662,7 +662,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.11.2</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.11.3</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -933,7 +933,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.11.2</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.11.3</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
@@ -1603,8 +1603,15 @@ function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
     });
 
     insertGoogleCalendarEvents(accessToken, selectedEvents)
-      .then((createdEvents) => {
-        setStatusMessage(`${createdEvents.length} / ${selectedEvents.length} events were added to Google Calendar.`);
+      .then((result) => {
+        const failureSummary = result.failed
+          .map((event) => `${event.title}: ${event.status ? `${event.status} ` : ''}${event.message}`)
+          .join(' / ');
+        setStatusMessage(
+          result.failed.length
+            ? `Google Calendar: ${result.requested}件中 成功 ${result.created.length}件 / 失敗 ${result.failed.length}件。${failureSummary}`
+            : `Google Calendar: ${result.requested}件中 成功 ${result.created.length}件 / 失敗 0件。`,
+        );
         revokeGoogleAccessToken(accessToken);
         setAccessToken('');
       })

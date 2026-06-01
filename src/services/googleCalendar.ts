@@ -103,7 +103,24 @@ export function revokeGoogleAccessToken(accessToken: string) {
   window.google?.accounts?.oauth2?.revoke(accessToken);
 }
 
-export async function insertGoogleCalendarEvents(accessToken: string, events: GoogleCalendarEventInput[]) {
+export type GoogleCalendarInsertFailure = {
+  title: string;
+  status?: number;
+  message: string;
+};
+
+export type GoogleCalendarInsertResult = {
+  requested: number;
+  created: unknown[];
+  failed: GoogleCalendarInsertFailure[];
+};
+
+const calendarInsertDelayMs = 750;
+
+export async function insertGoogleCalendarEvents(
+  accessToken: string,
+  events: GoogleCalendarEventInput[],
+): Promise<GoogleCalendarInsertResult> {
   if (!accessToken) {
     throw new Error('Google access token is missing. Please choose a Google account again.');
   }
@@ -116,16 +133,22 @@ export async function insertGoogleCalendarEvents(accessToken: string, events: Go
   });
 
   const createdEvents = [];
-  const failedEvents: Array<{ title: string; message: string }> = [];
+  const failedEvents: GoogleCalendarInsertFailure[] = [];
 
   for (const [index, event] of events.entries()) {
     try {
       createdEvents.push(await insertSingleGoogleCalendarEvent(accessToken, event, index, events.length));
     } catch (error) {
+      const calendarError = normalizeGoogleCalendarError(error);
       failedEvents.push({
         title: event.title,
-        message: error instanceof Error ? error.message : 'Unknown Google Calendar error.',
+        status: calendarError.status,
+        message: calendarError.message,
       });
+    }
+
+    if (index < events.length - 1) {
+      await wait(calendarInsertDelayMs);
     }
   }
 
@@ -133,18 +156,14 @@ export async function insertGoogleCalendarEvents(accessToken: string, events: Go
     requested: events.length,
     created: createdEvents.length,
     failed: failedEvents.length,
-    failedEvents,
+    failureReasons: failedEvents,
   });
 
-  if (failedEvents.length) {
-    throw new Error(
-      `Google Calendar registration partially failed. Created ${createdEvents.length} of ${events.length}. Failed: ${failedEvents
-        .map((event) => event.title)
-        .join(', ')}`,
-    );
-  }
-
-  return createdEvents;
+  return {
+    requested: events.length,
+    created: createdEvents,
+    failed: failedEvents,
+  };
 }
 
 async function insertSingleGoogleCalendarEvent(
@@ -185,17 +204,37 @@ async function insertSingleGoogleCalendarEvent(
       extendedProperties: {
         private: {
           priority: event.priority,
-          source: 'MORNING FLOW AI v2.11.2',
+          source: 'MORNING FLOW AI v2.11.3',
         },
       },
     }),
   });
 
   if (!response.ok) {
-    throw new Error(await buildCalendarErrorMessage(response));
+    throw await buildCalendarError(response);
   }
 
   return response.json();
+}
+
+function wait(delayMs: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, delayMs);
+  });
+}
+
+function normalizeGoogleCalendarError(error: unknown) {
+  if (error instanceof GoogleCalendarApiError) {
+    return {
+      status: error.status,
+      message: error.message,
+    };
+  }
+
+  return {
+    status: undefined,
+    message: error instanceof Error ? error.message : 'Unknown Google Calendar error.',
+  };
 }
 
 function toGoogleCalendarTokyoDateTime(date: Date) {
@@ -209,10 +248,20 @@ function padDatePart(value: number) {
   return String(value).padStart(2, '0');
 }
 
-async function buildCalendarErrorMessage(response: Response) {
+class GoogleCalendarApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'GoogleCalendarApiError';
+  }
+}
+
+async function buildCalendarError(response: Response) {
   const payload = (await response.json().catch(() => null)) as CalendarApiErrorPayload | null;
   const detail = payload?.error?.message || response.statusText || 'Unknown error';
-  return `Google Calendar registration failed (${response.status}): ${detail}`;
+  return new GoogleCalendarApiError(response.status, `Google Calendar registration failed (${response.status}): ${detail}`);
 }
 
 function loadGoogleIdentityServices() {

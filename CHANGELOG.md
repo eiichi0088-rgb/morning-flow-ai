@@ -1,6 +1,14 @@
 ﻿# CHANGELOG
 
 
+## Version 2.11.3 - 2026-06-02
+
+- Google Calendar multiple-event error handling improvement.
+- Partial success is now shown as success and failure counts instead of hiding failed events.
+- Google Calendar API failure status and reason are shown for errors such as 401, 403, and 429.
+- Added a 750ms wait between event registrations to reduce 429 Too Many Requests risk.
+- Console logging now includes success count, failure count, and failure reasons.
+
 ## Version 2.11.2 - 2026-06-02
 
 - Google Calendar multiple-event registration fix.
