@@ -15,6 +15,7 @@
 - Version 2.10 Google Calendar, date parsing, session ID, snapshots, shopping list, and microphone behavior are preserved.
 - Initial AI result view separates today's items from future calendar events.
 - Future dated events remain eligible for Google Calendar registration on their parsed dates.
+- One microphone input is classified into today's schedule items and shopping list items.
 
 ## Version 2.10 Storage Stability Patch - 2026-06-01
 

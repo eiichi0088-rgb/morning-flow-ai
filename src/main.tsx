@@ -45,6 +45,7 @@ import {
 } from './services/reflectionStorage';
 import {
   createShoppingPlan,
+  classifyShoppingItem,
   formatShoppingItemLabel,
   groupShoppingItems,
   parseShoppingItemInput,
@@ -417,10 +418,18 @@ function App() {
     setIsOrganizing(true);
     setError('');
 
-    createAiMorningPlan(transcript, energy)
-      .then((nextPlan) => {
-        const planWithCarryover = addCarryoverToPlan(nextPlan, carriedTodos);
+    Promise.all([createAiMorningPlan(transcript, energy), createShoppingPlan(transcript, shoppingItems)])
+      .then(([nextPlan, shoppingPlan]) => {
+        const classifiedShoppingItems = mergeShoppingPlans(shoppingPlan.items, extractShoppingItemsFromUnifiedInput(transcript));
+        const planWithCarryover = addCarryoverToPlan(
+          prepareUnifiedMorningPlan(nextPlan, transcript, classifiedShoppingItems),
+          carriedTodos,
+        );
         setPlan(planWithCarryover);
+        setShoppingText(transcript.trim());
+        setOriginalShoppingText(transcript.trim());
+        setShoppingItems(classifiedShoppingItems);
+        setShoppingUpdatedAt(shoppingPlan.updatedAt);
         setCaptureMode('update');
         setUpdateInstruction('');
         setOriginalUpdateInstruction('');
@@ -783,7 +792,7 @@ function App() {
 
         <div ref={planAnchorRef} />
         {plan && <CoachCard plan={plan} />}
-        {plan && <PlanView highlightedScheduleKeys={highlightedScheduleKeys} plan={plan} />}
+        {plan && <PlanView highlightedScheduleKeys={highlightedScheduleKeys} plan={plan} shoppingItems={shoppingItems} />}
 
         <div className="action-row">
           <button className="secondary-button" type="button" onClick={() => setIsResetDialogOpen(true)}>
@@ -1354,9 +1363,11 @@ function ReflectionView({
 function PlanView({
   highlightedScheduleKeys,
   plan,
+  shoppingItems,
 }: {
   highlightedScheduleKeys: string[];
   plan: MorningPlan;
+  shoppingItems: ShoppingItem[];
 }) {
   const [isCalendarOpen, setIsCalendarOpen] = React.useState(false);
   const [showDetails, setShowDetails] = React.useState(false);
@@ -1371,12 +1382,12 @@ function PlanView({
     [calendarEvents, today],
   );
   const todayTodos = React.useMemo(
-    () => plan.todos.filter((todo) => !isFutureDatedText(todo, today)).slice(0, 5),
+    () => plan.todos.filter((todo) => !isFutureDatedText(todo, today) && !isShoppingItemText(todo)).slice(0, 5),
     [plan.todos, today],
   );
   const visibleSchedule = todayEvents.slice(0, 5);
   const topTask = todayTodos[0] ?? visibleSchedule[0]?.title ?? '';
-  const todayPurpose = topTask ? `${topTask}????` : '??????????????';
+  const todayPurpose = topTask ? `${topTask}\u3092\u9032\u3081\u308b` : '\u4eca\u65e5\u306e\u4e88\u5b9a\u306f\u307e\u3060\u3042\u308a\u307e\u305b\u3093\u3002';
 
   return (
     <section className="plan-stack" aria-label="AI organized result">
@@ -1400,6 +1411,18 @@ function PlanView({
           </div>
         ) : (
           <p className="purpose-text">{'\u4eca\u65e5\u306e\u3084\u308b\u3053\u3068\u306f\u307e\u3060\u3042\u308a\u307e\u305b\u3093\u3002'}</p>
+        )}
+      </PlanSection>
+
+      <PlanSection icon={<ShoppingCart size={18} />} title={'\u8cb7\u3044\u7269\u30ea\u30b9\u30c8'}>
+        {shoppingItems.length ? (
+          <ul className="clean-list">
+            {shoppingItems.map((item) => (
+              <li key={item.id}>{formatShoppingItemLabel(item)}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="purpose-text">{'\u8cb7\u3044\u7269\u30ea\u30b9\u30c8\u306f\u307e\u3060\u3042\u308a\u307e\u305b\u3093\u3002'}</p>
         )}
       </PlanSection>
 
@@ -1861,6 +1884,139 @@ function mergeStrings(previousItems: string[], nextItems: string[]) {
 
 function sortScheduleByTime(schedule: MorningPlan['schedule']) {
   return [...schedule].sort((a, b) => getScheduleStartMinutes(a.time) - getScheduleStartMinutes(b.time));
+}
+
+function prepareUnifiedMorningPlan(plan: MorningPlan, sourceText: string, shoppingItems: ShoppingItem[]): MorningPlan {
+  const shoppingNames = new Set(shoppingItems.map((item) => normalizeTaskText(item.name)));
+  const extractedActions = extractScheduleActionsFromUnifiedInput(sourceText);
+  const extractedSchedule = extractDatedScheduleItems(sourceText);
+  const futureTaskNames = new Set(extractedSchedule.map((item) => normalizeTaskText(item.task)));
+  const shoppingAction = shoppingItems.length ? ['買い物へ行く'] : [];
+  const isShoppingText = (value: string) =>
+    isShoppingItemText(value) || shoppingItems.some((item) => normalizeTaskText(value).includes(normalizeTaskText(item.name)));
+  const isFutureTaskText = (value: string) =>
+    Array.from(futureTaskNames).some((task) => task && normalizeTaskText(value).includes(task));
+
+  return {
+    ...plan,
+    todos: mergeStrings(
+      [...plan.todos.filter((todo) => !isShoppingText(todo) && !isFutureTaskText(todo)), ...extractedActions, ...shoppingAction],
+      [],
+    ),
+    schedule: sortScheduleByTime(
+      mergeSchedule(
+        plan.schedule.filter((item) => !isShoppingText(item.task) && !isFutureTaskText(item.task)),
+        extractedSchedule,
+      ),
+    ),
+    priorities: {
+      highest: plan.priorities.highest.filter((item) => !isShoppingText(item) && !isFutureTaskText(item)),
+      important: plan.priorities.important.filter((item) => !isShoppingText(item) && !isFutureTaskText(item)),
+      optional: plan.priorities.optional.filter((item) => !isShoppingText(item) && !isFutureTaskText(item)),
+    },
+    categories: {
+      work: plan.categories.work.filter((item) => !shoppingNames.has(normalizeTaskText(item))),
+      health: plan.categories.health.filter((item) => !shoppingNames.has(normalizeTaskText(item))),
+      family: plan.categories.family.filter((item) => !shoppingNames.has(normalizeTaskText(item))),
+      learning: plan.categories.learning.filter((item) => !shoppingNames.has(normalizeTaskText(item))),
+    },
+  };
+}
+
+function mergeShoppingPlans(aiItems: ShoppingItem[], localItems: ShoppingItem[]) {
+  const byName = new Map<string, ShoppingItem>();
+  [...aiItems, ...localItems].forEach((item) => {
+    const key = normalizeTaskText(item.name);
+    if (!key) return;
+    const existing = byName.get(key);
+    if (existing) {
+      if (!existing.quantity && item.quantity) existing.quantity = item.quantity;
+      return;
+    }
+    byName.set(key, item);
+  });
+  return Array.from(byName.values());
+}
+
+function extractShoppingItemsFromUnifiedInput(text: string): ShoppingItem[] {
+  const normalized = normalizeJapaneseDateText(text)
+    .replace(/帰りに/g, '')
+    .replace(/を買う/g, '、')
+    .replace(/買う/g, '、')
+    .replace(/買って/g, '、')
+    .replace(/と/g, '、');
+  const candidates = normalized
+    .split(/[、。,.]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .filter((item) => !isScheduleActionText(item))
+    .filter((item) => isShoppingItemText(item));
+
+  return candidates.map((candidate) => {
+    const parsed = parseShoppingItemInput(candidate);
+    const name = parsed.name || candidate;
+    return {
+      id: createLocalShoppingItemId(name),
+      name,
+      quantity: parsed.quantity,
+      category: classifyShoppingItem(name),
+      completed: false,
+      addedAt: new Date().toISOString(),
+    };
+  });
+}
+
+function extractScheduleActionsFromUnifiedInput(text: string) {
+  const actions = normalizeJapaneseDateText(text)
+    .replace(/今日は/g, '')
+    .split(/[、。,.]|そして|それから/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => item.replace(/^(帰りに|その後|あとで)/, '').trim())
+    .filter((item) => isScheduleActionText(item))
+    .filter((item) => !isFutureDatedText(item, new Date()))
+    .map(normalizeScheduleActionText);
+
+  if (/買う|買って|購入/.test(text) && !actions.some((item) => item.includes('買い物'))) {
+    actions.push('買い物へ行く');
+  }
+
+  return Array.from(new Set(actions));
+}
+
+function extractDatedScheduleItems(text: string): MorningPlan['schedule'] {
+  const normalized = normalizeJapaneseDateText(text);
+  const explicitDateTime = normalized.match(/(\d{1,2}月\d{1,2}日)\s*(\d{1,2}(?::\d{2}|時(?:\d{1,2}分?)?))\s*(?:から)?(.+)/);
+  if (!explicitDateTime) return [];
+
+  return [
+    {
+      time: `${explicitDateTime[1]} ${explicitDateTime[2]}`,
+      task: normalizeScheduleActionText(explicitDateTime[3]),
+    },
+  ];
+}
+
+function isScheduleActionText(text: string) {
+  return /(行く|迎え|会う|会議|仕事|病院|銀行|ジム|電話|支払い|送迎|予約|面談|打ち合わせ)/.test(text);
+}
+
+function isShoppingItemText(text: string) {
+  return /(ネギ|ねぎ|玉ねぎ|玉葱|歯ブラシ|牛乳|卵|洗剤|ティッシュ|ラップ|お菓子|水|キロ|kg|g|本|個|袋|買う|購入)/.test(text);
+}
+
+function normalizeScheduleActionText(text: string) {
+  return text
+    .replace(/^今日は/, '')
+    .replace(/^(から|に|へ|を|帰りに)/, '')
+    .replace(/行って$/, '行く')
+    .replace(/を?買う.*$/, '')
+    .replace(/へ$/, 'へ行く')
+    .trim();
+}
+
+function createLocalShoppingItemId(name: string) {
+  return `shopping-local-${normalizeTaskText(name)}-${Date.now()}`;
 }
 
 function isSameLocalDate(date: Date, baseDate: Date) {
