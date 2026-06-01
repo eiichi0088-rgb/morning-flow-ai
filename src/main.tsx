@@ -1360,44 +1360,83 @@ function PlanView({
 }) {
   const [isCalendarOpen, setIsCalendarOpen] = React.useState(false);
   const [showDetails, setShowDetails] = React.useState(false);
+  const today = React.useMemo(() => startOfLocalDay(new Date()), []);
   const calendarEvents = React.useMemo(() => createCalendarEvents(plan), [plan]);
-  const topTask = plan.priorities.highest[0] ?? plan.todos[0] ?? plan.goals[0] ?? plan.purpose;
-  const visibleTodos = plan.todos.slice(0, 3);
-  const visibleSchedule = plan.schedule.slice(0, 3);
+  const todayEvents = React.useMemo(
+    () => calendarEvents.filter((event) => isSameLocalDate(event.start, today)),
+    [calendarEvents, today],
+  );
+  const futureEvents = React.useMemo(
+    () => calendarEvents.filter((event) => isFutureLocalDate(event.start, today)),
+    [calendarEvents, today],
+  );
+  const todayTodos = React.useMemo(
+    () => plan.todos.filter((todo) => !isFutureDatedText(todo, today)).slice(0, 5),
+    [plan.todos, today],
+  );
+  const visibleSchedule = todayEvents.slice(0, 5);
+  const topTask = todayTodos[0] ?? visibleSchedule[0]?.title ?? '';
+  const todayPurpose = topTask ? `${topTask}????` : '??????????????';
 
   return (
     <section className="plan-stack" aria-label="AI organized result">
       <PlanSection icon={<Flag size={18} />} title={'\u4eca\u65e5\u306e\u76ee\u7684'}>
-        <p className="purpose-text">{plan.purpose}</p>
+        <p className="purpose-text">{todayPurpose}</p>
       </PlanSection>
 
-      <PlanSection icon={<Target size={18} />} title={'\u4eca\u65e5\u306e\u6700\u512a\u5148\u30bf\u30b9\u30af'}>
-        <p className="purpose-text">{topTask}</p>
+      <PlanSection icon={<Target size={18} />} title={'\u4eca\u65e5\u306e\u6700\u512a\u5148'}>
+        <p className="purpose-text">{topTask || '\u4eca\u65e5\u306e\u6700\u512a\u5148\u30bf\u30b9\u30af\u306f\u307e\u3060\u3042\u308a\u307e\u305b\u3093\u3002'}</p>
       </PlanSection>
 
-      <PlanSection icon={<ListChecks size={18} />} title={'\u3084\u308b\u3053\u3068\u30ea\u30b9\u30c8'}>
-        <div className="todo-list">
-          {visibleTodos.map((todo) => (
-            <label key={todo} className="todo-item">
-              <input type="checkbox" />
-              <span>{todo}</span>
-            </label>
-          ))}
-        </div>
+      <PlanSection icon={<ListChecks size={18} />} title={'\u4eca\u65e5\u306e\u3084\u308b\u3053\u3068'}>
+        {todayTodos.length ? (
+          <div className="todo-list">
+            {todayTodos.map((todo) => (
+              <label key={todo} className="todo-item">
+                <input type="checkbox" />
+                <span>{todo}</span>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <p className="purpose-text">{'\u4eca\u65e5\u306e\u3084\u308b\u3053\u3068\u306f\u307e\u3060\u3042\u308a\u307e\u305b\u3093\u3002'}</p>
+        )}
       </PlanSection>
 
-      <PlanSection icon={<CalendarClock size={18} />} title={'\u63a8\u5968\u30bf\u30a4\u30e0\u30b9\u30b1\u30b8\u30e5\u30fc\u30eb'}>
-        <div className="schedule-list">
-          {visibleSchedule.map((item) => (
-            <div
-              className={`schedule-item ${highlightedScheduleKeys.includes(getScheduleKey(item)) ? 'is-new' : ''}`}
-              key={`${item.time}-${item.task}`}
-            >
-              <time>{item.time}</time>
-              <span>{item.task}</span>
-            </div>
-          ))}
-        </div>
+      <PlanSection icon={<CalendarClock size={18} />} title={'\u4eca\u65e5\u306e\u30b9\u30b1\u30b8\u30e5\u30fc\u30eb'}>
+        {visibleSchedule.length ? (
+          <div className="schedule-list">
+            {visibleSchedule.map((event) => (
+              <div
+                className={`schedule-item ${
+                  highlightedScheduleKeys.includes(`${event.sourceTime.trim()}::${event.title.trim()}`) ? 'is-new' : ''
+                }`}
+                key={event.id}
+              >
+                <time>{formatEventTime(event.start)}</time>
+                <span>{event.title}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="purpose-text">{'\u4eca\u65e5\u306e\u30b9\u30b1\u30b8\u30e5\u30fc\u30eb\u306f\u307e\u3060\u3042\u308a\u307e\u305b\u3093\u3002'}</p>
+        )}
+      </PlanSection>
+
+      {futureEvents.length > 0 && (
+        <PlanSection icon={<CalendarClock size={18} />} title={'\u672a\u6765\u306e\u4e88\u5b9a'}>
+          <div className="schedule-list">
+            {futureEvents.map((event) => (
+              <div className="schedule-item" key={event.id}>
+                <time>{formatEventDateTime(event.start)}</time>
+                <span>{event.title}</span>
+              </div>
+            ))}
+          </div>
+        </PlanSection>
+      )}
+
+      <PlanSection icon={<CalendarClock size={18} />} title={'Google\u30ab\u30ec\u30f3\u30c0\u30fc'}>
         <button
           className="calendar-add-button"
           disabled={!calendarEvents.length}
@@ -1822,6 +1861,18 @@ function mergeStrings(previousItems: string[], nextItems: string[]) {
 
 function sortScheduleByTime(schedule: MorningPlan['schedule']) {
   return [...schedule].sort((a, b) => getScheduleStartMinutes(a.time) - getScheduleStartMinutes(b.time));
+}
+
+function isSameLocalDate(date: Date, baseDate: Date) {
+  return startOfLocalDay(date).getTime() === startOfLocalDay(baseDate).getTime();
+}
+
+function isFutureLocalDate(date: Date, baseDate: Date) {
+  return startOfLocalDay(date).getTime() > startOfLocalDay(baseDate).getTime();
+}
+
+function isFutureDatedText(text: string, baseDate: Date) {
+  return isFutureLocalDate(parseScheduleDate(text, baseDate), baseDate);
 }
 
 function getScheduleStartMinutes(timeText: string) {

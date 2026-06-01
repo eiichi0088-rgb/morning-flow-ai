@@ -13,7 +13,8 @@
 - ZIP: morning-flow-ai-v2.11.zip
 - Next planned version: Version 2.12
 - Version 2.10 Google Calendar, date parsing, session ID, snapshots, shopping list, and microphone behavior are preserved.
-- Initial AI result view is shortened for daily morning use.
+- Initial AI result view separates today's items from future calendar events.
+- Future dated events remain eligible for Google Calendar registration on their parsed dates.
 
 ## Version 2.10 Storage Stability Patch - 2026-06-01
 
