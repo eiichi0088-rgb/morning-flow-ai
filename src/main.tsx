@@ -28,7 +28,7 @@ import {
   Target,
   Trash2,
 } from 'lucide-react';
-import { createAiMorningPlan, type EnergyMood, type MorningPlan } from './services/aiPlanner';
+import { createAiMorningPlan, type MorningPlan } from './services/aiPlanner';
 import {
   insertGoogleCalendarEvents,
   isGoogleCalendarConfigured,
@@ -126,13 +126,6 @@ const reviewOptions: { label: string; value: ReviewStatus }[] = [
   { label: '✕ 未達成', value: 'missed' },
 ];
 
-const energyOptions: { label: string; value: EnergyMood }[] = [
-  { label: '😊 絶好調', value: 'great' },
-  { label: '🙂 普通', value: 'normal' },
-  { label: '😴 疲れている', value: 'tired' },
-  { label: '😣 とても疲れている', value: 'exhausted' },
-];
-
 function createPrivateSessionId() {
   const savedSessionId = localStorage.getItem(privateSessionIdStorageKey);
   if (savedSessionId) return savedSessionId;
@@ -196,7 +189,6 @@ function App() {
   const [previousSnapshot, setPreviousSnapshot] = React.useState<MorningSnapshot | null>(null);
   const [reviewStatuses, setReviewStatuses] = React.useState<Record<string, ReviewStatus>>({});
   const [carriedTodos, setCarriedTodos] = React.useState<string[]>([]);
-  const [energy, setEnergy] = React.useState<EnergyMood>('normal');
   const planAnchorRef = React.useRef<HTMLDivElement | null>(null);
 
   const isSupported = Boolean(SpeechRecognition);
@@ -419,7 +411,7 @@ function App() {
     setIsOrganizing(true);
     setError('');
 
-    Promise.all([createAiMorningPlan(transcript, energy), createShoppingPlan(transcript, shoppingItems)])
+    Promise.all([createAiMorningPlan(transcript), createShoppingPlan(transcript, shoppingItems)])
       .then(([nextPlan, shoppingPlan]) => {
         const classifiedShoppingItems = mergeShoppingPlans(shoppingPlan.items, extractShoppingItemsFromUnifiedInput(transcript));
         const planWithCarryover = addCarryoverToPlan(
@@ -453,7 +445,7 @@ function App() {
     setIsOrganizing(true);
     setError('');
 
-    createAiMorningPlan(updateInstruction, energy, {
+    createAiMorningPlan(updateInstruction, {
       currentPlan: previousPlan,
       mode: 'update',
     })
@@ -779,8 +771,6 @@ function App() {
             text={updateInstruction}
           />
         )}
-
-        <EnergySelector energy={energy} onChange={setEnergy} />
 
         {canOrganize && (
           <button
@@ -1164,35 +1154,6 @@ function CaptureModeSwitcher({
         既存スケジュールへの追加・修正
       </button>
     </div>
-  );
-}
-
-function EnergySelector({
-  energy,
-  onChange,
-}: {
-  energy: EnergyMood;
-  onChange: (energy: EnergyMood) => void;
-}) {
-  return (
-    <section className="energy-card" aria-label="朝の気分">
-      <div className="energy-header">
-        <span>Energy Check</span>
-        <strong>今朝の気分</strong>
-      </div>
-      <div className="energy-options">
-        {energyOptions.map((option) => (
-          <button
-            className={energy === option.value ? 'selected' : ''}
-            key={option.value}
-            onClick={() => onChange(option.value)}
-            type="button"
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    </section>
   );
 }
 

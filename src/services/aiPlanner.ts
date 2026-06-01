@@ -1,5 +1,4 @@
 export type LifeCategory = 'work' | 'health' | 'family' | 'learning';
-export type EnergyMood = 'great' | 'normal' | 'tired' | 'exhausted';
 
 export interface MorningPlan {
   purpose: string;
@@ -17,7 +16,6 @@ export interface MorningPlan {
   advice: string[];
   categories: Record<LifeCategory, string[]>;
   coach: {
-    energy: EnergyMood;
     mission: string;
     focusItems: {
       highest: string;
@@ -36,7 +34,6 @@ export interface PlanUpdateContext {
 
 export async function createAiMorningPlan(
   transcript: string,
-  energy: EnergyMood,
   context: PlanUpdateContext = {},
 ): Promise<MorningPlan> {
   const response = await fetch('/api/plan', {
@@ -46,7 +43,6 @@ export async function createAiMorningPlan(
     },
     body: JSON.stringify({
       currentPlan: context.currentPlan,
-      energy,
       mode: context.mode ?? 'create',
       transcript,
     }),
@@ -85,7 +81,6 @@ function normalizePlan(plan: MorningPlan): MorningPlan {
       learning: safeArray(plan.categories?.learning),
     },
     coach: {
-      energy: plan.coach?.energy || 'normal',
       mission: plan.coach?.mission || plan.priorities?.highest?.[0] || plan.todos?.[0] || '今日を整える',
       focusItems: {
         highest: plan.coach?.focusItems?.highest || plan.priorities?.highest?.[0] || '最重要タスクを進める',

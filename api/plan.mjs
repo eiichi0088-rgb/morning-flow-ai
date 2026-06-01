@@ -1,4 +1,4 @@
-import { createPlanFromTranscript, normalizeEnergy } from '../scripts/openai-plan-handler.mjs';
+import { createPlanFromTranscript } from '../scripts/openai-plan-handler.mjs';
 
 export default {
   async fetch(request) {
@@ -9,7 +9,6 @@ export default {
     try {
       const body = await request.json();
       const transcript = String(body.transcript ?? '').trim();
-      const energy = normalizeEnergy(body.energy);
       const mode = body.mode === 'update' ? 'update' : 'create';
       const currentPlan = body.currentPlan ?? null;
 
@@ -24,7 +23,7 @@ export default {
         );
       }
 
-      const plan = await createPlanFromTranscript(transcript, energy, { currentPlan, mode });
+      const plan = await createPlanFromTranscript(transcript, { currentPlan, mode });
       return Response.json({ plan });
     } catch (error) {
       return Response.json(

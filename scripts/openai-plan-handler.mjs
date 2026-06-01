@@ -49,9 +49,8 @@ const planSchema = {
     coach: {
       type: 'object',
       additionalProperties: false,
-      required: ['energy', 'mission', 'focusItems', 'morningAdvice', 'successConditions'],
+      required: ['mission', 'focusItems', 'morningAdvice', 'successConditions'],
       properties: {
-        energy: { type: 'string', enum: ['great', 'normal', 'tired', 'exhausted'] },
         mission: { type: 'string' },
         focusItems: {
           type: 'object',
@@ -127,7 +126,6 @@ export async function handlePlanRequest(request, response) {
   try {
     const body = await readJsonBody(request);
     const transcript = String(body.transcript ?? '').trim();
-    const energy = normalizeEnergy(body.energy);
     const mode = body.mode === 'update' ? 'update' : 'create';
     const currentPlan = body.currentPlan ?? null;
 
@@ -143,7 +141,7 @@ export async function handlePlanRequest(request, response) {
       return;
     }
 
-    const plan = await createPlanFromTranscript(transcript, energy, { currentPlan, mode });
+    const plan = await createPlanFromTranscript(transcript, { currentPlan, mode });
     sendJson(response, 200, { plan });
   } catch (error) {
     sendJson(response, 500, {
@@ -152,28 +150,26 @@ export async function handlePlanRequest(request, response) {
   }
 }
 
-export async function createPlanFromTranscript(transcript, energy = 'normal', context = {}) {
+export async function createPlanFromTranscript(transcript, context = {}) {
   const mode = context.mode === 'update' ? 'update' : 'create';
   const currentPlan = context.currentPlan ?? null;
   const systemText = [
     'You are MORNING FLOW AI, a Japanese morning planning coach.',
     'Return a concise Japanese day plan in the requested JSON schema.',
-    'Use the user transcript, energy level, and context to organize purpose, goals, todos, priorities, schedule, advice, categories, and coach.',
+    'Use the user transcript and context to organize purpose, goals, todos, priorities, schedule, advice, categories, and coach.',
     'If mode is update, integrate the new instruction into the current plan. Keep existing schedules and tasks unless the user clearly asks to change them.',
     'Do not drop existing items when adding new items. Insert new schedule items at a reasonable time between existing items when possible.',
   ].join(' ');
   const userText = mode === 'update'
     ? [
         `Mode: update`,
-        `Morning energy: ${energy}`,
-        '',
         'Current MORNING FLOW AI plan JSON:',
         JSON.stringify(currentPlan, null, 2),
         '',
         'Additional or correction instruction:',
         transcript,
       ].join('\n')
-    : `Mode: create\nMorning energy: ${energy}\n\nTranscript:\n${transcript}`;
+    : `Mode: create\n\nTranscript:\n${transcript}`;
 
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
@@ -216,10 +212,6 @@ export async function createPlanFromTranscript(transcript, energy = 'normal', co
   }
 
   return JSON.parse(text);
-}
-
-export function normalizeEnergy(value) {
-  return ['great', 'normal', 'tired', 'exhausted'].includes(value) ? value : 'normal';
 }
 
 function extractOutputText(data) {
