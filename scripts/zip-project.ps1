@@ -15,7 +15,9 @@ if (Test-Path -LiteralPath $zipPath) {
 $excludedNames = @(
   'node_modules',
   '.npm-cache',
+  '.npm-cache-v2',
   '.env',
+  'api - コピー',
   'morning-flow-ai-mvp.zip',
   'morning-flow-ai-v1.2.zip'
 )

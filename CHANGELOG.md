@@ -1,5 +1,13 @@
 ﻿# CHANGELOG
 
+## Version 2.8 - 2026-06-01
+
+- Version 2.7 UIを維持したGoogle Calendar修正。
+- Google Calendar OAuthを毎回アカウント選択する方式に固定。
+- GoogleアクセストークンをlocalStorageへ保存せず、画面上の一時状態だけで扱うよう整理。
+- Google Calendar API登録時の失敗理由を表示できるようエラーハンドリングを改善。
+- 時刻解析できない予定でもGoogleカレンダー追加ボタンが使えるよう、登録用の安全な仮時刻を設定。
+- `morning-flow-ai-v2.8.zip` として保存。
 ## Version 2.7 - 2026-06-01
 
 - Version 2.6 UIを維持したSecurity & Stability Patch。
@@ -19,3 +27,4 @@
 - Google login now requests account selection with `select_account consent`.
 - Added a second calendar registration path: open selected events in Google Calendar's new event screen.
 - Updated screen display to `v2.6` and saved as `morning-flow-ai-v2.6.zip`.
+

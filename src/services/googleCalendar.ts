@@ -1,4 +1,4 @@
-export type GoogleCalendarPriority = '最優先' | '重要' | '時間があれば' | '通常';
+export type GoogleCalendarPriority = string;
 
 export interface GoogleCalendarEventInput {
   title: string;
@@ -11,6 +11,8 @@ export interface GoogleCalendarEventInput {
 interface TokenResponse {
   access_token?: string;
   error?: string;
+  error_description?: string;
+  error_uri?: string;
   expires_in?: number;
   scope?: string;
   token_type?: string;
@@ -19,6 +21,14 @@ interface TokenResponse {
 interface TokenClient {
   callback: (response: TokenResponse) => void;
   requestAccessToken: (options?: { prompt?: string }) => void;
+}
+
+interface CalendarApiErrorPayload {
+  error?: {
+    code?: number;
+    message?: string;
+    status?: string;
+  };
 }
 
 declare global {
@@ -39,7 +49,9 @@ declare global {
 }
 
 const googleIdentityScriptId = 'google-identity-services';
+const googleIdentityScriptUrl = 'https://accounts.google.com/gsi/client';
 const calendarScope = 'https://www.googleapis.com/auth/calendar.events';
+const tokyoTimeZone = 'Asia/Tokyo';
 
 export function getGoogleClientId() {
   return import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
@@ -49,10 +61,10 @@ export function isGoogleCalendarConfigured() {
   return Boolean(getGoogleClientId());
 }
 
-export async function requestGoogleAccessToken(prompt = 'select_account consent') {
+export async function requestGoogleAccessToken() {
   const clientId = getGoogleClientId();
   if (!clientId) {
-    throw new Error('Google Client IDが未設定です。.envにVITE_GOOGLE_CLIENT_IDを設定してください。');
+    throw new Error('Google Client ID is not configured. Set VITE_GOOGLE_CLIENT_ID in the environment.');
   }
 
   await loadGoogleIdentityServices();
@@ -60,7 +72,7 @@ export async function requestGoogleAccessToken(prompt = 'select_account consent'
   return new Promise<string>((resolve, reject) => {
     const oauth2 = window.google?.accounts?.oauth2;
     if (!oauth2) {
-      reject(new Error('Googleログインの準備に失敗しました。ページを再読み込みしてください。'));
+      reject(new Error('Google sign-in could not be initialized. Please reload the page and try again.'));
       return;
     }
 
@@ -69,26 +81,35 @@ export async function requestGoogleAccessToken(prompt = 'select_account consent'
       scope: calendarScope,
       callback: (response) => {
         if (response.error || !response.access_token) {
-          reject(new Error('Googleログインが完了しませんでした。もう一度お試しください。'));
+          reject(
+            new Error(
+              response.error_description ||
+                response.error ||
+                'Google sign-in did not complete. Please choose an account and try again.',
+            ),
+          );
           return;
         }
         resolve(response.access_token);
       },
     });
 
-    tokenClient.requestAccessToken({ prompt });
+    tokenClient.requestAccessToken({ prompt: 'select_account consent' });
   });
 }
 
 export function revokeGoogleAccessToken(accessToken: string) {
+  if (!accessToken) return;
   window.google?.accounts?.oauth2?.revoke(accessToken);
 }
 
-export async function insertGoogleCalendarEvents(
-  accessToken: string,
-  events: GoogleCalendarEventInput[],
-) {
-  const timeZone = 'Asia/Tokyo';
+export async function insertGoogleCalendarEvents(accessToken: string, events: GoogleCalendarEventInput[]) {
+  if (!accessToken) {
+    throw new Error('Google access token is missing. Please choose a Google account again.');
+  }
+  if (!events.length) {
+    throw new Error('There are no events selected for Google Calendar.');
+  }
 
   return Promise.all(
     events.map(async (event) => {
@@ -100,28 +121,26 @@ export async function insertGoogleCalendarEvents(
         },
         body: JSON.stringify({
           summary: event.title,
-          description: `${event.memo}\n\n優先度: ${event.priority}`,
+          description: `${event.memo}\n\nPriority: ${event.priority}`,
           start: {
             dateTime: toTokyoDateTime(event.start),
-            timeZone,
+            timeZone: tokyoTimeZone,
           },
           end: {
             dateTime: toTokyoDateTime(event.end),
-            timeZone,
+            timeZone: tokyoTimeZone,
           },
           extendedProperties: {
             private: {
               priority: event.priority,
-              source: 'MORNING FLOW AI',
+              source: 'MORNING FLOW AI v2.8',
             },
           },
         }),
       });
 
       if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        const message = payload?.error?.message ?? 'Googleカレンダーへの登録に失敗しました。';
-        throw new Error(message);
+        throw new Error(await buildCalendarErrorMessage(response));
       }
 
       return response.json();
@@ -134,9 +153,15 @@ function toTokyoDateTime(date: Date) {
     dateStyle: 'short',
     hour12: false,
     timeStyle: 'medium',
-    timeZone: 'Asia/Tokyo',
+    timeZone: tokyoTimeZone,
   });
   return formatter.format(date).replace(' ', 'T');
+}
+
+async function buildCalendarErrorMessage(response: Response) {
+  const payload = (await response.json().catch(() => null)) as CalendarApiErrorPayload | null;
+  const detail = payload?.error?.message || response.statusText || 'Unknown error';
+  return `Google Calendar registration failed (${response.status}): ${detail}`;
 }
 
 function loadGoogleIdentityServices() {
@@ -147,20 +172,35 @@ function loadGoogleIdentityServices() {
   return new Promise<void>((resolve, reject) => {
     const existingScript = document.getElementById(googleIdentityScriptId) as HTMLScriptElement | null;
     if (existingScript) {
-      existingScript.addEventListener('load', () => resolve(), { once: true });
-      existingScript.addEventListener('error', () => reject(new Error('Googleログインの読み込みに失敗しました。')), {
-        once: true,
-      });
+      waitForGoogleIdentityServices().then(resolve, reject);
       return;
     }
 
     const script = document.createElement('script');
     script.id = googleIdentityScriptId;
-    script.src = 'https://accounts.google.com/gsi/client';
+    script.src = googleIdentityScriptUrl;
     script.async = true;
     script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Googleログインの読み込みに失敗しました。'));
+    script.onload = () => waitForGoogleIdentityServices().then(resolve, reject);
+    script.onerror = () => reject(new Error('Failed to load Google sign-in. Please check the network and try again.'));
     document.head.appendChild(script);
+  });
+}
+
+function waitForGoogleIdentityServices() {
+  return new Promise<void>((resolve, reject) => {
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      if (window.google?.accounts?.oauth2) {
+        window.clearInterval(timer);
+        resolve();
+        return;
+      }
+
+      if (Date.now() - startedAt > 8000) {
+        window.clearInterval(timer);
+        reject(new Error('Google sign-in took too long to initialize. Please reload the page and try again.'));
+      }
+    }, 100);
   });
 }

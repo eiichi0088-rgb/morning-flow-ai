@@ -140,7 +140,7 @@ function createPrivateSessionKeys(sessionId: string): PrivateSessionKeys {
   return {
     draft: `morning-flow-ai:session:${sessionId}:transcript-draft`,
     shopping: `morning-flow-ai:session:${sessionId}:shopping-list`,
-    snapshots: `morning-flow-ai:v2.7:session:${sessionId}:snapshots`,
+    snapshots: `morning-flow-ai:v2.8:session:${sessionId}:snapshots`,
   };
 }
 
@@ -153,7 +153,7 @@ function removeLegacySharedStorage(currentSessionId: string) {
     .filter((key) => key.startsWith('morning-flow-ai:snapshots:private-session'))
     .forEach((key) => localStorage.removeItem(key));
   Object.keys(localStorage)
-    .filter((key) => key.startsWith('morning-flow-ai:v2.7:session:') && !key.includes(`:${currentSessionId}:`))
+    .filter((key) => key.startsWith('morning-flow-ai:v2.8:session:') && !key.includes(`:${currentSessionId}:`))
     .forEach((key) => localStorage.removeItem(key));
 }
 
@@ -637,7 +637,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.7</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.8</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -908,7 +908,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.7</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.8</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
@@ -1443,19 +1443,27 @@ function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
   const selectedEvents = events.filter((event) => selectedEventIds.includes(event.id));
 
   React.useEffect(() => {
+    return () => {
+      if (accessToken) {
+        revokeGoogleAccessToken(accessToken);
+      }
+    };
+  }, [accessToken]);
+
+  React.useEffect(() => {
     setSelectedEventIds(events.map((event) => event.id));
   }, [events]);
 
   const connectGoogle = () => {
     setIsSigningIn(true);
     setStatusMessage('');
-    requestGoogleAccessToken('select_account consent')
+    requestGoogleAccessToken()
       .then((token) => {
         setAccessToken(token);
-        setStatusMessage('Googleカレンダーに接続しました。登録する予定を確認してください。');
+        setStatusMessage('Google account selected. Please confirm the events before registration.');
       })
       .catch((reason: unknown) => {
-        setStatusMessage(reason instanceof Error ? reason.message : 'Googleログインに失敗しました。');
+        setStatusMessage(reason instanceof Error ? reason.message : 'Google sign-in failed.');
       })
       .finally(() => setIsSigningIn(false));
   };
@@ -1465,7 +1473,7 @@ function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
       revokeGoogleAccessToken(accessToken);
     }
     setAccessToken('');
-    setStatusMessage('Googleカレンダー連携を解除しました。');
+    setStatusMessage('Google Calendar connection was cleared.');
   };
 
   const toggleEvent = (eventId: string) => {
@@ -1481,10 +1489,12 @@ function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
     setStatusMessage('');
     insertGoogleCalendarEvents(accessToken, selectedEvents)
       .then(() => {
-        setStatusMessage(`${selectedEvents.length}件の予定をGoogleカレンダーへ登録しました。`);
+        setStatusMessage(`${selectedEvents.length} events were added to Google Calendar.`);
+        revokeGoogleAccessToken(accessToken);
+        setAccessToken('');
       })
       .catch((reason: unknown) => {
-        setStatusMessage(reason instanceof Error ? reason.message : 'Googleカレンダーへの登録に失敗しました。');
+        setStatusMessage(reason instanceof Error ? reason.message : 'Google Calendar registration failed.');
       })
       .finally(() => setIsRegistering(false));
   };
@@ -1801,12 +1811,13 @@ function createCalendarEvents(plan: MorningPlan): CalendarEvent[] {
   return plan.schedule
     .map((item, index) => {
       const range = parseScheduleTime(item.time);
-      if (!range) return null;
+      const fallbackStartMinutes = 9 * 60 + index * 60;
+      const startMinutes = range?.startMinutes ?? fallbackStartMinutes;
 
       const start = new Date(today);
-      start.setHours(Math.floor(range.startMinutes / 60), range.startMinutes % 60, 0, 0);
+      start.setHours(Math.floor(startMinutes / 60), startMinutes % 60, 0, 0);
 
-      const endMinutes = range.endMinutes ?? range.startMinutes + 60;
+      const endMinutes = range?.endMinutes ?? startMinutes + 60;
       const end = new Date(today);
       end.setHours(Math.floor(endMinutes / 60), endMinutes % 60, 0, 0);
       if (end <= start) {
