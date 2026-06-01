@@ -1,5 +1,12 @@
 ﻿# CHANGELOG
 
+## Version 2.10 - 2026-06-01
+
+- Version 2.9 UIを維持した保存安定化修正。
+- セッションIDをlocalStorageに保存し、画面更新後も同じユーザーは同じ保存キーを使うよう修正。
+- snapshots保存キーを `session:{sessionId}:snapshots` 形式へ変更。
+- 画面更新後も予定と買い物リストを同じセッションから復元できるよう修正。
+
 ## Version 2.9 - 2026-06-01
 
 - Version 2.8 UIを維持したGoogle Calendar日付解析修正。

@@ -116,6 +116,8 @@ type PrivateSessionKeys = {
   snapshots: string;
 };
 
+const privateSessionIdStorageKey = 'morning-flow-ai:session-id:v2';
+
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
   { label: '✓ 完了', value: 'done' },
   { label: '△ 一部完了', value: 'partial' },
@@ -130,17 +132,23 @@ const energyOptions: { label: string; value: EnergyMood }[] = [
 ];
 
 function createPrivateSessionId() {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const savedSessionId = localStorage.getItem(privateSessionIdStorageKey);
+  if (savedSessionId) return savedSessionId;
+
+  const nextSessionId =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  localStorage.setItem(privateSessionIdStorageKey, nextSessionId);
+  return nextSessionId;
 }
 
 function createPrivateSessionKeys(sessionId: string): PrivateSessionKeys {
   return {
     draft: `morning-flow-ai:session:${sessionId}:transcript-draft`,
     shopping: `morning-flow-ai:session:${sessionId}:shopping-list`,
-    snapshots: `morning-flow-ai:v2.8:session:${sessionId}:snapshots`,
+    snapshots: `session:${sessionId}:snapshots`,
   };
 }
 
@@ -150,10 +158,10 @@ function removeLegacySharedStorage(currentSessionId: string) {
     .filter((key) => key.startsWith('morning-flow-ai:session:') && !key.includes(`:${currentSessionId}:`))
     .forEach((key) => localStorage.removeItem(key));
   Object.keys(localStorage)
-    .filter((key) => key.startsWith('morning-flow-ai:snapshots:private-session'))
+    .filter((key) => key.startsWith('morning-flow-ai:v2.8:session:') && !key.includes(`:${currentSessionId}:`))
     .forEach((key) => localStorage.removeItem(key));
   Object.keys(localStorage)
-    .filter((key) => key.startsWith('morning-flow-ai:v2.8:session:') && !key.includes(`:${currentSessionId}:`))
+    .filter((key) => key.startsWith('session:') && key.endsWith(':snapshots') && !key.includes(`:${currentSessionId}:`))
     .forEach((key) => localStorage.removeItem(key));
 }
 
@@ -637,7 +645,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.9</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.10</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -908,7 +916,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.9</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.10</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">

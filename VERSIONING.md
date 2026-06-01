@@ -5,7 +5,16 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.9 is based on v2.8 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.10 is based on v2.9 normal UI. Do not mix v3.0 or v3.1 UI.
+
+## Version 2.10 Storage Stability Patch - 2026-06-01
+
+- Screen display: v2.10
+- ZIP: morning-flow-ai-v2.10.zip
+- Next planned version: Version 2.11
+- Version 2.9 UI, microphone button, layout, button placement, and CSS are preserved.
+- Session ID is saved to localStorage so refresh keeps the same private session.
+- snapshots storage key is `session:{sessionId}:snapshots`.
 
 ## Version 2.9 Google Calendar Date Patch - 2026-06-01
 
