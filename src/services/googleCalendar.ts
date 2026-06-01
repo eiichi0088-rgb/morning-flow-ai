@@ -111,51 +111,91 @@ export async function insertGoogleCalendarEvents(accessToken: string, events: Go
     throw new Error('There are no events selected for Google Calendar.');
   }
 
-  return Promise.all(
-    events.map(async (event) => {
-      const startDateTime = toGoogleCalendarTokyoDateTime(event.start);
-      const endDateTime = toGoogleCalendarTokyoDateTime(event.end);
+  console.info('[MORNING FLOW AI] Google Calendar selected event count', {
+    count: events.length,
+  });
 
-      console.info('[MORNING FLOW AI] Google Calendar event payload', {
+  const createdEvents = [];
+  const failedEvents: Array<{ title: string; message: string }> = [];
+
+  for (const [index, event] of events.entries()) {
+    try {
+      createdEvents.push(await insertSingleGoogleCalendarEvent(accessToken, event, index, events.length));
+    } catch (error) {
+      failedEvents.push({
         title: event.title,
-        startDateTime,
-        endDateTime,
+        message: error instanceof Error ? error.message : 'Unknown Google Calendar error.',
+      });
+    }
+  }
+
+  console.info('[MORNING FLOW AI] Google Calendar registration result', {
+    requested: events.length,
+    created: createdEvents.length,
+    failed: failedEvents.length,
+    failedEvents,
+  });
+
+  if (failedEvents.length) {
+    throw new Error(
+      `Google Calendar registration partially failed. Created ${createdEvents.length} of ${events.length}. Failed: ${failedEvents
+        .map((event) => event.title)
+        .join(', ')}`,
+    );
+  }
+
+  return createdEvents;
+}
+
+async function insertSingleGoogleCalendarEvent(
+  accessToken: string,
+  event: GoogleCalendarEventInput,
+  index: number,
+  total: number,
+) {
+  const startDateTime = toGoogleCalendarTokyoDateTime(event.start);
+  const endDateTime = toGoogleCalendarTokyoDateTime(event.end);
+
+  console.info('[MORNING FLOW AI] Google Calendar event payload', {
+    index: index + 1,
+    total,
+    title: event.title,
+    startDateTime,
+    endDateTime,
+    timeZone: tokyoTimeZone,
+  });
+
+  const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      summary: event.title,
+      description: `${event.memo}\n\nPriority: ${event.priority}`,
+      start: {
+        dateTime: startDateTime,
         timeZone: tokyoTimeZone,
-      });
-
-      const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
+      },
+      end: {
+        dateTime: endDateTime,
+        timeZone: tokyoTimeZone,
+      },
+      extendedProperties: {
+        private: {
+          priority: event.priority,
+          source: 'MORNING FLOW AI v2.11.2',
         },
-        body: JSON.stringify({
-          summary: event.title,
-          description: `${event.memo}\n\nPriority: ${event.priority}`,
-          start: {
-            dateTime: startDateTime,
-            timeZone: tokyoTimeZone,
-          },
-          end: {
-            dateTime: endDateTime,
-            timeZone: tokyoTimeZone,
-          },
-          extendedProperties: {
-            private: {
-              priority: event.priority,
-              source: 'MORNING FLOW AI v2.11.1',
-            },
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(await buildCalendarErrorMessage(response));
-      }
-
-      return response.json();
+      },
     }),
-  );
+  });
+
+  if (!response.ok) {
+    throw new Error(await buildCalendarErrorMessage(response));
+  }
+
+  return response.json();
 }
 
 function toGoogleCalendarTokyoDateTime(date: Date) {

@@ -5,8 +5,16 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.11.1 is based on v2.11 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.11.2 is based on v2.11.1 normal UI. Do not mix v3.0 or v3.1 UI.
 
+
+## Version 2.11.2 Google Calendar Multi-Event Patch - 2026-06-02
+
+- Screen display: v2.11.2
+- ZIP: morning-flow-ai-v2.11.2.zip
+- Next planned version: Version 2.11.3
+- UI, CSS, layout, microphone, shopping, snapshots, and session behavior are preserved.
+- Google Calendar selected event count and created event count must match.
 ## Version 2.11.1 Google Calendar Time Patch - 2026-06-02
 
 - Screen display: v2.11.1

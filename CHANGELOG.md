@@ -1,5 +1,11 @@
 ﻿# CHANGELOG
 
+
+## Version 2.11.2 - 2026-06-02
+
+- Google Calendar multiple-event registration fix.
+- Selected events are now sent sequentially to Google Calendar API and the created count is checked against the selected count.
+- Added console logging for selected event count, each payload, and registration result.
 ## Version 2.11.1 - 2026-06-02
 
 - Google Calendar registration time mismatch fix.
