@@ -1,6 +1,13 @@
 ﻿# CHANGELOG
 
 
+## Version 2.11.6 - 2026-06-02
+
+- Removed the Today Capture display card to avoid duplicating Editable Transcript.
+- Removed the large AI Coach priority display from the main result screen.
+- Removed the detailed 4-category classification, AI priority ranking, and AI advice detail block.
+- Editable Transcript, microphone input, today's schedule, shopping list, future events, Google Calendar, and Apple Calendar export are preserved.
+
 ## Version 2.11.5 - 2026-06-02
 
 - Removed the UPDATE INSTRUCTION flow from the main screen.

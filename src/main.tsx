@@ -6,25 +6,19 @@ import {
   Brain,
   CalendarClock,
   CalendarPlus,
-  CheckCircle2,
   ChevronRight,
-  Compass,
   Download,
-  Flag,
-  HeartPulse,
   Lightbulb,
   ListChecks,
   Loader2,
   Home,
   Mic,
   RefreshCw,
-  Route,
   Pencil,
   Share2,
   ShoppingCart,
   Sparkles,
   Square,
-  Target,
   Trash2,
 } from 'lucide-react';
 import { createAiMorningPlan, type MorningPlan } from './services/aiPlanner';
@@ -659,7 +653,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.11.5</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.11.6</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -728,16 +722,6 @@ function App() {
           />
         )}
 
-        <div className="transcript-card">
-          <div className="transcript-header">
-            <span>Today Capture</span>
-            {interimTranscript && <span className="live-label">Listening</span>}
-          </div>
-          <div className={`transcript-box ${resultText ? 'has-text' : ''}`}>
-            {resultText || '今日の予定、やること、目標、目的をそのまま話してください。'}
-          </div>
-        </div>
-
         {hasEditableTranscript && (
           <TranscriptEditor
             onCancel={restoreOriginalTranscript}
@@ -764,21 +748,7 @@ function App() {
           </button>
         )}
 
-        {false && (
-          <button
-            className={`organize-button ${isOrganizing ? 'is-organizing' : ''}`}
-            type="button"
-            onClick={applyScheduleUpdate}
-            disabled={isOrganizing}
-          >
-            <Brain size={21} />
-            {isOrganizing ? '既存スケジュールを更新中' : 'この内容をスケジュールに反映'}
-            <Sparkles size={18} />
-          </button>
-        )}
-
         <div ref={planAnchorRef} />
-        {plan && <CoachCard plan={plan} />}
         {plan && <PlanView highlightedScheduleKeys={highlightedScheduleKeys} plan={plan} shoppingItems={shoppingItems} />}
 
         <div className="action-row">
@@ -912,7 +882,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.11.5</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.11.6</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
@@ -1187,57 +1157,6 @@ function TranscriptEditor({
   );
 }
 
-function CoachCard({ plan }: { plan: MorningPlan }) {
-  const conditions = plan.coach.successConditions.length
-    ? plan.coach.successConditions
-    : plan.todos.slice(0, 3);
-
-  return (
-    <section className="coach-card" aria-label="AI Morning Coach">
-      <div className="coach-top">
-        <div>
-          <span>AI Morning Coach</span>
-          <h2>今日の最重要ミッション</h2>
-        </div>
-        <Compass size={24} />
-      </div>
-
-      <p className="mission-text">{plan.coach.mission}</p>
-
-      <div className="focus-three">
-        <div>
-          <span>① 最重要</span>
-          <strong>{plan.coach.focusItems.highest}</strong>
-        </div>
-        <div>
-          <span>② 重要</span>
-          <strong>{plan.coach.focusItems.important}</strong>
-        </div>
-        <div>
-          <span>③ できれば実施</span>
-          <strong>{plan.coach.focusItems.optional}</strong>
-        </div>
-      </div>
-
-      <div className="coach-advice">
-        <Lightbulb size={17} />
-        <span>{plan.coach.morningAdvice}</span>
-      </div>
-
-      <div className="success-conditions">
-        <span>今日の成功条件</span>
-        {conditions.map((condition) => (
-          <div key={condition}>
-            <CheckCircle2 size={16} />
-            <strong>{condition}</strong>
-          </div>
-        ))}
-        <p>この3つを達成すれば、今日は成功です。</p>
-      </div>
-    </section>
-  );
-}
-
 function ReflectionView({
   carriedTodos,
   onCarryOver,
@@ -1385,19 +1304,8 @@ function PlanView({
     [plan.todos, today],
   );
   const visibleSchedule = todayEvents.slice(0, 5);
-  const topTask = todayTodos[0] ?? visibleSchedule[0]?.title ?? '';
-  const todayPurpose = topTask ? `${topTask}\u3092\u9032\u3081\u308b` : '\u4eca\u65e5\u306e\u4e88\u5b9a\u306f\u307e\u3060\u3042\u308a\u307e\u305b\u3093\u3002';
-
   return (
     <section className="plan-stack" aria-label="AI organized result">
-      <PlanSection icon={<Flag size={18} />} title={'\u4eca\u65e5\u306e\u76ee\u7684'}>
-        <p className="purpose-text">{todayPurpose}</p>
-      </PlanSection>
-
-      <PlanSection icon={<Target size={18} />} title={'\u4eca\u65e5\u306e\u6700\u512a\u5148'}>
-        <p className="purpose-text">{topTask || '\u4eca\u65e5\u306e\u6700\u512a\u5148\u30bf\u30b9\u30af\u306f\u307e\u3060\u3042\u308a\u307e\u305b\u3093\u3002'}</p>
-      </PlanSection>
-
       <PlanSection icon={<ListChecks size={18} />} title={'\u4eca\u65e5\u306e\u3084\u308b\u3053\u3068'}>
         {todayTodos.length ? (
           <div className="todo-list">
@@ -1471,49 +1379,6 @@ function PlanView({
         {isCalendarOpen && <GoogleCalendarExportPanel events={calendarEvents} />}
       </PlanSection>
 
-      <button className="calendar-download-button" onClick={() => setShowDetails((current) => !current)} type="button">
-        {showDetails ? '\u8a73\u7d30\u3092\u9589\u3058\u308b' : '\u8a73\u3057\u304f\u898b\u308b'}
-      </button>
-
-      {showDetails && (
-        <>
-          <PlanSection icon={<Target size={18} />} title={'\u4eca\u65e5\u306e\u76ee\u6a19'}>
-            <ul className="clean-list">
-              {plan.goals.map((goal) => (
-                <li key={goal}>{goal}</li>
-              ))}
-            </ul>
-          </PlanSection>
-
-          <PlanSection icon={<HeartPulse size={18} />} title={'4\u30ab\u30c6\u30b4\u30ea\u30fc\u5206\u985e'}>
-            <div className="category-grid">
-              <CategoryColumn title={'\u4ed5\u4e8b'} items={plan.categories.work} />
-              <CategoryColumn title={'\u5065\u5eb7'} items={plan.categories.health} />
-              <CategoryColumn title={'\u5bb6\u65cf'} items={plan.categories.family} />
-              <CategoryColumn title={'\u5b66\u7fd2'} items={plan.categories.learning} />
-            </div>
-          </PlanSection>
-
-          <PlanSection icon={<Route size={18} />} title={'\u512a\u5148\u9806\u4f4d'}>
-            <div className="priority-grid">
-              <PriorityColumn title={'1. \u6700\u512a\u5148'} items={plan.priorities.highest} />
-              <PriorityColumn title={'2. \u91cd\u8981'} items={plan.priorities.important} />
-              <PriorityColumn title={'3. \u6642\u9593\u304c\u3042\u308c\u3070'} items={plan.priorities.optional} />
-            </div>
-          </PlanSection>
-
-          <PlanSection icon={<Lightbulb size={18} />} title={'AI\u30a2\u30c9\u30d0\u30a4\u30b9'}>
-            <ul className="advice-list">
-              {plan.advice.map((advice) => (
-                <li key={advice}>
-                  <CheckCircle2 size={16} />
-                  <span>{advice}</span>
-                </li>
-              ))}
-            </ul>
-          </PlanSection>
-        </>
-      )}
     </section>
   );
 }
@@ -1775,30 +1640,6 @@ function PlanSection({
       </div>
       {children}
     </article>
-  );
-}
-
-function PriorityColumn({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div className="priority-column">
-      <h3>{title}</h3>
-      {items.map((item) => (
-        <span key={item}>{item}</span>
-      ))}
-    </div>
-  );
-}
-
-function CategoryColumn({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div className="category-column">
-      <h3>{title}</h3>
-      {items.length ? (
-        items.map((item) => <span key={item}>{item}</span>)
-      ) : (
-        <span className="muted-category">該当なし</span>
-      )}
-    </div>
   );
 }
 
