@@ -38,6 +38,7 @@ import {
 } from './services/googleCalendar';
 import {
   loadLatestSnapshot,
+  deleteReviewTasks,
   saveMorningSnapshot,
   saveReview,
   type MorningSnapshot,
@@ -479,6 +480,21 @@ function App() {
     setPlan((currentPlan) => (currentPlan ? addCarryoverToPlan(currentPlan, todos) : currentPlan));
   };
 
+  const deleteReflectionTodos = (todos: string[]) => {
+    if (!previousSnapshot || !todos.length) return;
+
+    const nextSnapshot = deleteReviewTasks(previousSnapshot.id, todos, privateSessionKeys.snapshots);
+    setPreviousSnapshot(nextSnapshot);
+    setReviewStatuses((current) => {
+      const nextStatuses = { ...current };
+      todos.forEach((todo) => {
+        delete nextStatuses[todo];
+      });
+      return nextStatuses;
+    });
+    setCarriedTodos((current) => current.filter((todo) => !todos.includes(todo)));
+  };
+
   const saveEditedTranscript = () => {
     const normalized = transcript.trim();
     setTranscript(normalized);
@@ -710,6 +726,8 @@ function App() {
         {previousSnapshot && (
           <ReflectionView
             carriedTodos={carriedTodos}
+            onDeleteAll={() => deleteReflectionTodos(previousSnapshot.plan.todos)}
+            onDeleteTask={(task) => deleteReflectionTodos([task])}
             onCarryOver={carryOverTodos}
             onStatusChange={(task, status) => {
               const nextStatuses = { ...reviewStatuses, [task]: status };
@@ -1283,20 +1301,25 @@ function CoachCard({ plan }: { plan: MorningPlan }) {
 function ReflectionView({
   carriedTodos,
   onCarryOver,
+  onDeleteAll,
+  onDeleteTask,
   onStatusChange,
   snapshot,
   statuses,
 }: {
   carriedTodos: string[];
   onCarryOver: (todos: string[]) => void;
+  onDeleteAll: () => void;
+  onDeleteTask: (task: string) => void;
   onStatusChange: (task: string, status: ReviewStatus) => void;
   snapshot: MorningSnapshot;
   statuses: Record<string, ReviewStatus>;
 }) {
+  const [swipedTodo, setSwipedTodo] = React.useState('');
+  const pointerStartX = React.useRef<number | null>(null);
   const todos = snapshot.plan.todos;
   const completed = todos.filter((todo) => statuses[todo] === 'done').length;
   const partial = todos.filter((todo) => statuses[todo] === 'partial').length;
-  const reviewed = todos.filter((todo) => statuses[todo]).length;
   const score = todos.length ? Math.round(((completed + partial * 0.5) / todos.length) * 100) : 0;
   const unfinished = todos.filter((todo) => statuses[todo] === 'partial' || statuses[todo] === 'missed');
   const reflection = createReflectionMessage(statuses, todos);
@@ -1305,16 +1328,31 @@ function ReflectionView({
     onCarryOver(Array.from(new Set([...carriedTodos, ...unfinished])));
   };
 
+  const deleteAll = () => {
+    if (!todos.length) return;
+    if (window.confirm('\u3059\u3079\u3066\u306e\u632f\u308a\u8fd4\u308a\u9805\u76ee\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f')) {
+      onDeleteAll();
+    }
+  };
+
+  const deleteTask = (todo: string) => {
+    onDeleteTask(todo);
+    setSwipedTodo('');
+  };
+
   return (
-    <section className="reflection-card" aria-label="昨日の振り返り">
+    <section className="reflection-card" aria-label="yesterday review">
       <div className="reflection-header">
         <div>
-          <span>昨日の振り返り</span>
-          <strong>今日につなげる</strong>
+          <span>{'\u6628\u65e5\u306e\u632f\u308a\u8fd4\u308a'}</span>
+          <strong>{'\u4eca\u65e5\u306b\u3064\u306a\u3052\u308b'}</strong>
         </div>
+        <button className="reflection-clear-button" disabled={!todos.length} onClick={deleteAll} type="button">
+          {'\u3059\u3079\u3066\u524a\u9664'}
+        </button>
         <div className="score-ring">
           <b>{score}%</b>
-          <small>{completed}件完了</small>
+          <small>{completed}{'\u4ef6\u5b8c\u4e86'}</small>
         </div>
       </div>
 
@@ -1322,19 +1360,40 @@ function ReflectionView({
 
       <div className="review-list">
         {todos.map((todo) => (
-          <div className="review-item" key={todo}>
-            <span>{todo}</span>
-            <div className="review-buttons" aria-label={`${todo}の達成状況`}>
-              {reviewOptions.map((option) => (
-                <button
-                  className={statuses[todo] === option.value ? 'selected' : ''}
-                  key={option.value}
-                  onClick={() => onStatusChange(todo, option.value)}
-                  type="button"
-                >
-                  {option.label}
-                </button>
-              ))}
+          <div className={`review-swipe-row ${swipedTodo === todo ? 'is-swiped' : ''}`} key={todo}>
+            <div className="review-delete-action">
+              <button onClick={() => deleteTask(todo)} type="button">
+                {'\u524a\u9664'}
+              </button>
+            </div>
+            <div
+              className="review-item"
+              onPointerDown={(event) => {
+                pointerStartX.current = event.clientX;
+              }}
+              onPointerUp={(event) => {
+                if (pointerStartX.current === null) return;
+                const deltaX = event.clientX - pointerStartX.current;
+                pointerStartX.current = null;
+                if (Math.abs(deltaX) > 42) {
+                  setSwipedTodo((current) => (current === todo ? '' : todo));
+                }
+              }}
+            >
+              <span>{todo}</span>
+              <div className="review-buttons" aria-label={`${todo} review status`}
+              >
+                {reviewOptions.map((option) => (
+                  <button
+                    className={statuses[todo] === option.value ? 'selected' : ''}
+                    key={option.value}
+                    onClick={() => onStatusChange(todo, option.value)}
+                    type="button"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         ))}
@@ -1346,15 +1405,15 @@ function ReflectionView({
       </div>
 
       <div className="reflection-footer">
-        <span>{todos.length}件中{completed}件完了</span>
+        <span>{todos.length}{'\u4ef6\u4e2d'}{completed}{'\u4ef6\u5b8c\u4e86'}</span>
         <button disabled={!unfinished.length} onClick={carryUnfinished} type="button">
-          今日へ繰り越す
+          {'\u4eca\u65e5\u3078\u7e70\u308a\u8d8a\u3059'}
           <ChevronRight size={17} />
         </button>
       </div>
 
       {carriedTodos.length > 0 && (
-        <p className="carryover-note">{carriedTodos.length}件を今日のAI整理に反映します。</p>
+        <p className="carryover-note">{carriedTodos.length}{'\u4ef6\u3092\u4eca\u65e5\u306eAI\u6574\u7406\u306b\u53cd\u6620\u3057\u307e\u3059\u3002'}</p>
       )}
     </section>
   );

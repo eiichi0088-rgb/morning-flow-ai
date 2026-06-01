@@ -46,6 +46,33 @@ export function saveReview(snapshotId: string, statuses: Record<string, ReviewSt
   saveSnapshots(snapshots, storageKey);
 }
 
+export function deleteReviewTasks(snapshotId: string, tasks: string[], storageKey: string) {
+  const taskSet = new Set(tasks);
+  const snapshots = loadSnapshots(storageKey).map((snapshot) => {
+    if (snapshot.id !== snapshotId) return snapshot;
+
+    const nextStatuses = { ...(snapshot.review?.statuses ?? {}) };
+    tasks.forEach((task) => {
+      delete nextStatuses[task];
+    });
+
+    return {
+      ...snapshot,
+      plan: {
+        ...snapshot.plan,
+        todos: snapshot.plan.todos.filter((todo) => !taskSet.has(todo)),
+      },
+      review: {
+        statuses: nextStatuses,
+        updatedAt: new Date().toISOString(),
+      },
+    };
+  });
+
+  saveSnapshots(snapshots, storageKey);
+  return snapshots.find((snapshot) => snapshot.id === snapshotId) ?? null;
+}
+
 function loadSnapshots(storageKey: string): MorningSnapshot[] {
   try {
     const raw = localStorage.getItem(storageKey);

@@ -466,13 +466,58 @@ h1 {
   gap: 10px;
 }
 
+.review-swipe-row {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.review-delete-action {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 86px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, rgba(255, 107, 87, 0.92), rgba(157, 41, 37, 0.92));
+}
+
+.review-delete-action button,
+.reflection-clear-button {
+  border: 0;
+  color: #fff7f4;
+  background: transparent;
+  font-weight: 860;
+  cursor: pointer;
+}
+
+.reflection-clear-button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 142, 124, 0.28);
+  border-radius: 999px;
+  background: rgba(157, 41, 37, 0.32);
+  font-size: 0.78rem;
+}
+
+.reflection-clear-button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
 .review-item {
+  position: relative;
   display: grid;
   gap: 9px;
   padding: 11px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
   background: rgba(2, 6, 14, 0.18);
+  touch-action: pan-y;
+  transition: transform 180ms ease;
+}
+
+.review-swipe-row.is-swiped .review-item {
+  transform: translateX(-86px);
 }
 
 .review-item > span {
