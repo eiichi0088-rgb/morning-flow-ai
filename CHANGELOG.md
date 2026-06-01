@@ -6,6 +6,7 @@
 - Google Calendar confirmation screen URL time fix.
 - The confirmation URL now sends dates as YYYYMMDDTHHMMSS with ctz=Asia/Tokyo so the Google Calendar creation screen matches the MORNING FLOW AI display time.
 - Google Calendar API registration logic was not changed.
+- Removed Google Calendar confirmation screen buttons and per-event Google open links to keep batch registration simple.
 
 ## Version 2.11.3 - 2026-06-02
 

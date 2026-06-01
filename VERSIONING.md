@@ -17,6 +17,7 @@
 - Next planned version: Version 2.11.5
 - UI, CSS, layout, Google Calendar API registration, shopping, snapshots, and session behavior are preserved.
 - Google Calendar confirmation screen URLs use YYYYMMDDTHHMMSS and ctz=Asia/Tokyo.
+- Google Calendar confirmation screen buttons are removed; the API batch registration button remains the only Google registration path.
 
 ## Version 2.11.3 Google Calendar Partial Success Patch - 2026-06-02
 

@@ -10,7 +10,6 @@ import {
   ChevronRight,
   Compass,
   Download,
-  ExternalLink,
   Flag,
   HeartPulse,
   Lightbulb,
@@ -1621,13 +1620,6 @@ function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
       .finally(() => setIsRegistering(false));
   };
 
-  const openSelectedEventsInGoogle = () => {
-    selectedEvents.forEach((event) => {
-      window.open(createGoogleCalendarUrl(event), '_blank', 'noopener,noreferrer');
-    });
-    setStatusMessage('選択した予定をGoogleカレンダーの新規作成画面で開きました。登録先アカウントを画面上で確認してください。');
-  };
-
   if (!events.length) {
     return (
       <div className="calendar-panel">
@@ -1706,17 +1698,6 @@ function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
                 <small>優先度: {event.priority}</small>
               </div>
             </label>
-            <a
-              className="calendar-link"
-              href={createGoogleCalendarUrl(event)}
-              aria-label={`${event.title}をGoogleカレンダーで編集して登録`}
-              rel="noreferrer"
-              title="編集して登録"
-              target="_blank"
-            >
-              Googleで開く
-              <ExternalLink size={15} />
-            </a>
           </article>
           );
         })}
@@ -1733,16 +1714,6 @@ function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
       >
         <CalendarPlus size={18} />
         {isRegistering ? '登録中' : `Googleカレンダーへ登録 (${selectedEvents.length}件)`}
-      </button>
-
-      <button
-        className="calendar-download-button"
-        disabled={!selectedEvents.length}
-        onClick={openSelectedEventsInGoogle}
-        type="button"
-      >
-        <ExternalLink size={18} />
-        Googleカレンダー画面で確認して登録
       </button>
 
       {statusMessage && <p className="calendar-status">{statusMessage}</p>}
@@ -1795,15 +1766,6 @@ function CalendarExportPanel({ events }: { events: CalendarEvent[] }) {
               <strong>{event.title}</strong>
               <p>{event.memo}</p>
             </div>
-            <a
-              className="calendar-link"
-              href={createGoogleCalendarUrl(event)}
-              rel="noreferrer"
-              target="_blank"
-            >
-              Googleで開く
-              <ExternalLink size={15} />
-            </a>
           </article>
         ))}
       </div>
@@ -2244,18 +2206,6 @@ function addDays(date: Date, days: number) {
   return result;
 }
 
-function createGoogleCalendarUrl(event: CalendarEvent) {
-  const params = new URLSearchParams({
-    action: 'TEMPLATE',
-    ctz: 'Asia/Tokyo',
-    dates: `${toGoogleCalendarRenderTimestamp(event.start)}/${toGoogleCalendarRenderTimestamp(event.end)}`,
-    details: event.memo,
-    text: event.title,
-  });
-
-  return `https://calendar.google.com/calendar/render?${params.toString()}`;
-}
-
 function downloadIcs(events: CalendarEvent[]) {
   const now = toCalendarTimestamp(new Date());
   const lines = [
@@ -2290,13 +2240,6 @@ function toCalendarTimestamp(date: Date) {
   return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 }
 
-function toGoogleCalendarRenderTimestamp(date: Date) {
-  return [
-    `${date.getFullYear()}${padCalendarPart(date.getMonth() + 1)}${padCalendarPart(date.getDate())}`,
-    `${padCalendarPart(date.getHours())}${padCalendarPart(date.getMinutes())}${padCalendarPart(date.getSeconds())}`,
-  ].join('T');
-}
-
 function toLocalCalendarTimestamp(date: Date) {
   const formatter = new Intl.DateTimeFormat('sv-SE', {
     dateStyle: 'short',
@@ -2305,10 +2248,6 @@ function toLocalCalendarTimestamp(date: Date) {
     timeZone: 'Asia/Tokyo',
   });
   return formatter.format(date).replace(/[-: ]/g, '');
-}
-
-function padCalendarPart(value: number) {
-  return String(value).padStart(2, '0');
 }
 
 function escapeIcsText(value: string) {
