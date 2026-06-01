@@ -1,5 +1,11 @@
 ﻿# CHANGELOG
 
+## Version 2.11.1 - 2026-06-02
+
+- Google Calendar registration time mismatch fix.
+- Google Calendar payload now sends the same wall-clock start/end time shown in MORNING FLOW AI with `Asia/Tokyo`.
+- Added console logging before registration for event title, startDateTime, endDateTime, and timeZone.
+
 ## Version 2.11 - 2026-06-01
 
 - Version 2.10の機能を維持したAI整理結果の表示改善。

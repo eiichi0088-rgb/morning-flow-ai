@@ -113,6 +113,16 @@ export async function insertGoogleCalendarEvents(accessToken: string, events: Go
 
   return Promise.all(
     events.map(async (event) => {
+      const startDateTime = toGoogleCalendarTokyoDateTime(event.start);
+      const endDateTime = toGoogleCalendarTokyoDateTime(event.end);
+
+      console.info('[MORNING FLOW AI] Google Calendar event payload', {
+        title: event.title,
+        startDateTime,
+        endDateTime,
+        timeZone: tokyoTimeZone,
+      });
+
       const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
         method: 'POST',
         headers: {
@@ -123,17 +133,17 @@ export async function insertGoogleCalendarEvents(accessToken: string, events: Go
           summary: event.title,
           description: `${event.memo}\n\nPriority: ${event.priority}`,
           start: {
-            dateTime: toTokyoDateTime(event.start),
+            dateTime: startDateTime,
             timeZone: tokyoTimeZone,
           },
           end: {
-            dateTime: toTokyoDateTime(event.end),
+            dateTime: endDateTime,
             timeZone: tokyoTimeZone,
           },
           extendedProperties: {
             private: {
               priority: event.priority,
-              source: 'MORNING FLOW AI v2.9',
+              source: 'MORNING FLOW AI v2.11.1',
             },
           },
         }),
@@ -148,14 +158,15 @@ export async function insertGoogleCalendarEvents(accessToken: string, events: Go
   );
 }
 
-function toTokyoDateTime(date: Date) {
-  const formatter = new Intl.DateTimeFormat('sv-SE', {
-    dateStyle: 'short',
-    hour12: false,
-    timeStyle: 'medium',
-    timeZone: tokyoTimeZone,
-  });
-  return formatter.format(date).replace(' ', 'T');
+function toGoogleCalendarTokyoDateTime(date: Date) {
+  return [
+    `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`,
+    `${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}:${padDatePart(date.getSeconds())}`,
+  ].join('T');
+}
+
+function padDatePart(value: number) {
+  return String(value).padStart(2, '0');
 }
 
 async function buildCalendarErrorMessage(response: Response) {
