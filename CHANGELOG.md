@@ -1,6 +1,13 @@
 ﻿# CHANGELOG
 
 
+## Version 2.12.0 - 2026-06-02
+
+- Added FOLLOW UP MANAGER initial implementation for missed replies and callback management.
+- Added a home screen button for 未返信・折り返し with pending and due-today counts.
+- Added follow-up registration with name, optional company, content, priority, due date, type, AI suggestion, completion history, and due-today notification.
+- Follow-up data is stored separately per private session key and does not mix with schedule or shopping data.
+
 ## Version 2.11.6 - 2026-06-02
 
 - Removed the Today Capture display card to avoid duplicating Editable Transcript.

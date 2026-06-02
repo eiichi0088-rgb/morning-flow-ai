@@ -5,12 +5,22 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.11.6 is based on v2.11.5 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.12.0 is based on v2.11.6 normal UI. Do not mix v3.0 or v3.1 UI.
 
 
 
 
 
+
+
+## Version 2.12.0 FOLLOW UP MANAGER - 2026-06-02
+
+- Screen display: v2.12.0
+- ZIP: morning-flow-ai-v2.12.0.zip
+- Next planned version: Version 2.12.1
+- FOLLOW UP MANAGER is added as separate data from schedules and shopping.
+- Follow-up storage key: morning-flow-ai:session:{sessionId}:follow-ups.
+- Google Calendar, Apple Calendar export, date parsing, session ID, snapshots, shopping list, and microphone behavior are preserved.
 
 ## Version 2.11.6 Simple Result UI Patch - 2026-06-02
 

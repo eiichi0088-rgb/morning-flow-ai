@@ -7,12 +7,18 @@ import {
   CalendarClock,
   CalendarPlus,
   ChevronRight,
+  CheckCircle2,
+  Clock,
   Download,
+  Mail,
+  MessageCircle,
   Lightbulb,
   ListChecks,
   Loader2,
   Home,
   Mic,
+  Phone,
+  Plus,
   RefreshCw,
   Pencil,
   Share2,
@@ -103,10 +109,30 @@ type CalendarEvent = {
 };
 
 type CaptureMode = 'create' | 'update';
-type AppView = 'morning' | 'shopping';
+type AppView = 'morning' | 'shopping' | 'followUp';
+
+type FollowUpPriority = 'high' | 'medium' | 'low';
+type FollowUpKind = 'phone' | 'line' | 'email' | 'sms' | 'other';
+type FollowUpDuePreset = 'today' | 'tomorrow' | 'thisWeek' | 'custom';
+
+type FollowUpItem = {
+  id: string;
+  name: string;
+  company?: string;
+  content: string;
+  priority: FollowUpPriority;
+  duePreset: FollowUpDuePreset;
+  dueDate: string;
+  dueTime?: string;
+  kind: FollowUpKind;
+  completed: boolean;
+  createdAt: string;
+  completedAt?: string;
+};
 
 type PrivateSessionKeys = {
   draft: string;
+  followUps: string;
   shopping: string;
   snapshots: string;
 };
@@ -132,9 +158,14 @@ function createPrivateSessionId() {
   return nextSessionId;
 }
 
+function createLocalId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function createPrivateSessionKeys(sessionId: string): PrivateSessionKeys {
   return {
     draft: `morning-flow-ai:session:${sessionId}:transcript-draft`,
+    followUps: `morning-flow-ai:session:${sessionId}:follow-ups`,
     shopping: `morning-flow-ai:session:${sessionId}:shopping-list`,
     snapshots: `session:${sessionId}:snapshots`,
   };
@@ -179,6 +210,7 @@ function App() {
   const [isShoppingOrganizing, setIsShoppingOrganizing] = React.useState(false);
   const [isShoppingResetDialogOpen, setIsShoppingResetDialogOpen] = React.useState(false);
   const [highlightedShoppingIds, setHighlightedShoppingIds] = React.useState<string[]>([]);
+  const [followUps, setFollowUps] = React.useState<FollowUpItem[]>([]);
   const [previousSnapshot, setPreviousSnapshot] = React.useState<MorningSnapshot | null>(null);
   const [reviewStatuses, setReviewStatuses] = React.useState<Record<string, ReviewStatus>>({});
   const [carriedTodos, setCarriedTodos] = React.useState<string[]>([]);
@@ -186,6 +218,7 @@ function App() {
 
   const isSupported = Boolean(SpeechRecognition);
   const isShoppingView = activeView === 'shopping';
+  const isFollowUpView = activeView === 'followUp';
   const resultText = [transcript, interimTranscript].filter(Boolean).join('\n');
   const shoppingResultText = [shoppingText, isShoppingView ? interimTranscript : ''].filter(Boolean).join('\n');
   const canOrganize = Boolean(transcript.trim()) && !isListening && captureMode === 'create';
@@ -198,6 +231,11 @@ function App() {
       : 'AIが整理中…'
     : '次へ進む';
   const hasEditableTranscript = Boolean(transcript.trim()) && !isListening && captureMode === 'create';
+  const pendingFollowUps = React.useMemo(() => followUps.filter((item) => !item.completed), [followUps]);
+  const dueTodayFollowUps = React.useMemo(
+    () => pendingFollowUps.filter((item) => isSameLocalDate(parseFollowUpDate(item.dueDate), new Date())),
+    [pendingFollowUps],
+  );
 
   React.useEffect(() => {
     removeLegacySharedStorage(privateSessionId);
@@ -223,6 +261,15 @@ function App() {
         setShoppingUpdatedAt(parsed.updatedAt ?? '');
       } catch {
         localStorage.removeItem(privateSessionKeys.shopping);
+      }
+    }
+    const savedFollowUps = localStorage.getItem(privateSessionKeys.followUps);
+    if (savedFollowUps) {
+      try {
+        const parsed = JSON.parse(savedFollowUps) as FollowUpItem[];
+        setFollowUps(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        localStorage.removeItem(privateSessionKeys.followUps);
       }
     }
   }, [privateSessionId, privateSessionKeys]);
@@ -256,6 +303,15 @@ function App() {
       }),
     );
   }, [privateSessionKeys.shopping, shoppingItems, shoppingText, shoppingUpdatedAt]);
+
+  React.useEffect(() => {
+    if (!followUps.length) {
+      localStorage.removeItem(privateSessionKeys.followUps);
+      return;
+    }
+
+    localStorage.setItem(privateSessionKeys.followUps, JSON.stringify(followUps));
+  }, [followUps, privateSessionKeys.followUps]);
 
   React.useEffect(() => {
     if (!highlightedShoppingIds.length) return;
@@ -561,6 +617,49 @@ function App() {
     setShoppingUpdatedAt(new Date().toISOString());
   };
 
+  const addFollowUp = (item: Omit<FollowUpItem, 'completed' | 'completedAt' | 'createdAt' | 'id'>) => {
+    const nextItem: FollowUpItem = {
+      ...item,
+      completed: false,
+      createdAt: new Date().toISOString(),
+      id: createLocalId('follow-up'),
+    };
+    setFollowUps((current) => [...current, nextItem]);
+    notifyFollowUpDueToday(nextItem);
+  };
+
+  const completeFollowUp = (itemId: string) => {
+    setFollowUps((current) =>
+      current.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              completed: true,
+              completedAt: new Date().toISOString(),
+            }
+          : item,
+      ),
+    );
+  };
+
+  const reopenFollowUp = (itemId: string) => {
+    setFollowUps((current) =>
+      current.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              completed: false,
+              completedAt: undefined,
+            }
+          : item,
+      ),
+    );
+  };
+
+  const deleteFollowUp = (itemId: string) => {
+    setFollowUps((current) => current.filter((item) => item.id !== itemId));
+  };
+
   const shareShoppingList = async () => {
     const shareText = formatShoppingShareText(shoppingItems);
     setShoppingShareMessage('');
@@ -649,11 +748,22 @@ function App() {
           updatedAt={shoppingUpdatedAt}
           shareMessage={shoppingShareMessage}
         />
+      ) : isFollowUpView ? (
+        <FollowUpManagerPage
+          dueTodayCount={dueTodayFollowUps.length}
+          items={followUps}
+          onAdd={addFollowUp}
+          onBack={() => setActiveView('morning')}
+          onComplete={completeFollowUp}
+          onDelete={deleteFollowUp}
+          onReopen={reopenFollowUp}
+          pendingCount={pendingFollowUps.length}
+        />
       ) : (
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.11.6</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.12.0</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -703,6 +813,11 @@ function App() {
           <button type="button" onClick={() => setActiveView('shopping')}>
             <ShoppingCart size={18} />
             買い物リストを作る
+          </button>
+          <button type="button" onClick={() => setActiveView('followUp')}>
+            <MessageCircle size={18} />
+            {'\u672a\u8fd4\u4fe1\u30fb\u6298\u308a\u8fd4\u3057'}
+            <span className="follow-up-badge">{'\u672a\u8fd4\u4fe1'} {pendingFollowUps.length}{'\u4ef6'} / {'\u4eca\u65e5'} {dueTodayFollowUps.length}{'\u4ef6'}</span>
           </button>
         </div>
 
@@ -806,6 +921,233 @@ function App() {
   );
 }
 
+function FollowUpManagerPage({
+  dueTodayCount,
+  items,
+  onAdd,
+  onBack,
+  onComplete,
+  onDelete,
+  onReopen,
+  pendingCount,
+}: {
+  dueTodayCount: number;
+  items: FollowUpItem[];
+  onAdd: (item: Omit<FollowUpItem, 'completed' | 'completedAt' | 'createdAt' | 'id'>) => void;
+  onBack: () => void;
+  onComplete: (itemId: string) => void;
+  onDelete: (itemId: string) => void;
+  onReopen: (itemId: string) => void;
+  pendingCount: number;
+}) {
+  const [isFormOpen, setIsFormOpen] = React.useState(false);
+  const [name, setName] = React.useState('');
+  const [company, setCompany] = React.useState('');
+  const [content, setContent] = React.useState('');
+  const [priority, setPriority] = React.useState<FollowUpPriority>('medium');
+  const [duePreset, setDuePreset] = React.useState<FollowUpDuePreset>('today');
+  const [customDate, setCustomDate] = React.useState(formatDateInput(new Date()));
+  const [dueTime, setDueTime] = React.useState('');
+  const [kind, setKind] = React.useState<FollowUpKind>('phone');
+
+  const suggestion = React.useMemo(() => suggestFollowUp(content), [content]);
+  const pendingItems = React.useMemo(() => sortFollowUps(items.filter((item) => !item.completed)), [items]);
+  const completedItems = React.useMemo(() => sortFollowUps(items.filter((item) => item.completed)), [items]);
+
+  React.useEffect(() => {
+    if (!content.trim()) return;
+    setPriority((current) => (current === 'medium' ? suggestion.priority : current));
+    setKind((current) => (current === 'phone' ? suggestion.kind : current));
+  }, [content, suggestion.kind, suggestion.priority]);
+
+  const resetForm = () => {
+    setName('');
+    setCompany('');
+    setContent('');
+    setPriority('medium');
+    setDuePreset('today');
+    setCustomDate(formatDateInput(new Date()));
+    setDueTime('');
+    setKind('phone');
+  };
+
+  const submitFollowUp = () => {
+    if (!name.trim() || !content.trim()) return;
+    onAdd({
+      name: name.trim(),
+      company: company.trim() || undefined,
+      content: content.trim(),
+      dueDate: resolveFollowUpDueDate(duePreset, customDate),
+      duePreset,
+      dueTime: dueTime || undefined,
+      kind,
+      priority,
+    });
+    resetForm();
+    setIsFormOpen(false);
+  };
+
+  return (
+    <section className="hero-panel follow-up-page" aria-label="FOLLOW UP MANAGER">
+      <div className="top-bar">
+        <button className="icon-ghost-button" onClick={onBack} type="button" aria-label="戻る">
+          <Home size={20} />
+        </button>
+        <div>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.0</span></p>
+          <h1>FOLLOW UP MANAGER</h1>
+        </div>
+        <button className="icon-ghost-button" onClick={() => setIsFormOpen((current) => !current)} type="button" aria-label="追加">
+          <Plus size={21} />
+        </button>
+      </div>
+
+      <div className="follow-up-summary">
+        <div>
+          <span>未返信</span>
+          <strong>{pendingCount}件</strong>
+        </div>
+        <div>
+          <span>今日期限</span>
+          <strong>{dueTodayCount}件</strong>
+        </div>
+      </div>
+
+      {isFormOpen && (
+        <section className="follow-up-form" aria-label="未返信・折り返し登録">
+          <label>
+            名前
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="山田さん" />
+          </label>
+          <label>
+            会社名 任意
+            <input value={company} onChange={(event) => setCompany(event.target.value)} placeholder="○○会社" />
+          </label>
+          <label>
+            内容
+            <textarea value={content} onChange={(event) => setContent(event.target.value)} placeholder="折り返し電話、LINE返信など" rows={3} />
+          </label>
+
+          <div className="follow-up-grid">
+            <label>
+              優先度
+              <select value={priority} onChange={(event) => setPriority(event.target.value as FollowUpPriority)}>
+                <option value="high">高</option>
+                <option value="medium">中</option>
+                <option value="low">低</option>
+              </select>
+            </label>
+            <label>
+              種別
+              <select value={kind} onChange={(event) => setKind(event.target.value as FollowUpKind)}>
+                <option value="phone">電話</option>
+                <option value="line">LINE</option>
+                <option value="email">メール</option>
+                <option value="sms">SMS</option>
+                <option value="other">その他</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="follow-up-grid">
+            <label>
+              期限
+              <select value={duePreset} onChange={(event) => setDuePreset(event.target.value as FollowUpDuePreset)}>
+                <option value="today">今日</option>
+                <option value="tomorrow">明日</option>
+                <option value="thisWeek">今週</option>
+                <option value="custom">日付指定</option>
+              </select>
+            </label>
+            <label>
+              時刻 任意
+              <input type="time" value={dueTime} onChange={(event) => setDueTime(event.target.value)} />
+            </label>
+          </div>
+
+          {duePreset === 'custom' && (
+            <label>
+              日付
+              <input type="date" value={customDate} onChange={(event) => setCustomDate(event.target.value)} />
+            </label>
+          )}
+
+          <p className="follow-up-suggestion">
+            AI候補: 優先度 {followUpPriorityLabel(suggestion.priority)} / 種別 {followUpKindLabel(suggestion.kind)}
+          </p>
+
+          <button className="organize-button" disabled={!name.trim() || !content.trim()} onClick={submitFollowUp} type="button">
+            <Plus size={19} />
+            登録する
+          </button>
+        </section>
+      )}
+
+      <FollowUpList items={pendingItems} mode="pending" onComplete={onComplete} onDelete={onDelete} onReopen={onReopen} />
+      <FollowUpList items={completedItems} mode="completed" onComplete={onComplete} onDelete={onDelete} onReopen={onReopen} />
+    </section>
+  );
+}
+
+function FollowUpList({
+  items,
+  mode,
+  onComplete,
+  onDelete,
+  onReopen,
+}: {
+  items: FollowUpItem[];
+  mode: 'pending' | 'completed';
+  onComplete: (itemId: string) => void;
+  onDelete: (itemId: string) => void;
+  onReopen: (itemId: string) => void;
+}) {
+  return (
+    <section className="follow-up-list" aria-label={mode === 'pending' ? '未対応一覧' : '完了一覧'}>
+      <div className="follow-up-list-header">
+        <span>{mode === 'pending' ? '未対応' : '完了履歴'}</span>
+        <strong>{items.length}件</strong>
+      </div>
+
+      {items.length ? (
+        items.map((item) => (
+          <article className={`follow-up-item priority-${item.priority}`} key={item.id}>
+            <div className="follow-up-item-top">
+              <span className="follow-up-priority">【{followUpPriorityLabel(item.priority)}】</span>
+              <span className="follow-up-kind">{followUpKindLabel(item.kind)}</span>
+            </div>
+            <strong>{formatFollowUpTitle(item)}</strong>
+            {item.company && <small>{item.company}</small>}
+            <p>{item.content}</p>
+            <div className="follow-up-meta">
+              <Clock size={15} />
+              <span>期限 {formatFollowUpDue(item)}</span>
+            </div>
+            <div className="follow-up-actions">
+              {mode === 'pending' ? (
+                <button onClick={() => onComplete(item.id)} type="button">
+                  <CheckCircle2 size={16} />
+                  完了
+                </button>
+              ) : (
+                <button onClick={() => onReopen(item.id)} type="button">
+                  未対応に戻す
+                </button>
+              )}
+              <button className="danger-button" onClick={() => onDelete(item.id)} type="button">
+                <Trash2 size={16} />
+                削除
+              </button>
+            </div>
+          </article>
+        ))
+      ) : (
+        <p className="follow-up-empty">{mode === 'pending' ? '未対応の連絡はありません。' : '完了履歴はまだありません。'}</p>
+      )}
+    </section>
+  );
+}
+
 function ShoppingListPage({
   canOrganize,
   error,
@@ -882,7 +1224,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.11.6</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.0</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
@@ -1653,6 +1995,126 @@ function formatShoppingShareText(items: ShoppingItem[]) {
     .join('\n\n');
 
   return ['【今日の買い物リスト】', '', body || '買い物リストはまだありません。', '', '買い物よろしくお願いします。'].join('\n');
+}
+
+
+function sortFollowUps(items: FollowUpItem[]) {
+  return [...items].sort((a, b) => {
+    const dueDiff = parseFollowUpDate(a.dueDate).getTime() - parseFollowUpDate(b.dueDate).getTime();
+    if (dueDiff !== 0) return dueDiff;
+    return followUpPriorityWeight(b.priority) - followUpPriorityWeight(a.priority);
+  });
+}
+
+function suggestFollowUp(text: string): { priority: FollowUpPriority; kind: FollowUpKind } {
+  const normalized = text.toLowerCase();
+  const kind: FollowUpKind = includesAny(normalized, ['line'])
+    ? 'line'
+    : includesAny(normalized, ['mail', '\u30e1\u30fc\u30eb'])
+      ? 'email'
+      : includesAny(normalized, ['sms', '\u30b7\u30e7\u30fc\u30c8'])
+        ? 'sms'
+        : includesAny(normalized, ['\u96fb\u8a71', '\u6298\u308a\u8fd4\u3057', 'tel'])
+          ? 'phone'
+          : 'other';
+  const priority: FollowUpPriority = includesAny(text, ['\u81f3\u6025', '\u6025\u304e', '\u4eca\u65e5\u4e2d', '\u6298\u308a\u8fd4\u3057', '\u96fb\u8a71', '\u50ac\u4fc3'])
+    ? 'high'
+    : includesAny(text, ['\u6765\u9031\u3067\u3082', '\u6025\u304e\u3058\u3083\u306a\u3044', '\u5f8c\u3067', '\u4f59\u88d5'])
+      ? 'low'
+      : 'medium';
+
+  return { kind, priority };
+}
+
+function includesAny(text: string, keywords: string[]) {
+  return keywords.some((keyword) => text.includes(keyword));
+}
+
+function resolveFollowUpDueDate(preset: FollowUpDuePreset, customDate: string) {
+  const today = startOfLocalDay(new Date());
+  if (preset === 'tomorrow') return formatDateInput(addDays(today, 1));
+  if (preset === 'thisWeek') return formatDateInput(addDays(today, 6));
+  if (preset === 'custom' && customDate) return customDate;
+  return formatDateInput(today);
+}
+
+function parseFollowUpDate(dateText: string) {
+  const [year, month, day] = dateText.split('-').map(Number);
+  if (!year || !month || !day) return startOfLocalDay(new Date());
+  return new Date(year, month - 1, day);
+}
+
+function formatDateInput(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+function formatFollowUpDue(item: FollowUpItem) {
+  const date = parseFollowUpDate(item.dueDate);
+  const dateLabel = date.toLocaleDateString('ja-JP', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  });
+  return item.dueTime ? dateLabel + ' ' + item.dueTime : dateLabel;
+}
+
+function formatFollowUpTitle(item: FollowUpItem) {
+  const action =
+    item.kind === 'phone'
+      ? '\u3078\u96fb\u8a71'
+      : item.kind === 'line'
+        ? '\u3078LINE\u8fd4\u4fe1'
+        : item.kind === 'email'
+          ? '\u3078\u30e1\u30fc\u30eb\u8fd4\u4fe1'
+          : item.kind === 'sms'
+            ? '\u3078SMS\u8fd4\u4fe1'
+            : '\u3078\u9023\u7d61';
+  return item.name + action;
+}
+
+function followUpPriorityLabel(priority: FollowUpPriority) {
+  return priority === 'high' ? '?' : priority === 'medium' ? '?' : '?';
+}
+
+function followUpPriorityWeight(priority: FollowUpPriority) {
+  return priority === 'high' ? 3 : priority === 'medium' ? 2 : 1;
+}
+
+function followUpKindLabel(kind: FollowUpKind) {
+  const labels: Record<FollowUpKind, string> = {
+    phone: '\u96fb\u8a71',
+    line: 'LINE',
+    email: '\u30e1\u30fc\u30eb',
+    sms: 'SMS',
+    other: '\u305d\u306e\u4ed6',
+  };
+  return labels[kind];
+}
+
+function notifyFollowUpDueToday(item: FollowUpItem) {
+  if (!('Notification' in window)) return;
+  if (!isSameLocalDate(parseFollowUpDate(item.dueDate), new Date())) return;
+
+  const show = () => {
+    new Notification('MORNING FLOW AI \u672a\u8fd4\u4fe1\u30ea\u30de\u30a4\u30f3\u30c9', {
+      body: formatFollowUpTitle(item) + ': ' + item.content,
+    });
+  };
+
+  if (Notification.permission === 'granted') {
+    show();
+    return;
+  }
+
+  if (Notification.permission === 'default') {
+    Notification.requestPermission().then((permission) => {
+      if (permission === 'granted') show();
+    });
+  }
 }
 
 function isShareCancelError(error: unknown) {
