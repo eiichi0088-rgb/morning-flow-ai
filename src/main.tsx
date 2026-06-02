@@ -109,7 +109,7 @@ type CalendarEvent = {
 };
 
 type CaptureMode = 'create' | 'update';
-type AppView = 'morning' | 'shopping' | 'followUp' | 'feedback';
+type AppView = 'morning' | 'shopping' | 'followUp' | 'feedback' | 'analytics';
 
 type FollowUpPriority = 'high' | 'medium' | 'low';
 type FollowUpKind = 'phone' | 'line' | 'email' | 'sms' | 'other';
@@ -141,6 +141,22 @@ type FeedbackSummary = {
   urgency: FeedbackUrgency;
 };
 
+type AnalyticsEventType = 'app_install' | 'app_open' | 'feature_use' | 'feedback_sent';
+type AnalyticsFeature =
+  | 'morning_flow'
+  | 'shopping_list'
+  | 'follow_up'
+  | 'google_calendar'
+  | 'apple_calendar'
+  | 'feedback';
+
+type AnalyticsSummary = {
+  totalUsers?: number;
+  todayUsers?: number;
+  totalOpens?: number;
+  popularFeatures?: Array<{ feature: string; count: number }>;
+};
+
 type PrivateSessionKeys = {
   draft: string;
   followUps: string;
@@ -149,6 +165,9 @@ type PrivateSessionKeys = {
 };
 
 const privateSessionIdStorageKey = 'morning-flow-ai:session-id:v2';
+const analyticsUserIdStorageKey = 'morning-flow-ai:analytics-user-id:v1';
+const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1';
+const appVersion = 'v2.12.3';
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
   { label: '✓ 完了', value: 'done' },
@@ -171,6 +190,65 @@ function createPrivateSessionId() {
 
 function createLocalId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createAnalyticsUserId() {
+  const savedUserId = localStorage.getItem(analyticsUserIdStorageKey);
+  if (savedUserId) return savedUserId;
+
+  const rawId =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const nextUserId = `mfai_${rawId.replace(/-/g, '').slice(0, 8)}`;
+  localStorage.setItem(analyticsUserIdStorageKey, nextUserId);
+  return nextUserId;
+}
+
+function getAnalyticsEndpoint() {
+  return import.meta.env.VITE_ANALYTICS_ENDPOINT as string | undefined;
+}
+
+function trackAnalyticsEvent(userId: string, eventType: AnalyticsEventType, feature = '--------') {
+  const endpoint = getAnalyticsEndpoint();
+  if (!endpoint) return;
+
+  const payload = {
+    eventType,
+    feature,
+    timestamp: new Date().toISOString(),
+    userId,
+    version: appVersion,
+  };
+
+  fetch(endpoint, {
+    body: JSON.stringify(payload),
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8',
+    },
+    method: 'POST',
+    mode: 'no-cors',
+  }).catch(() => {
+    // Analytics must never block the app.
+  });
+}
+
+function trackAnalyticsFeature(userId: string, feature: AnalyticsFeature) {
+  trackAnalyticsEvent(userId, 'feature_use', feature);
+}
+
+async function fetchAnalyticsSummary(): Promise<AnalyticsSummary | null> {
+  const endpoint = getAnalyticsEndpoint();
+  if (!endpoint) return null;
+
+  try {
+    const separator = endpoint.includes('?') ? '&' : '?';
+    const response = await fetch(`${endpoint}${separator}summary=1`, { method: 'GET' });
+    if (!response.ok) return null;
+    return (await response.json()) as AnalyticsSummary;
+  } catch {
+    return null;
+  }
 }
 
 function createPrivateSessionKeys(sessionId: string): PrivateSessionKeys {
@@ -198,6 +276,7 @@ function removeLegacySharedStorage(currentSessionId: string) {
 function App() {
   const privateSessionId = React.useMemo(createPrivateSessionId, []);
   const privateSessionKeys = React.useMemo(() => createPrivateSessionKeys(privateSessionId), [privateSessionId]);
+  const analyticsUserId = React.useMemo(createAnalyticsUserId, []);
   const [activeView, setActiveView] = React.useState<AppView>('morning');
   const [recognition, setRecognition] = React.useState<SpeechRecognitionLike | null>(null);
   const [isListening, setIsListening] = React.useState(false);
@@ -250,6 +329,14 @@ function App() {
     () => pendingFollowUps.filter((item) => isSameLocalDate(parseFollowUpDate(item.dueDate), new Date())),
     [pendingFollowUps],
   );
+
+  React.useEffect(() => {
+    if (!localStorage.getItem(analyticsInstallTrackedKey)) {
+      trackAnalyticsEvent(analyticsUserId, 'app_install');
+      localStorage.setItem(analyticsInstallTrackedKey, 'true');
+    }
+    trackAnalyticsEvent(analyticsUserId, 'app_open');
+  }, [analyticsUserId]);
 
   React.useEffect(() => {
     removeLegacySharedStorage(privateSessionId);
@@ -472,6 +559,7 @@ function App() {
   const organizeMorning = () => {
     if (!transcript.trim()) return;
 
+    trackAnalyticsFeature(analyticsUserId, 'morning_flow');
     setIsOrganizing(true);
     setError('');
     addVoiceFollowUpsFromText(transcript);
@@ -567,6 +655,7 @@ function App() {
   const organizeShoppingList = () => {
     if (!shoppingText.trim()) return;
 
+    trackAnalyticsFeature(analyticsUserId, 'shopping_list');
     const previousIds = new Set(shoppingItems.map((item) => item.id));
     setIsShoppingOrganizing(true);
     setShoppingError('');
@@ -643,6 +732,7 @@ function App() {
       id: createLocalId('follow-up'),
       source: item.source ?? 'manual',
     };
+    trackAnalyticsFeature(analyticsUserId, 'follow_up');
     setFollowUps((current) => [...current, nextItem]);
     notifyFollowUpDueToday(nextItem);
   };
@@ -792,6 +882,7 @@ function App() {
         />
       ) : isFeedbackView ? (
         <FeedbackBoxPage
+          analyticsUserId={analyticsUserId}
           isListening={isListening}
           isSupported={isSupported}
           onBack={() => {
@@ -806,11 +897,13 @@ function App() {
           resultText={feedbackResultText}
           text={feedbackText}
         />
+      ) : activeView === 'analytics' ? (
+        <AnalyticsDashboardPage onBack={() => setActiveView('morning')} userId={analyticsUserId} />
       ) : (
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.12.2</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.12.3</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -857,18 +950,40 @@ function App() {
           <button className="selected" type="button">
             今日の予定を整理する
           </button>
-          <button type="button" onClick={() => setActiveView('shopping')}>
+          <button
+            type="button"
+            onClick={() => {
+              trackAnalyticsFeature(analyticsUserId, 'shopping_list');
+              setActiveView('shopping');
+            }}
+          >
             <ShoppingCart size={18} />
             買い物リストを作る
           </button>
-          <button type="button" onClick={() => setActiveView('followUp')}>
+          <button
+            type="button"
+            onClick={() => {
+              trackAnalyticsFeature(analyticsUserId, 'follow_up');
+              setActiveView('followUp');
+            }}
+          >
             <MessageCircle size={18} />
             {'\u672a\u8fd4\u4fe1\u30fb\u6298\u308a\u8fd4\u3057'}
             <span className="follow-up-badge">{'\u672a\u8fd4\u4fe1'} {pendingFollowUps.length}{'\u4ef6'} / {'\u4eca\u65e5'} {dueTodayFollowUps.length}{'\u4ef6'}</span>
           </button>
-          <button type="button" onClick={() => setActiveView('feedback')}>
+          <button
+            type="button"
+            onClick={() => {
+              trackAnalyticsFeature(analyticsUserId, 'feedback');
+              setActiveView('feedback');
+            }}
+          >
             <Mail size={18} />
             {'\u3054\u610f\u898b\u30fb\u6539\u5584\u8981\u671b'}
+          </button>
+          <button type="button" onClick={() => setActiveView('analytics')}>
+            <ListChecks size={18} />
+            {'\u5229\u7528\u72b6\u6cc1'}
           </button>
         </div>
 
@@ -915,7 +1030,14 @@ function App() {
         )}
 
         <div ref={planAnchorRef} />
-        {plan && <PlanView highlightedScheduleKeys={highlightedScheduleKeys} plan={plan} shoppingItems={shoppingItems} />}
+        {plan && (
+          <PlanView
+            analyticsUserId={analyticsUserId}
+            highlightedScheduleKeys={highlightedScheduleKeys}
+            plan={plan}
+            shoppingItems={shoppingItems}
+          />
+        )}
 
         <div className="action-row">
           <button className="secondary-button" type="button" onClick={() => setIsResetDialogOpen(true)}>
@@ -1045,7 +1167,7 @@ function FollowUpManagerPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.2</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.3</span></p>
           <h1>FOLLOW UP MANAGER</h1>
         </div>
         <button className="icon-ghost-button" onClick={() => setIsFormOpen((current) => !current)} type="button" aria-label="追加">
@@ -1141,6 +1263,7 @@ function FollowUpManagerPage({
 }
 
 function FeedbackBoxPage({
+  analyticsUserId,
   isListening,
   isSupported,
   onBack,
@@ -1150,6 +1273,7 @@ function FeedbackBoxPage({
   resultText,
   text,
 }: {
+  analyticsUserId: string;
   isListening: boolean;
   isSupported: boolean;
   onBack: () => void;
@@ -1173,6 +1297,7 @@ function FeedbackBoxPage({
   const sendFeedback = () => {
     const nextSummary = editableBody ? summary : createFeedbackSummary(text, feedbackType);
     const body = editableBody || formatFeedbackEmailBody(nextSummary, text, senderName);
+    trackAnalyticsEvent(analyticsUserId, 'feedback_sent', 'feedback');
     window.location.href = createFeedbackMailto(body);
   };
 
@@ -1183,7 +1308,7 @@ function FeedbackBoxPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.2</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.3</span></p>
           <h1>FEEDBACK BOX</h1>
         </div>
         <div className="brand-mark" aria-hidden="true">
@@ -1281,6 +1406,83 @@ function FeedbackBoxPage({
         </button>
       </section>
     </section>
+  );
+}
+
+function AnalyticsDashboardPage({ onBack, userId }: { onBack: () => void; userId: string }) {
+  const [summary, setSummary] = React.useState<AnalyticsSummary | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const endpoint = getAnalyticsEndpoint();
+
+  React.useEffect(() => {
+    setIsLoading(true);
+    fetchAnalyticsSummary()
+      .then(setSummary)
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  return (
+    <section className="hero-panel analytics-page" aria-label="Analytics Lite">
+      <div className="top-bar">
+        <button className="icon-ghost-button" onClick={onBack} type="button" aria-label="戻る">
+          <Home size={20} />
+        </button>
+        <div>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.3</span></p>
+          <h1>{'\u5229\u7528\u72b6\u6cc1'}</h1>
+        </div>
+        <div className="brand-mark" aria-hidden="true">
+          <ListChecks size={21} />
+        </div>
+      </div>
+
+      <p className="analytics-privacy">
+        {'\u5229\u7528\u72b6\u6cc1\u5411\u4e0a\u306e\u305f\u3081\u3001\u533f\u540d\u306e\u5229\u7528\u7d71\u8a08\u3092\u53ce\u96c6\u3057\u3066\u3044\u307e\u3059\u3002\u500b\u4eba\u60c5\u5831\u3084\u5165\u529b\u5185\u5bb9\u306f\u9001\u4fe1\u3055\u308c\u307e\u305b\u3093\u3002'}
+      </p>
+
+      <div className="analytics-grid">
+        <AnalyticsMetric label={'\u7dcf\u5229\u7528\u8005\u6570'} value={summary?.totalUsers ?? '-'} />
+        <AnalyticsMetric label={'\u672c\u65e5\u5229\u7528\u8005\u6570'} value={summary?.todayUsers ?? '-'} />
+        <AnalyticsMetric label={'\u7dcf\u8d77\u52d5\u56de\u6570'} value={summary?.totalOpens ?? '-'} />
+      </div>
+
+      <section className="analytics-card">
+        <div className="follow-up-list-header">
+          <span>{'\u4eba\u6c17\u6a5f\u80fd\u30e9\u30f3\u30ad\u30f3\u30b0'}</span>
+          <strong>{isLoading ? 'Loading' : endpoint ? 'Apps Script' : '未設定'}</strong>
+        </div>
+        {summary?.popularFeatures?.length ? (
+          <ol className="analytics-ranking">
+            {summary.popularFeatures.map((item) => (
+              <li key={item.feature}>
+                <span>{formatAnalyticsFeatureLabel(item.feature)}</span>
+                <strong>{item.count}</strong>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="follow-up-empty">
+            {endpoint
+              ? '\u96c6\u8a08\u30c7\u30fc\u30bf\u3092\u53d6\u5f97\u3067\u304d\u306a\u3044\u5834\u5408\u306f\u3001Google Apps Script\u306eGET\u5fdc\u7b54\u3092\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002'
+              : 'VITE_ANALYTICS_ENDPOINT\u3092\u8a2d\u5b9a\u3059\u308b\u3068Google Apps Script\u3078\u9001\u4fe1\u3057\u307e\u3059\u3002'}
+          </p>
+        )}
+      </section>
+
+      <section className="analytics-card">
+        <span className="muted-category">Anonymous userId</span>
+        <strong>{userId}</strong>
+      </section>
+    </section>
+  );
+}
+
+function AnalyticsMetric({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="analytics-card">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }
 
@@ -1816,10 +2018,12 @@ function ReflectionView({
 }
 
 function PlanView({
+  analyticsUserId,
   highlightedScheduleKeys,
   plan,
   shoppingItems,
 }: {
+  analyticsUserId: string;
   highlightedScheduleKeys: string[];
   plan: MorningPlan;
   shoppingItems: ShoppingItem[];
@@ -1913,14 +2117,14 @@ function PlanView({
           <CalendarPlus size={19} />
           {'\u30ab\u30ec\u30f3\u30c0\u30fc\u3078\u8ffd\u52a0'}
         </button>
-        {isCalendarOpen && <GoogleCalendarExportPanel events={calendarEvents} />}
+        {isCalendarOpen && <GoogleCalendarExportPanel analyticsUserId={analyticsUserId} events={calendarEvents} />}
       </PlanSection>
 
     </section>
   );
 }
 
-function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
+function GoogleCalendarExportPanel({ analyticsUserId, events }: { analyticsUserId: string; events: CalendarEvent[] }) {
   const [accessToken, setAccessToken] = React.useState('');
   const [selectedEventIds, setSelectedEventIds] = React.useState(() => events.map((event) => event.id));
   const [statusMessage, setStatusMessage] = React.useState('');
@@ -1972,6 +2176,7 @@ function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
   const registerSelectedEvents = () => {
     if (!accessToken || !selectedEvents.length) return;
 
+    trackAnalyticsFeature(analyticsUserId, 'google_calendar');
     setIsRegistering(true);
     setStatusMessage('');
     console.info('[MORNING FLOW AI] Google Calendar selected events', {
@@ -2100,7 +2305,14 @@ function GoogleCalendarExportPanel({ events }: { events: CalendarEvent[] }) {
 
       {statusMessage && <p className="calendar-status">{statusMessage}</p>}
 
-      <button className="calendar-download-button" onClick={() => downloadIcs(events)} type="button">
+      <button
+        className="calendar-download-button"
+        onClick={() => {
+          trackAnalyticsFeature(analyticsUserId, 'apple_calendar');
+          downloadIcs(events);
+        }}
+        type="button"
+      >
         <Download size={18} />
         Appleカレンダー用ファイルを保存
       </button>
@@ -2422,6 +2634,18 @@ function formatFeedbackEmailBody(summary: FeedbackSummary, originalText: string,
 function createFeedbackMailto(body: string) {
   const subject = '\u3010MORNING FLOW AI \u30d5\u30a3\u30fc\u30c9\u30d0\u30c3\u30af\u3011';
   return `mailto:eiichi0088@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function formatAnalyticsFeatureLabel(feature: string) {
+  const labels: Record<string, string> = {
+    apple_calendar: 'Apple Calendar',
+    feedback: 'Feedback',
+    follow_up: 'Follow Up',
+    google_calendar: 'Google Calendar',
+    morning_flow: 'Morning Flow',
+    shopping_list: '\u8cb7\u3044\u7269\u30ea\u30b9\u30c8',
+  };
+  return labels[feature] ?? feature;
 }
 
 function notifyFollowUpDueToday(item: FollowUpItem) {

@@ -5,7 +5,7 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.12.2 is based on v2.12.1 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.12.3 is based on v2.12.2 normal UI. Do not mix v3.0 or v3.1 UI.
 
 
 
@@ -14,6 +14,17 @@
 
 
 
+
+
+## Version 2.12.3 Analytics Lite - 2026-06-02
+
+- Screen display: v2.12.3
+- ZIP: morning-flow-ai-v2.12.3.zip
+- Next planned version: Version 2.12.4
+- Analytics Lite is added using anonymous userId and optional Google Apps Script endpoint.
+- Endpoint env var: VITE_ANALYTICS_ENDPOINT.
+- No names, emails, phone numbers, schedule content, shopping content, notes, or feedback text are sent as analytics data.
+- Google Calendar, Apple Calendar export, FOLLOW UP MANAGER, shopping, feedback, snapshots, and session behavior are preserved.
 
 ## Version 2.12.2 FEEDBACK BOX - 2026-06-02
 

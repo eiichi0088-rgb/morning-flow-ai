@@ -1,6 +1,14 @@
 ﻿# CHANGELOG
 
 
+## Version 2.12.3 - 2026-06-02
+
+- Added Analytics Lite initial implementation.
+- Added anonymous userId generation and localStorage persistence.
+- Added background Google Apps Script POST support via VITE_ANALYTICS_ENDPOINT for app_install, app_open, feature_use, and feedback_sent events.
+- Added developer-facing usage status screen with privacy notice and summary placeholders.
+- Analytics sends only timestamp, anonymous userId, eventType, feature, and version; no user content is sent.
+
 ## Version 2.12.2 - 2026-06-02
 
 - Added FEEDBACK BOX initial implementation.
