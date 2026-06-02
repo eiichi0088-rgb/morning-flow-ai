@@ -1175,6 +1175,43 @@ h1 {
   padding: 10px 11px;
 }
 
+.developer-mode-card {
+  gap: 12px;
+}
+
+.developer-mode-form {
+  display: grid;
+  gap: 12px;
+}
+
+.developer-mode-form label {
+  color: rgba(226, 235, 245, 0.78);
+  display: grid;
+  gap: 8px;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.developer-mode-form input {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(6, 11, 20, 0.5);
+  color: #fff;
+  font: inherit;
+  padding: 12px 13px;
+}
+
+.developer-mode-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.developer-mode-error {
+  color: #fecaca;
+  font-size: 0.82rem;
+  margin: 0;
+}
+
 .shopping-lead {
   margin: 0;
   color: rgba(226, 235, 245, 0.76);

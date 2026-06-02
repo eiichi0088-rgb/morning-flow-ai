@@ -186,7 +186,9 @@ const privateSessionIdStorageKey = 'morning-flow-ai:session-id:v2';
 const analyticsUserIdStorageKey = 'morning-flow-ai:analytics-user-id:v1';
 const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1';
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
-const appVersion = 'v2.12.5';
+const developerModeStorageKey = 'mfai_developer_mode';
+const developerModePasscode = '19810303';
+const appVersion = 'v2.12.6';
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
   { label: '✓ 完了', value: 'done' },
@@ -227,6 +229,10 @@ function createAnalyticsUserId() {
 function getAnalyticsEndpoint() {
   const endpoint = import.meta.env.VITE_ANALYTICS_ENDPOINT as string | undefined;
   return endpoint?.trim() || undefined;
+}
+
+function isDeveloperModeEnabled() {
+  return localStorage.getItem(developerModeStorageKey) === 'true';
 }
 
 function maskAnalyticsEndpoint(endpoint?: string) {
@@ -1133,7 +1139,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.12.5</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.12.6</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -1397,7 +1403,7 @@ function FollowUpManagerPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.5</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.6</span></p>
           <h1>FOLLOW UP MANAGER</h1>
         </div>
         <button className="icon-ghost-button" onClick={() => setIsFormOpen((current) => !current)} type="button" aria-label="追加">
@@ -1538,7 +1544,7 @@ function FeedbackBoxPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.5</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.6</span></p>
           <h1>FEEDBACK BOX</h1>
         </div>
         <div className="brand-mark" aria-hidden="true">
@@ -1645,18 +1651,48 @@ function AnalyticsDashboardPage({ onBack, userId }: { onBack: () => void; userId
   const [testResult, setTestResult] = React.useState<AnalyticsSendResult | null>(null);
   const [debugLog, setDebugLog] = React.useState<AnalyticsDebugEntry[]>(() => readAnalyticsDebugLog());
   const [isTesting, setIsTesting] = React.useState(false);
+  const [isDeveloperMode, setIsDeveloperMode] = React.useState(() => isDeveloperModeEnabled());
+  const [isPasscodeOpen, setIsPasscodeOpen] = React.useState(false);
+  const [passcode, setPasscode] = React.useState('');
+  const [passcodeError, setPasscodeError] = React.useState('');
   const endpoint = getAnalyticsEndpoint();
 
   const reloadSummary = React.useCallback(() => {
+    if (!isDeveloperMode) return;
     setIsLoading(true);
     fetchAnalyticsSummary()
       .then(setSummary)
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [isDeveloperMode]);
 
   React.useEffect(() => {
     reloadSummary();
   }, [reloadSummary]);
+
+  const unlockDeveloperMode = () => {
+    if (passcode !== developerModePasscode) {
+      localStorage.removeItem(developerModeStorageKey);
+      setIsDeveloperMode(false);
+      setPasscodeError('パスコードが違います。');
+      return;
+    }
+
+    localStorage.setItem(developerModeStorageKey, 'true');
+    setIsDeveloperMode(true);
+    setIsPasscodeOpen(false);
+    setPasscode('');
+    setPasscodeError('');
+  };
+
+  const lockDeveloperMode = () => {
+    localStorage.removeItem(developerModeStorageKey);
+    setIsDeveloperMode(false);
+    setSummary(null);
+    setTestResult(null);
+    setDebugLog([]);
+    setPasscode('');
+    setPasscodeError('');
+  };
 
   const runAnalyticsTest = async () => {
     setIsTesting(true);
@@ -1692,7 +1728,7 @@ function AnalyticsDashboardPage({ onBack, userId }: { onBack: () => void; userId
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.5</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.6</span></p>
           <h1>{'\u5229\u7528\u72b6\u6cc1'}</h1>
         </div>
         <div className="brand-mark" aria-hidden="true">
@@ -1704,6 +1740,43 @@ function AnalyticsDashboardPage({ onBack, userId }: { onBack: () => void; userId
         {'\u5229\u7528\u72b6\u6cc1\u5411\u4e0a\u306e\u305f\u3081\u3001\u533f\u540d\u306e\u5229\u7528\u7d71\u8a08\u3092\u53ce\u96c6\u3057\u3066\u3044\u307e\u3059\u3002\u500b\u4eba\u60c5\u5831\u3084\u5165\u529b\u5185\u5bb9\u306f\u9001\u4fe1\u3055\u308c\u307e\u305b\u3093\u3002'}
       </p>
 
+      {!isDeveloperMode && (
+        <section className="analytics-card developer-mode-card">
+          {!isPasscodeOpen ? (
+            <button className="secondary-action-button" onClick={() => setIsPasscodeOpen(true)} type="button">
+              開発者モード
+            </button>
+          ) : (
+            <div className="developer-mode-form">
+              <label>
+                パスコード
+                <input
+                  autoComplete="off"
+                  inputMode="numeric"
+                  onChange={(event) => {
+                    setPasscode(event.target.value);
+                    setPasscodeError('');
+                  }}
+                  type="password"
+                  value={passcode}
+                />
+              </label>
+              {passcodeError && <p className="developer-mode-error">{passcodeError}</p>}
+              <div className="developer-mode-actions">
+                <button className="calendar-register-button" onClick={unlockDeveloperMode} type="button">
+                  開く
+                </button>
+                <button className="secondary-action-button" onClick={() => setIsPasscodeOpen(false)} type="button">
+                  戻る
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {isDeveloperMode && (
+        <>
       <div className="analytics-grid">
         <AnalyticsMetric label={'\u7dcf\u5229\u7528\u8005\u6570'} value={summary?.totalUsers ?? '-'} />
         <AnalyticsMetric label={'\u672c\u65e5\u5229\u7528\u8005\u6570'} value={summary?.todayUsers ?? '-'} />
@@ -1793,6 +1866,13 @@ function AnalyticsDashboardPage({ onBack, userId }: { onBack: () => void; userId
           <p className="follow-up-empty">まだ送信ログはありません。</p>
         )}
       </section>
+      <section className="analytics-card developer-mode-card">
+        <button className="secondary-action-button" onClick={lockDeveloperMode} type="button">
+          開発者モード解除
+        </button>
+      </section>
+        </>
+      )}
     </section>
   );
 }

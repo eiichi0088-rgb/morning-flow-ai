@@ -5,7 +5,7 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.12.5 is based on v2.12.4 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.12.6 is based on v2.12.5 normal UI. Do not mix v3.0 or v3.1 UI.
 
 
 
@@ -15,6 +15,17 @@
 
 
 
+
+## Version 2.12.6 Developer Mode - 2026-06-02
+
+- Screen display: v2.12.6
+- ZIP: morning-flow-ai-v2.12.6.zip
+- Next planned version: Version 2.12.7
+- Usage status details and Analytics debug tools are hidden from general users.
+- Developer Mode uses passcode unlock and mfai_developer_mode localStorage persistence.
+- Developer Mode release clears mfai_developer_mode.
+- Analytics Lite continues to collect only anonymous event data.
+- Google Calendar, Apple Calendar export, FOLLOW UP MANAGER, shopping, feedback, snapshots, and session behavior are preserved.
 
 ## Version 2.12.5 Analytics Lite POST Debug Patch - 2026-06-02
 

@@ -1,6 +1,15 @@
 ﻿# CHANGELOG
 
 
+## Version 2.12.6 - 2026-06-02
+
+- Added Developer Mode gate for usage status details.
+- General users now see only the anonymous usage statistics privacy notice.
+- Developer-only view keeps total users, today users, total opens, feature ranking, anonymous userId, endpoint, send logs, and Analytics test tools.
+- Added passcode unlock and localStorage persistence with mfai_developer_mode=true.
+- Added Developer Mode release button that clears localStorage developer access.
+- Google Calendar, Apple Calendar export, FOLLOW UP MANAGER, shopping, feedback, and Analytics Lite event sending are preserved.
+
 ## Version 2.12.5 - 2026-06-02
 
 - Changed Analytics Test to submit a real hidden-form POST to Apps Script so doPost can be checked in the browser Network tab.
