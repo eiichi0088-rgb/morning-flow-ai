@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 2.13.6 - 2026-06-02
+
+- Synced the app display version, package version, and lockfile version to v2.13.6.
+- Reused the single appVersion constant for visible MORNING FLOW AI version labels.
+- Apple Calendar ICS Fix, Google Calendar registration, and shopping list behavior are unchanged.
+
 ## Version 2.13.5 - 2026-06-02
 
 - Renamed the Apple calendar action to Apple????????.

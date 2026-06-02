@@ -5,9 +5,18 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.13.5 is based on v2.13.4 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.13.6 is based on v2.13.5 normal UI. Do not mix v3.0 or v3.1 UI.
 
 
+
+## Version 2.13.6 Version Display Sync Fix - 2026-06-02
+
+- Screen display: v2.13.6
+- ZIP: morning-flow-ai-v2.13.6.zip
+- Next planned version: Version 2.13.7
+- App UI version labels now use the shared appVersion constant.
+- package.json and package-lock.json are synced to 2.13.6.
+- Apple Calendar ICS Fix, Google Calendar, shopping list, FOLLOW UP MANAGER, feedback, Analytics Lite, Developer Mode, snapshots, and session behavior are preserved.
 
 ## Version 2.13.5 Apple Calendar ICS Fix - 2026-06-02
 
