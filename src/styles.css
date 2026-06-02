@@ -2077,6 +2077,28 @@ h1 {
   color: rgba(247, 231, 190, 0.9);
 }
 
+.apple-calendar-disposition {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.apple-calendar-disposition button {
+  min-height: 38px;
+  border: 1px solid rgba(223, 247, 255, 0.16);
+  border-radius: 10px;
+  color: rgba(232, 240, 248, 0.78);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.apple-calendar-disposition button.selected {
+  border-color: rgba(247, 231, 190, 0.38);
+  color: #11151d;
+  background: linear-gradient(135deg, #ffffff 0%, #dff7ff 48%, #f5e3bd 100%);
+}
+
 .apple-calendar-debug {
   display: grid;
   gap: 8px;
@@ -2115,6 +2137,10 @@ h1 {
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.apple-calendar-debug a {
+  color: rgba(223, 247, 255, 0.92);
 }
 
 .calendar-download-button {

@@ -6,6 +6,7 @@ const kvKeyPrefix = 'mfai:apple-calendar:';
 
 export async function handleAppleCalendarRequest(request, response) {
   const requestUrl = new URL(request.url ?? '/api/apple-calendar', `https://${request.headers.host ?? 'localhost'}`);
+  const disposition = getCalendarDisposition(requestUrl);
   const requestInfo = {
     contentType: request.headers['content-type'] ?? '',
     debug: request.headers['x-mfai-apple-debug'] ?? requestUrl.searchParams.get('debug') ?? '',
@@ -49,7 +50,7 @@ export async function handleAppleCalendarRequest(request, response) {
           return;
         }
 
-        sendIcsResponse(response, ics);
+        sendIcsResponse(response, ics, disposition);
       } catch (error) {
         console.error('[MORNING FLOW AI] Apple Calendar KV get failed', error);
         response.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -73,7 +74,7 @@ export async function handleAppleCalendarRequest(request, response) {
       return;
     }
 
-    sendIcsResponse(response, ics);
+    sendIcsResponse(response, ics, disposition);
     return;
   }
 
@@ -118,7 +119,7 @@ export async function handleAppleCalendarRequest(request, response) {
       return;
     }
 
-    sendIcsResponse(response, ics);
+    sendIcsResponse(response, ics, disposition);
   } catch (error) {
     response.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
     response.end(error instanceof Error ? error.message : 'Calendar export failed.');
@@ -183,10 +184,14 @@ async function runKvCommand(command) {
   return data;
 }
 
-export function sendIcsResponse(response, ics) {
+function getCalendarDisposition(requestUrl) {
+  return requestUrl.searchParams.get('disposition') === 'attachment' ? 'attachment' : 'inline';
+}
+
+export function sendIcsResponse(response, ics, disposition = 'inline') {
   const headers = {
     'Content-Type': 'text/calendar; charset=utf-8',
-    'Content-Disposition': 'inline; filename="morning-flow-event.ics"',
+    'Content-Disposition': `${disposition}; filename="morning-flow-event.ics"`,
     'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff',
   };

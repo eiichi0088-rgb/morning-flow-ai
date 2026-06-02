@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## Version 2.13.12 - 2026-06-03
+
+- Changed Apple Calendar ICS event times from `TZID=Asia/Tokyo` to UTC `Z` timestamps for stricter iOS import compatibility.
+- Added UTC `CREATED` and `LAST-MODIFIED` fields and kept CRLF line endings.
+- Apple Calendar Debug now shows `icsTimeMode: utc-z`, `hasVTIMEZONE`, Content-Disposition mode, and a tappable ICS link.
+- Added inline/attachment Content-Disposition A/B control for Apple Calendar import investigation.
+- Upstash Redis storage, Google Calendar, shopping list, Follow Up Manager, and Analytics behavior are unchanged.
+
 ## Version 2.13.11 - 2026-06-03
 
 - Changed Apple Calendar persistent ICS storage from Vercel KV naming to direct Upstash Redis REST configuration.

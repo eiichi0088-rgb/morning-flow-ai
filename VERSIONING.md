@@ -5,9 +5,21 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.13.11 is based on v2.13.10 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.13.12 is based on v2.13.11 normal UI. Do not mix v3.0 or v3.1 UI.
 
 
+
+## Version 2.13.12 Apple Calendar iOS ICS Format Fix - 2026-06-03
+
+- Screen display: v2.13.12
+- ZIP: morning-flow-ai-v2.13.12.zip
+- Next planned version: Version 2.13.13
+- Apple Calendar ICS no longer emits `DTSTART;TZID=Asia/Tokyo` or `DTEND;TZID=Asia/Tokyo`.
+- DTSTART, DTEND, DTSTAMP, CREATED, and LAST-MODIFIED use UTC `Z` timestamps.
+- VTIMEZONE remains absent and Debug reports `hasVTIMEZONE: false`.
+- Apple Calendar Debug reports `icsTimeMode: utc-z` and Content-Disposition mode.
+- Inline/attachment Content-Disposition A/B control and tappable ICS link were added.
+- Upstash Redis storage, Google Calendar, shopping list, FOLLOW UP MANAGER, feedback, Analytics Lite, Developer Mode, snapshots, and session behavior are preserved.
 
 ## Version 2.13.11 Upstash Redis Free Storage Fix - 2026-06-03
 

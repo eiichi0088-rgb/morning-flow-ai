@@ -204,10 +204,13 @@ type AppleCalendarDebugInfo = {
   appVersion: string;
   bodyPreview?: string;
   contentDisposition?: string;
+  contentDispositionMode?: AppleCalendarDisposition;
   contentType?: string;
   fallbackUsed: string;
+  hasVTIMEZONE?: boolean;
   importId?: string;
   icsLength?: number;
+  icsTimeMode?: string;
   mode: string;
   payloadUrlLength?: number;
   responseStatus?: string;
@@ -229,8 +232,9 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.13.11';
+const appVersion = 'v2.13.12';
 const isMealDatabaseExperimentalEnabled = false;
+type AppleCalendarDisposition = 'inline' | 'attachment';
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
   { label: '✓ 完了', value: 'done' },
@@ -2808,6 +2812,7 @@ function GoogleCalendarExportPanel({ analyticsUserId, events }: { analyticsUserI
   const [selectedEventIds, setSelectedEventIds] = React.useState(() => events.map((event) => event.id));
   const [statusMessage, setStatusMessage] = React.useState('');
   const [appleDebug, setAppleDebug] = React.useState<AppleCalendarDebugInfo | null>(null);
+  const [appleDisposition, setAppleDisposition] = React.useState<AppleCalendarDisposition>('inline');
   const [isSigningIn, setIsSigningIn] = React.useState(false);
   const [isRegistering, setIsRegistering] = React.useState(false);
   const isConfigured = isGoogleCalendarConfigured();
@@ -2890,7 +2895,7 @@ function GoogleCalendarExportPanel({ analyticsUserId, events }: { analyticsUserI
   const openAppleCalendar = () => {
     trackAnalyticsFeature(analyticsUserId, 'apple_calendar');
     setStatusMessage('AppleカレンダーAPIを確認しています。');
-    void openAppleCalendarIcs(events, setAppleDebug).then(setStatusMessage);
+    void openAppleCalendarIcs(events, setAppleDebug, appleDisposition).then(setStatusMessage);
   };
 
   if (!events.length) {
@@ -2999,6 +3004,7 @@ function GoogleCalendarExportPanel({ analyticsUserId, events }: { analyticsUserI
         <Download size={18} />
         Appleカレンダーに追加
       </button>
+      <AppleCalendarDispositionControl value={appleDisposition} onChange={setAppleDisposition} />
       {appleDebug && <AppleCalendarDebugPanel debug={appleDebug} />}
     </div>
   );
@@ -3007,10 +3013,11 @@ function GoogleCalendarExportPanel({ analyticsUserId, events }: { analyticsUserI
 function CalendarExportPanel({ events }: { events: CalendarEvent[] }) {
   const [appleStatusMessage, setAppleStatusMessage] = React.useState('');
   const [appleDebug, setAppleDebug] = React.useState<AppleCalendarDebugInfo | null>(null);
+  const [appleDisposition, setAppleDisposition] = React.useState<AppleCalendarDisposition>('inline');
 
   const openAppleCalendar = () => {
     setAppleStatusMessage('AppleカレンダーAPIを確認しています。');
-    void openAppleCalendarIcs(events, setAppleDebug).then(setAppleStatusMessage);
+    void openAppleCalendarIcs(events, setAppleDebug, appleDisposition).then(setAppleStatusMessage);
   };
 
   if (!events.length) {
@@ -3060,8 +3067,28 @@ function CalendarExportPanel({ events }: { events: CalendarEvent[] }) {
         <Download size={18} />
         Appleカレンダーに追加
       </button>
+      <AppleCalendarDispositionControl value={appleDisposition} onChange={setAppleDisposition} />
       {appleStatusMessage && <p className="calendar-status">{appleStatusMessage}</p>}
       {appleDebug && <AppleCalendarDebugPanel debug={appleDebug} />}
+    </div>
+  );
+}
+
+function AppleCalendarDispositionControl({
+  onChange,
+  value,
+}: {
+  onChange: (value: AppleCalendarDisposition) => void;
+  value: AppleCalendarDisposition;
+}) {
+  return (
+    <div className="apple-calendar-disposition" aria-label="Apple Calendar Content-Disposition">
+      <button className={value === 'inline' ? 'selected' : ''} onClick={() => onChange('inline')} type="button">
+        inline
+      </button>
+      <button className={value === 'attachment' ? 'selected' : ''} onClick={() => onChange('attachment')} type="button">
+        attachment
+      </button>
     </div>
   );
 }
@@ -3077,7 +3104,19 @@ function AppleCalendarDebugPanel({ debug }: { debug: AppleCalendarDebugInfo }) {
         </div>
         <div>
           <dt>API URL</dt>
-          <dd>{debug.apiUrl}</dd>
+          <dd>
+            <a href={debug.apiUrl} rel="noreferrer" target="_blank">
+              {debug.apiUrl}
+            </a>
+          </dd>
+        </div>
+        <div>
+          <dt>ICS link</dt>
+          <dd>
+            <a href={debug.apiUrl} rel="noreferrer" target="_blank">
+              .icsを直接開く
+            </a>
+          </dd>
         </div>
         {debug.importId && (
           <div>
@@ -3114,6 +3153,18 @@ function AppleCalendarDebugPanel({ debug }: { debug: AppleCalendarDebugInfo }) {
         <div>
           <dt>Content-Disposition</dt>
           <dd>{debug.contentDisposition ?? 'not received'}</dd>
+        </div>
+        <div>
+          <dt>Disposition mode</dt>
+          <dd>{debug.contentDispositionMode ?? 'inline'}</dd>
+        </div>
+        <div>
+          <dt>icsTimeMode</dt>
+          <dd>{debug.icsTimeMode ?? 'unknown'}</dd>
+        </div>
+        <div>
+          <dt>hasVTIMEZONE</dt>
+          <dd>{String(debug.hasVTIMEZONE ?? false)}</dd>
         </div>
         <div>
           <dt>fallback used</dt>
@@ -3987,7 +4038,7 @@ function addDays(date: Date, days: number) {
 }
 
 function createIcsContent(events: CalendarEvent[]) {
-  const now = toCalendarTimestamp(new Date());
+  const now = toUtcCalendarTimestamp(new Date());
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -3998,8 +4049,10 @@ function createIcsContent(events: CalendarEvent[]) {
       'BEGIN:VEVENT',
       `UID:morning-flow-ai-${Date.now()}-${index}@local`,
       `DTSTAMP:${now}`,
-      `DTSTART;TZID=Asia/Tokyo:${toLocalCalendarTimestamp(event.start)}`,
-      `DTEND;TZID=Asia/Tokyo:${toLocalCalendarTimestamp(event.end)}`,
+      `CREATED:${now}`,
+      `LAST-MODIFIED:${now}`,
+      `DTSTART:${toUtcCalendarTimestamp(event.start)}`,
+      `DTEND:${toUtcCalendarTimestamp(event.end)}`,
       `SUMMARY:${escapeIcsText(event.title)}`,
       `DESCRIPTION:${escapeIcsText(event.memo)}`,
       'END:VEVENT',
@@ -4013,6 +4066,7 @@ function createIcsContent(events: CalendarEvent[]) {
 async function openAppleCalendarIcs(
   events: CalendarEvent[],
   onDebug?: (debug: AppleCalendarDebugInfo) => void,
+  disposition: AppleCalendarDisposition = 'inline',
 ) {
   const icsContent = createIcsContent(events);
   const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
@@ -4020,10 +4074,13 @@ async function openAppleCalendarIcs(
 
   if (isAppleMobileBrowser()) {
     const payloadUrl = createAppleCalendarPayloadUrl(icsContent);
-    const session = await createAppleCalendarImportSession(icsContent);
+    const session = await createAppleCalendarImportSession(icsContent, disposition);
     const debug = await verifyAppleCalendarGetUrl(session.importUrl, {
+      contentDispositionMode: disposition,
       fallbackUsed: session.fallbackUsed,
+      hasVTIMEZONE: icsContent.includes('BEGIN:VTIMEZONE'),
       icsLength: icsContent.length,
+      icsTimeMode: 'utc-z',
       importId: session.id,
       payloadUrlLength: payloadUrl.length,
       shortUrlLength: session.importUrl.length,
@@ -4059,7 +4116,7 @@ function createAppleCalendarPayloadUrl(icsContent: string) {
   return url.toString();
 }
 
-async function createAppleCalendarImportSession(icsContent: string) {
+async function createAppleCalendarImportSession(icsContent: string, disposition: AppleCalendarDisposition) {
   const apiUrl = new URL('/api/apple-calendar', window.location.href).toString();
 
   try {
@@ -4081,7 +4138,7 @@ async function createAppleCalendarImportSession(icsContent: string) {
     return {
       fallbackUsed: 'none',
       id: result.id,
-      importUrl: new URL(result.url, window.location.href).toString(),
+      importUrl: withAppleCalendarDisposition(new URL(result.url, window.location.href), disposition).toString(),
       storage: result.storage ?? 'upstash-redis',
     };
   } catch (error) {
@@ -4089,10 +4146,15 @@ async function createAppleCalendarImportSession(icsContent: string) {
     return {
       fallbackUsed: 'payload_url',
       id: undefined,
-      importUrl: createAppleCalendarPayloadUrl(icsContent),
+      importUrl: withAppleCalendarDisposition(new URL(createAppleCalendarPayloadUrl(icsContent)), disposition).toString(),
       storage: 'payload-url-fallback',
     };
   }
+}
+
+function withAppleCalendarDisposition(url: URL, disposition: AppleCalendarDisposition) {
+  url.searchParams.set('disposition', disposition);
+  return url;
 }
 
 async function verifyAppleCalendarGetUrl(
@@ -4102,8 +4164,11 @@ async function verifyAppleCalendarGetUrl(
   const baseDebug: AppleCalendarDebugInfo = {
     apiUrl,
     appVersion,
+    contentDispositionMode: details.contentDispositionMode,
     fallbackUsed: details.fallbackUsed ?? 'none',
+    hasVTIMEZONE: details.hasVTIMEZONE,
     icsLength: details.icsLength,
+    icsTimeMode: details.icsTimeMode,
     importId: details.importId,
     mode: details.importId ? 'api-get-short-id-ics-url' : 'api-get-payload-ics-url',
     payloadUrlLength: details.payloadUrlLength,
@@ -4178,18 +4243,8 @@ function isAppleMobileBrowser() {
   return isIphoneOrIpad || isStandalonePwa;
 }
 
-function toCalendarTimestamp(date: Date) {
+function toUtcCalendarTimestamp(date: Date) {
   return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-}
-
-function toLocalCalendarTimestamp(date: Date) {
-  const formatter = new Intl.DateTimeFormat('sv-SE', {
-    dateStyle: 'short',
-    hour12: false,
-    timeStyle: 'medium',
-    timeZone: 'Asia/Tokyo',
-  });
-  return formatter.format(date).replace(/[-: ]/g, '');
 }
 
 function escapeIcsText(value: string) {
