@@ -1,6 +1,14 @@
 ﻿# CHANGELOG
 
 
+## Version 2.12.4 - 2026-06-02
+
+- Added Analytics Test button on the usage status screen.
+- Added visible Analytics Lite send result and recent send log for troubleshooting.
+- Added console.info / console.error output for Analytics Lite endpoint, payload, and fetch failures.
+- Trimmed VITE_ANALYTICS_ENDPOINT before use and shows whether the production build has an endpoint configured.
+- Analytics still sends only timestamp, anonymous userId, eventType, feature, and version; no user content is sent.
+
 ## Version 2.12.3 - 2026-06-02
 
 - Added Analytics Lite initial implementation.

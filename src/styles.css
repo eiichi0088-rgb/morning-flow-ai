@@ -1133,6 +1133,48 @@ h1 {
   font-size: 0.95rem;
 }
 
+.analytics-debug-result {
+  border-radius: 14px;
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 11px 12px;
+}
+
+.analytics-debug-result.success,
+.analytics-debug-row.success {
+  background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.analytics-debug-result.error,
+.analytics-debug-row.error {
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+}
+
+.analytics-debug-result span,
+.analytics-debug-result small,
+.analytics-debug-row span,
+.analytics-debug-row small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.analytics-debug-list {
+  display: grid;
+  gap: 9px;
+}
+
+.analytics-debug-row {
+  border-radius: 12px;
+  display: grid;
+  gap: 4px;
+  padding: 10px 11px;
+}
+
 .shopping-lead {
   margin: 0;
   color: rgba(226, 235, 245, 0.76);

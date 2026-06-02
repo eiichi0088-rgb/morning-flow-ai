@@ -141,7 +141,7 @@ type FeedbackSummary = {
   urgency: FeedbackUrgency;
 };
 
-type AnalyticsEventType = 'app_install' | 'app_open' | 'feature_use' | 'feedback_sent';
+type AnalyticsEventType = 'app_install' | 'app_open' | 'feature_use' | 'feedback_sent' | 'test';
 type AnalyticsFeature =
   | 'morning_flow'
   | 'shopping_list'
@@ -157,6 +157,23 @@ type AnalyticsSummary = {
   popularFeatures?: Array<{ feature: string; count: number }>;
 };
 
+type AnalyticsSendResult = {
+  ok: boolean;
+  message: string;
+  endpointConfigured: boolean;
+  endpointPreview?: string;
+  payload?: Record<string, string>;
+};
+
+type AnalyticsDebugEntry = {
+  id: string;
+  at: string;
+  ok: boolean;
+  message: string;
+  eventType: AnalyticsEventType;
+  feature: string;
+};
+
 type PrivateSessionKeys = {
   draft: string;
   followUps: string;
@@ -167,7 +184,8 @@ type PrivateSessionKeys = {
 const privateSessionIdStorageKey = 'morning-flow-ai:session-id:v2';
 const analyticsUserIdStorageKey = 'morning-flow-ai:analytics-user-id:v1';
 const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1';
-const appVersion = 'v2.12.3';
+const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
+const appVersion = 'v2.12.4';
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
   { label: '✓ 完了', value: 'done' },
@@ -206,13 +224,40 @@ function createAnalyticsUserId() {
 }
 
 function getAnalyticsEndpoint() {
-  return import.meta.env.VITE_ANALYTICS_ENDPOINT as string | undefined;
+  const endpoint = import.meta.env.VITE_ANALYTICS_ENDPOINT as string | undefined;
+  return endpoint?.trim() || undefined;
 }
 
-function trackAnalyticsEvent(userId: string, eventType: AnalyticsEventType, feature = '--------') {
-  const endpoint = getAnalyticsEndpoint();
-  if (!endpoint) return;
+function maskAnalyticsEndpoint(endpoint?: string) {
+  if (!endpoint) return undefined;
+  if (endpoint.length <= 42) return endpoint;
+  return `${endpoint.slice(0, 24)}...${endpoint.slice(-14)}`;
+}
 
+function readAnalyticsDebugLog(): AnalyticsDebugEntry[] {
+  try {
+    return JSON.parse(localStorage.getItem(analyticsDebugStorageKey) || '[]') as AnalyticsDebugEntry[];
+  } catch {
+    return [];
+  }
+}
+
+function writeAnalyticsDebugLog(entry: Omit<AnalyticsDebugEntry, 'id' | 'at'>) {
+  const nextEntry: AnalyticsDebugEntry = {
+    ...entry,
+    at: new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }),
+    id: createLocalId('analytics-log'),
+  };
+  const nextLog = [nextEntry, ...readAnalyticsDebugLog()].slice(0, 12);
+  localStorage.setItem(analyticsDebugStorageKey, JSON.stringify(nextLog));
+}
+
+async function sendAnalyticsEvent(
+  userId: string,
+  eventType: AnalyticsEventType,
+  feature = '--------',
+): Promise<AnalyticsSendResult> {
+  const endpoint = getAnalyticsEndpoint();
   const payload = {
     eventType,
     feature,
@@ -221,16 +266,60 @@ function trackAnalyticsEvent(userId: string, eventType: AnalyticsEventType, feat
     version: appVersion,
   };
 
-  fetch(endpoint, {
-    body: JSON.stringify(payload),
-    headers: {
-      'Content-Type': 'text/plain;charset=utf-8',
-    },
-    method: 'POST',
-    mode: 'no-cors',
-  }).catch(() => {
-    // Analytics must never block the app.
+  if (!endpoint) {
+    const result = {
+      endpointConfigured: false,
+      message: 'VITE_ANALYTICS_ENDPOINT is not configured.',
+      ok: false,
+      payload,
+    };
+    console.error('[Analytics Lite] endpoint missing', result);
+    writeAnalyticsDebugLog({ eventType, feature, message: result.message, ok: false });
+    return result;
+  }
+
+  console.info('[Analytics Lite] sending', {
+    endpoint: maskAnalyticsEndpoint(endpoint),
+    payload,
   });
+
+  try {
+    await fetch(endpoint, {
+      body: JSON.stringify(payload),
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      method: 'POST',
+      mode: 'no-cors',
+    });
+    const result = {
+      endpointConfigured: true,
+      endpointPreview: maskAnalyticsEndpoint(endpoint),
+      message:
+        'Send request completed. Google Apps Script uses no-cors, so confirm the actual row in analytics_logs.',
+      ok: true,
+      payload,
+    };
+    console.info('[Analytics Lite] send completed', result);
+    writeAnalyticsDebugLog({ eventType, feature, message: result.message, ok: true });
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const result = {
+      endpointConfigured: true,
+      endpointPreview: maskAnalyticsEndpoint(endpoint),
+      message,
+      ok: false,
+      payload,
+    };
+    console.error('[Analytics Lite] send failed', result);
+    writeAnalyticsDebugLog({ eventType, feature, message, ok: false });
+    return result;
+  }
+}
+
+function trackAnalyticsEvent(userId: string, eventType: AnalyticsEventType, feature = '--------') {
+  void sendAnalyticsEvent(userId, eventType, feature);
 }
 
 function trackAnalyticsFeature(userId: string, feature: AnalyticsFeature) {
@@ -903,7 +992,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.12.3</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.12.4</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -1167,7 +1256,7 @@ function FollowUpManagerPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.3</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.4</span></p>
           <h1>FOLLOW UP MANAGER</h1>
         </div>
         <button className="icon-ghost-button" onClick={() => setIsFormOpen((current) => !current)} type="button" aria-label="追加">
@@ -1308,7 +1397,7 @@ function FeedbackBoxPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.3</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.4</span></p>
           <h1>FEEDBACK BOX</h1>
         </div>
         <div className="brand-mark" aria-hidden="true">
@@ -1412,14 +1501,30 @@ function FeedbackBoxPage({
 function AnalyticsDashboardPage({ onBack, userId }: { onBack: () => void; userId: string }) {
   const [summary, setSummary] = React.useState<AnalyticsSummary | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [testResult, setTestResult] = React.useState<AnalyticsSendResult | null>(null);
+  const [debugLog, setDebugLog] = React.useState<AnalyticsDebugEntry[]>(() => readAnalyticsDebugLog());
+  const [isTesting, setIsTesting] = React.useState(false);
   const endpoint = getAnalyticsEndpoint();
 
-  React.useEffect(() => {
+  const reloadSummary = React.useCallback(() => {
     setIsLoading(true);
     fetchAnalyticsSummary()
       .then(setSummary)
       .finally(() => setIsLoading(false));
   }, []);
+
+  React.useEffect(() => {
+    reloadSummary();
+  }, [reloadSummary]);
+
+  const runAnalyticsTest = async () => {
+    setIsTesting(true);
+    const result = await sendAnalyticsEvent(userId, 'test', 'manual_test');
+    setTestResult(result);
+    setDebugLog(readAnalyticsDebugLog());
+    window.setTimeout(reloadSummary, 1200);
+    setIsTesting(false);
+  };
 
   return (
     <section className="hero-panel analytics-page" aria-label="Analytics Lite">
@@ -1428,7 +1533,7 @@ function AnalyticsDashboardPage({ onBack, userId }: { onBack: () => void; userId
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.3</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.4</span></p>
           <h1>{'\u5229\u7528\u72b6\u6cc1'}</h1>
         </div>
         <div className="brand-mark" aria-hidden="true">
@@ -1472,6 +1577,55 @@ function AnalyticsDashboardPage({ onBack, userId }: { onBack: () => void; userId
       <section className="analytics-card">
         <span className="muted-category">Anonymous userId</span>
         <strong>{userId}</strong>
+      </section>
+
+      <section className="analytics-card">
+        <div className="follow-up-list-header">
+          <span>Analytics Test</span>
+          <strong>{endpoint ? 'Ready' : 'No endpoint'}</strong>
+        </div>
+        <button className="calendar-register-button" disabled={isTesting} onClick={runAnalyticsTest} type="button">
+          {isTesting ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
+          Analytics Test
+        </button>
+        <p className="follow-up-empty">
+          {endpoint
+            ? `Endpoint: ${maskAnalyticsEndpoint(endpoint)}`
+            : 'VITE_ANALYTICS_ENDPOINT is not configured in this build.'}
+        </p>
+        {testResult && (
+          <div className={`analytics-debug-result ${testResult.ok ? 'success' : 'error'}`}>
+            <strong>{testResult.ok ? '送信リクエスト完了' : '送信失敗'}</strong>
+            <span>{testResult.message}</span>
+            {testResult.payload && (
+              <small>
+                {testResult.payload.eventType} / {testResult.payload.feature} / {testResult.payload.version}
+              </small>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="analytics-card">
+        <div className="follow-up-list-header">
+          <span>送信ログ</span>
+          <strong>{debugLog.length}件</strong>
+        </div>
+        {debugLog.length ? (
+          <div className="analytics-debug-list">
+            {debugLog.map((entry) => (
+              <div className={`analytics-debug-row ${entry.ok ? 'success' : 'error'}`} key={entry.id}>
+                <span>{entry.at}</span>
+                <strong>
+                  {entry.eventType} / {entry.feature}
+                </strong>
+                <small>{entry.message}</small>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="follow-up-empty">まだ送信ログはありません。</p>
+        )}
       </section>
     </section>
   );
