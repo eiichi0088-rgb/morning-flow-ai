@@ -1,6 +1,6 @@
 ﻿# NEXT VERSION
 
-次回予定バージョン: Version 2.13.3
+次回予定バージョン: Version 2.13.4
 
 ## 方針
 

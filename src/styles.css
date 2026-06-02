@@ -1276,6 +1276,28 @@ h1 {
   line-height: 1.55;
 }
 
+.meal-debug-card {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(247, 231, 190, 0.18);
+  border-radius: 14px;
+  background: rgba(247, 231, 190, 0.06);
+  padding: 10px 11px;
+}
+
+.meal-debug-card span {
+  color: rgba(247, 231, 190, 0.92);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.meal-debug-card small {
+  color: rgba(226, 235, 245, 0.76);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
 .meal-candidate-list {
   display: grid;
   gap: 8px;

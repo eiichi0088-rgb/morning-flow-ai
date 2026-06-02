@@ -124,16 +124,20 @@ function normalizeRecipeName(value: string) {
 }
 
 export function findRecipe(name: string): Recipe | null {
+  return findRecipeMatch(name)?.recipe ?? null;
+}
+
+export function findRecipeMatch(name: string): { name: string; recipe: Recipe } | null {
   const normalized = normalizeRecipeName(name);
   const exact = Object.entries(recipeDatabase).find(([recipeName]) => normalizeRecipeName(recipeName) === normalized);
-  if (exact) return exact[1];
+  if (exact) return { name: exact[0], recipe: exact[1] };
 
   const partial = Object.entries(recipeDatabase).find(([recipeName]) => {
     const recipe = normalizeRecipeName(recipeName);
     return normalized.includes(recipe) || recipe.includes(normalized);
   });
 
-  return partial?.[1] ?? null;
+  return partial ? { name: partial[0], recipe: partial[1] } : null;
 }
 
 export function getRecipeDatabaseCount() {

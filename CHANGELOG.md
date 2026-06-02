@@ -1,6 +1,15 @@
 ﻿# CHANGELOG
 
 
+## Version 2.13.3 - 2026-06-02
+
+- Fixed Meal Database connection flow so known recipes always show ingredient candidates instead of an unknown recipe message.
+- Added normalized meal matching for lasagna, tarako spaghetti, tarako pasta, mentaiko pasta, curry rice, curry, vegetable salad, and salad.
+- Candidate generation now returns debug details for developer mode: extracted names, normalized names, matched recipe names, candidate count, and unknown state.
+- Unknown recipe message is shown only when candidate count is 0.
+- Dish names are not directly added to the shopping list during meal-plan flow.
+- Added analytics feature_use events for meal_database_match and meal_to_shopping_add.
+
 ## Version 2.13.2 - 2026-06-02
 
 - Added internal Meal Database 200 in src/services/recipeDatabase.ts.

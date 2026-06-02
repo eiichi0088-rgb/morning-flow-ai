@@ -51,7 +51,7 @@ import {
   parseShoppingItemInput,
   type ShoppingItem,
 } from './services/shoppingPlanner';
-import { findRecipe } from './services/recipeDatabase';
+import { findRecipeMatch } from './services/recipeDatabase';
 import './styles.css';
 
 type SpeechRecognitionResultListLike = SpeechRecognitionResultList;
@@ -148,7 +148,9 @@ type AnalyticsFeature =
   | 'shopping_list'
   | 'meal_to_shopping'
   | 'meal_database'
+  | 'meal_database_match'
   | 'meal_unknown_recipe'
+  | 'meal_to_shopping_add'
   | 'follow_up'
   | 'google_calendar'
   | 'apple_calendar'
@@ -162,6 +164,14 @@ type MealIngredientCandidate = {
   name: string;
   quantity: string;
   category: ShoppingItem['category'];
+};
+
+type MealPlanDebug = {
+  extracted: string[];
+  normalized: string[];
+  matched: string[];
+  candidateCount: number;
+  isUnknown: boolean;
 };
 
 type AnalyticsSummary = {
@@ -202,7 +212,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.13.2';
+const appVersion = 'v2.13.3';
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
   { label: '✓ 完了', value: 'done' },
@@ -552,6 +562,7 @@ function App() {
   const [originalMealPlanText, setOriginalMealPlanText] = React.useState('');
   const [mealServings, setMealServings] = React.useState(4);
   const [mealCandidates, setMealCandidates] = React.useState<MealIngredientCandidate[]>([]);
+  const [mealPlanDebug, setMealPlanDebug] = React.useState<MealPlanDebug | null>(null);
   const [isShoppingOrganizing, setIsShoppingOrganizing] = React.useState(false);
   const [isShoppingResetDialogOpen, setIsShoppingResetDialogOpen] = React.useState(false);
   const [highlightedShoppingIds, setHighlightedShoppingIds] = React.useState<string[]>([]);
@@ -932,13 +943,14 @@ function App() {
 
     if (detectMealPlanIntent(shoppingText)) {
       trackAnalyticsFeature(analyticsUserId, 'meal_to_shopping');
-      const candidates = createMealIngredientCandidates(shoppingText, mealServings);
-      trackAnalyticsFeature(analyticsUserId, candidates.length ? 'meal_database' : 'meal_unknown_recipe');
+      const mealResult = createMealPlanCandidateResult(shoppingText, mealServings);
+      trackAnalyticsFeature(analyticsUserId, mealResult.candidates.length ? 'meal_database_match' : 'meal_unknown_recipe');
       setMealPlanText(shoppingText.trim());
       setOriginalMealPlanText(shoppingText.trim());
-      setMealCandidates(candidates);
+      setMealCandidates(mealResult.candidates);
+      setMealPlanDebug(mealResult.debug);
       setShoppingCaptureMode('meal');
-      setShoppingError('\u30ec\u30b7\u30d4\u30c7\u30fc\u30bf\u30d9\u30fc\u30b9\u306b\u672a\u767b\u9332\u3067\u3059\u3002v2.14\u4ee5\u964d\u3067Web\u691c\u7d22\u30fbAI\u88dc\u5b8c\u3092\u691c\u8a0e\u3057\u307e\u3059\u3002');
+      setShoppingError(mealResult.candidates.length ? '' : '\u3053\u306e\u6599\u7406\u306f\u307e\u3060\u30ec\u30b7\u30d4\u30c7\u30fc\u30bf\u30d9\u30fc\u30b9\u306b\u767b\u9332\u3055\u308c\u3066\u3044\u307e\u305b\u3093\u3002\u6750\u6599\u3092\u624b\u5165\u529b\u3059\u308b\u304b\u3001\u901a\u5e38\u306e\u8cb7\u3044\u7269\u30ea\u30b9\u30c8\u3068\u3057\u3066\u8ffd\u52a0\u3057\u3066\u304f\u3060\u3055\u3044\u3002');
       return;
     }
 
@@ -956,7 +968,7 @@ function App() {
       })
       .catch((reason: unknown) => {
         console.error(reason);
-        setShoppingError('うまく整理できませんでした。もう一度お試しください。');
+        setShoppingError('\u3046\u307e\u304f\u6574\u7406\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u3082\u3046\u4e00\u5ea6\u304a\u8a66\u3057\u304f\u3060\u3055\u3044\u3002');
       })
       .finally(() => {
         setIsShoppingOrganizing(false);
@@ -984,21 +996,20 @@ function App() {
     if (!mealPlanText.trim()) return;
 
     trackAnalyticsFeature(analyticsUserId, 'meal_to_shopping');
-    const candidates = createMealIngredientCandidates(mealPlanText, mealServings);
-    trackAnalyticsFeature(analyticsUserId, candidates.length ? 'meal_database' : 'meal_unknown_recipe');
-    setMealCandidates(candidates);
+    const mealResult = createMealPlanCandidateResult(mealPlanText, mealServings);
+    trackAnalyticsFeature(analyticsUserId, mealResult.candidates.length ? 'meal_database_match' : 'meal_unknown_recipe');
+    setMealCandidates(mealResult.candidates);
+    setMealPlanDebug(mealResult.debug);
     setOriginalMealPlanText(mealPlanText.trim());
-    if (!candidates.length) {
-      setShoppingError('献立から材料候補を作れませんでした。料理名を少し具体的に入力してください。');
-    } else {
-      setShoppingError('');
-    }
+    setShoppingError(mealResult.candidates.length ? '' : '\u3053\u306e\u6599\u7406\u306f\u307e\u3060\u30ec\u30b7\u30d4\u30c7\u30fc\u30bf\u30d9\u30fc\u30b9\u306b\u767b\u9332\u3055\u308c\u3066\u3044\u307e\u305b\u3093\u3002\u6750\u6599\u3092\u624b\u5165\u529b\u3059\u308b\u304b\u3001\u901a\u5e38\u306e\u8cb7\u3044\u7269\u30ea\u30b9\u30c8\u3068\u3057\u3066\u8ffd\u52a0\u3057\u3066\u304f\u3060\u3055\u3044\u3002');
   };
 
   const changeMealServings = (servings: number) => {
     setMealServings(servings);
     if (mealPlanText.trim() && mealCandidates.length) {
-      setMealCandidates(createMealIngredientCandidates(mealPlanText, servings));
+      const mealResult = createMealPlanCandidateResult(mealPlanText, servings);
+      setMealCandidates(mealResult.candidates);
+      setMealPlanDebug(mealResult.debug);
     }
   };
 
@@ -1033,12 +1044,14 @@ function App() {
     if (!mealCandidates.length) return;
 
     trackAnalyticsFeature(analyticsUserId, 'meal_to_shopping');
+    trackAnalyticsFeature(analyticsUserId, 'meal_to_shopping_add');
     const previousIds = new Set(shoppingItems.map((item) => item.id));
     const nextItems = mergeMealCandidatesIntoShoppingItems(shoppingItems, mealCandidates);
     setShoppingItems(nextItems);
     setShoppingUpdatedAt(new Date().toISOString());
     setHighlightedShoppingIds(nextItems.filter((item) => !previousIds.has(item.id)).map((item) => item.id));
     setMealCandidates([]);
+    setMealPlanDebug(null);
     setShoppingCaptureMode('shopping');
   };
 
@@ -1049,6 +1062,7 @@ function App() {
     setMealPlanText('');
     setOriginalMealPlanText('');
     setMealCandidates([]);
+    setMealPlanDebug(null);
     setMealServings(4);
     setShoppingCaptureMode('shopping');
     setShoppingItems([]);
@@ -1215,6 +1229,7 @@ function App() {
           isSupported={isSupported}
           items={shoppingItems}
           mealCandidates={mealCandidates}
+          mealDebug={mealPlanDebug}
           mealPlanText={mealPlanText}
           mealServings={mealServings}
           mode={shoppingCaptureMode}
@@ -1289,7 +1304,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.13.2</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.13.3</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -1553,7 +1568,7 @@ function FollowUpManagerPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.13.2</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13.3</span></p>
           <h1>FOLLOW UP MANAGER</h1>
         </div>
         <button className="icon-ghost-button" onClick={() => setIsFormOpen((current) => !current)} type="button" aria-label="追加">
@@ -1694,7 +1709,7 @@ function FeedbackBoxPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.13.2</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13.3</span></p>
           <h1>FEEDBACK BOX</h1>
         </div>
         <div className="brand-mark" aria-hidden="true">
@@ -1878,7 +1893,7 @@ function AnalyticsDashboardPage({ onBack, userId }: { onBack: () => void; userId
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.13.2</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13.3</span></p>
           <h1>{'\u5229\u7528\u72b6\u6cc1'}</h1>
         </div>
         <div className="brand-mark" aria-hidden="true">
@@ -2105,6 +2120,7 @@ function ShoppingListPage({
   isSupported,
   items,
   mealCandidates,
+  mealDebug,
   mealPlanText,
   mealServings,
   mode,
@@ -2142,6 +2158,7 @@ function ShoppingListPage({
   isSupported: boolean;
   items: ShoppingItem[];
   mealCandidates: MealIngredientCandidate[];
+  mealDebug: MealPlanDebug | null;
   mealPlanText: string;
   mealServings: number;
   mode: ShoppingCaptureMode;
@@ -2194,7 +2211,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.13.2</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13.3</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
@@ -2306,6 +2323,16 @@ function ShoppingListPage({
             <h2>材料候補確認</h2>
           </div>
           <p className="meal-candidate-note">不要な材料は削除してから、買い物リストに追加してください。</p>
+          {mealDebug && isDeveloperModeEnabled() && (
+            <div className="meal-debug-card">
+              <span>Developer Debug</span>
+              <small>extracted: {mealDebug.extracted.join(', ') || '-'}</small>
+              <small>normalized: {mealDebug.normalized.join(', ') || '-'}</small>
+              <small>matched: {mealDebug.matched.join(', ') || '-'}</small>
+              <small>candidateCount: {mealDebug.candidateCount}</small>
+              <small>isUnknown: {String(mealDebug.isUnknown)}</small>
+            </div>
+          )}
           {mealCandidates.length ? (
             <>
               <div className="meal-candidate-list">
@@ -3276,7 +3303,9 @@ function formatAnalyticsFeatureLabel(feature: string) {
     google_calendar: 'Google Calendar',
     meal_to_shopping: '献立から買い物',
     meal_database: 'Meal Database',
+    meal_database_match: 'Meal Database Match',
     meal_unknown_recipe: '未登録レシピ',
+    meal_to_shopping_add: 'Meal Add',
     morning_flow: 'Morning Flow',
     shopping_list: '\u8cb7\u3044\u7269\u30ea\u30b9\u30c8',
   };
@@ -3489,21 +3518,46 @@ function createLocalShoppingItemId(name: string) {
 }
 
 function createMealIngredientCandidates(text: string, servings: number): MealIngredientCandidate[] {
-  const meals = extractMealNames(text);
+  return createMealPlanCandidateResult(text, servings).candidates;
+}
+
+function createMealPlanCandidateResult(text: string, servings: number): { candidates: MealIngredientCandidate[]; debug: MealPlanDebug } {
+  const extractedMeals = extractMealNames(text);
+  const normalizedMeals = extractedMeals.map(normalizeMealName);
   const multiplier = Math.max(1, servings) / 4;
+  const matchedMeals: string[] = [];
+  const seenIngredients = new Set<string>();
+  const candidates: MealIngredientCandidate[] = [];
 
-  return meals.flatMap((meal) => {
-    const recipe = findRecipe(meal);
-    if (!recipe) return [];
+  normalizedMeals.forEach((meal, mealIndex) => {
+    const match = findRecipeMatch(meal);
+    if (!match) return;
+    matchedMeals.push(match.name);
 
-    return recipe.ingredients.map((ingredient) => ({
+    match.recipe.ingredients.forEach((ingredient) => {
+      const normalizedIngredient = normalizeTaskText(ingredient);
+      if (seenIngredients.has(normalizedIngredient)) return;
+      seenIngredients.add(normalizedIngredient);
+      candidates.push({
       category: classifyShoppingItem(ingredient),
       id: createLocalId('meal-candidate'),
-      meal,
+        meal: extractedMeals[mealIndex] ?? meal,
       name: ingredient,
       quantity: scaleMealQuantity(estimateIngredientQuantity(ingredient), multiplier),
-    }));
+      });
+    });
   });
+
+  return {
+    candidates,
+    debug: {
+      candidateCount: candidates.length,
+      extracted: extractedMeals,
+      isUnknown: candidates.length === 0,
+      matched: matchedMeals,
+      normalized: normalizedMeals,
+    },
+  };
 }
 
 function extractMealNames(text: string) {
@@ -3539,6 +3593,21 @@ function extractMealNames(text: string) {
     .map((meal) => meal.trim())
     .filter((meal) => meal.length >= 2)
     .slice(0, 3);
+}
+
+function normalizeMealName(meal: string) {
+  const compact = meal.replace(/\s/g, '').replace(/\u3000/g, '');
+  if (compact.includes('\u3089\u3056\u306b\u3042') || compact.includes('\u30e9\u30b6\u30cb\u30a2')) return '\u30e9\u30b6\u30cb\u30a2';
+  if (
+    compact.includes('\u305f\u3089\u3053\u30b9\u30d1\u30b2\u30c6\u30a3') ||
+    compact.includes('\u305f\u3089\u3053\u30d1\u30b9\u30bf') ||
+    compact.includes('\u660e\u592a\u5b50\u30d1\u30b9\u30bf')
+  ) {
+    return '\u305f\u3089\u3053\u30b9\u30d1\u30b2\u30c6\u30a3';
+  }
+  if (compact.includes('\u30ab\u30ec\u30fc\u30e9\u30a4\u30b9') || compact.includes('\u30ab\u30ec\u30fc')) return '\u30ab\u30ec\u30fc';
+  if (compact.includes('\u91ce\u83dc\u30b5\u30e9\u30c0') || compact.includes('\u30b5\u30e9\u30c0')) return '\u30b5\u30e9\u30c0';
+  return compact;
 }
 
 function estimateIngredientQuantity(name: string) {
@@ -3594,11 +3663,31 @@ function mergeMealCandidatesIntoShoppingItems(
 
 function detectMealPlanIntent(text: string) {
   if (detectExplicitShoppingIntent(text)) return false;
-  return includesAny(text, ['今日の夜ご飯', '今日の晩ご飯', '夕飯', '晩ご飯', '今夜', '夜ご飯', 'ご飯は', '作る', '作ります', 'にします', '食べたい', '献立']);
+  return includesAny(text, [
+    '\u4eca\u65e5\u306e\u591c\u3054\u98ef',
+    '\u4eca\u65e5\u306e\u6669\u3054\u98ef',
+    '\u5915\u98ef',
+    '\u6669\u3054\u98ef',
+    '\u4eca\u591c',
+    '\u591c\u3054\u98ef',
+    '\u3054\u98ef\u306f',
+    '\u4f5c\u308b',
+    '\u4f5c\u308a\u307e\u3059',
+    '\u306b\u3057\u307e\u3059',
+    '\u98df\u3079\u305f\u3044',
+    '\u732e\u7acb',
+  ]);
 }
 
 function detectExplicitShoppingIntent(text: string) {
-  return includesAny(text, ['買う', '買います', '買いたい', '購入', '冷凍', 'の素']);
+  return includesAny(text, [
+    '\u8cb7\u3046',
+    '\u8cb7\u3044\u307e\u3059',
+    '\u8cb7\u3044\u305f\u3044',
+    '\u8cfc\u5165',
+    '\u51b7\u51cd',
+    '\u306e\u7d20',
+  ]);
 }
 
 function isSameLocalDate(date: Date, baseDate: Date) {
