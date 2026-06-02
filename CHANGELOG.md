@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## Version 2.13.5 - 2026-06-02
+
+- Renamed the Apple calendar action to Apple????????.
+- Changed iPhone, Safari, and PWA Apple calendar handling to open the generated .ics file instead of relying on the download attribute.
+- Preserved PC download behavior with the safe filename morning-flow-event.ics.
+- Updated the .ics content for Apple Calendar compatibility with PRODID, METHOD:PUBLISH, CRLF line endings, and Asia/Tokyo DTSTART/DTEND values.
+- Existing Google Calendar, shopping list, FOLLOW UP MANAGER, feedback, Analytics Lite, Developer Mode, and private storage behavior are unchanged.
+
 ## Version 2.13.4 - 2026-06-02
 
 - Temporarily hid the Meal Database UI and the meal-to-shopping entry button from the shopping list screen.

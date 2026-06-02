@@ -5,9 +5,20 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.13.4 is based on v2.13.3 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.13.5 is based on v2.13.4 normal UI. Do not mix v3.0 or v3.1 UI.
 
 
+
+## Version 2.13.5 Apple Calendar ICS Fix - 2026-06-02
+
+- Screen display: v2.13.5
+- ZIP: morning-flow-ai-v2.13.5.zip
+- Next planned version: Version 2.13.6
+- Apple Calendar action is renamed to Apple????????.
+- iPhone, Safari, and PWA environments open the generated .ics file instead of using download-only behavior.
+- PC environments can still download the .ics file as morning-flow-event.ics.
+- ICS output keeps CRLF line endings, METHOD:PUBLISH, PRODID:-//MORNING FLOW AI//JP, and Asia/Tokyo event times.
+- Existing Google Calendar, shopping list, FOLLOW UP MANAGER, feedback, Analytics Lite, Developer Mode, snapshots, and session behavior are preserved.
 
 ## Version 2.13.4 Shopping List Stabilization - 2026-06-02
 

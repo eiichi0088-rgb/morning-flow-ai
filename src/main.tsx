@@ -212,7 +212,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.13.4';
+const appVersion = 'v2.13.5';
 const isMealDatabaseExperimentalEnabled = false;
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
@@ -1305,7 +1305,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.13.4</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.13.5</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -1569,7 +1569,7 @@ function FollowUpManagerPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.13.4</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13.5</span></p>
           <h1>FOLLOW UP MANAGER</h1>
         </div>
         <button className="icon-ghost-button" onClick={() => setIsFormOpen((current) => !current)} type="button" aria-label="追加">
@@ -1710,7 +1710,7 @@ function FeedbackBoxPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.13.4</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13.5</span></p>
           <h1>FEEDBACK BOX</h1>
         </div>
         <div className="brand-mark" aria-hidden="true">
@@ -1894,7 +1894,7 @@ function AnalyticsDashboardPage({ onBack, userId }: { onBack: () => void; userId
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.13.4</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13.5</span></p>
           <h1>{'\u5229\u7528\u72b6\u6cc1'}</h1>
         </div>
         <div className="brand-mark" aria-hidden="true">
@@ -2212,7 +2212,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.13.4</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13.5</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
@@ -2971,18 +2971,20 @@ function GoogleCalendarExportPanel({ analyticsUserId, events }: { analyticsUserI
         className="calendar-download-button"
         onClick={() => {
           trackAnalyticsFeature(analyticsUserId, 'apple_calendar');
-          downloadIcs(events);
+          setStatusMessage(openAppleCalendarIcs(events));
         }}
         type="button"
       >
         <Download size={18} />
-        Appleカレンダー用ファイルを保存
+        Appleカレンダーに追加
       </button>
     </div>
   );
 }
 
 function CalendarExportPanel({ events }: { events: CalendarEvent[] }) {
+  const [appleStatusMessage, setAppleStatusMessage] = React.useState('');
+
   if (!events.length) {
     return (
       <div className="calendar-panel">
@@ -3026,10 +3028,11 @@ function CalendarExportPanel({ events }: { events: CalendarEvent[] }) {
         ))}
       </div>
 
-      <button className="calendar-download-button" onClick={() => downloadIcs(events)} type="button">
+      <button className="calendar-download-button" onClick={() => setAppleStatusMessage(openAppleCalendarIcs(events))} type="button">
         <Download size={18} />
-        Appleカレンダー用ファイルを保存
+        Appleカレンダーに追加
       </button>
+      {appleStatusMessage && <p className="calendar-status">{appleStatusMessage}</p>}
     </div>
   );
 }
@@ -3882,13 +3885,14 @@ function addDays(date: Date, days: number) {
   return result;
 }
 
-function downloadIcs(events: CalendarEvent[]) {
+function createIcsContent(events: CalendarEvent[]) {
   const now = toCalendarTimestamp(new Date());
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//MORNING FLOW AI//Calendar Export//JA',
+    'PRODID:-//MORNING FLOW AI//JP',
     'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
     ...events.flatMap((event, index) => [
       'BEGIN:VEVENT',
       `UID:morning-flow-ai-${Date.now()}-${index}@local`,
@@ -3901,15 +3905,42 @@ function downloadIcs(events: CalendarEvent[]) {
     ]),
     'END:VCALENDAR',
   ];
-  const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+
+  return `${lines.join('\r\n')}\r\n`;
+}
+
+function openAppleCalendarIcs(events: CalendarEvent[]) {
+  const icsContent = createIcsContent(events);
+  const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);
+  const fileName = 'morning-flow-event.ics';
+
+  if (isAppleMobileBrowser()) {
+    const opened = window.open(url, '_blank');
+    if (!opened) {
+      window.location.href = url;
+    }
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return 'Appleカレンダー用の予定ファイルを開きます。うまく開けない場合はSafariでMORNING FLOW AIを開いてから、もう一度Appleカレンダーに追加を押してください。';
+  }
+
   const link = document.createElement('a');
   link.href = url;
-  link.download = 'morning-flow-ai-schedule.ics';
+  link.download = fileName;
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return 'Appleカレンダー用の予定ファイルを作成しました。';
+}
+
+function isAppleMobileBrowser() {
+  const standaloneNavigator = navigator as Navigator & { standalone?: boolean };
+  const isTouchMac = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+  const isIphoneOrIpad = /iPhone|iPad|iPod/.test(navigator.userAgent) || isTouchMac;
+  const isStandalonePwa =
+    window.matchMedia?.('(display-mode: standalone)').matches || standaloneNavigator.standalone === true;
+  return isIphoneOrIpad || isStandalonePwa;
 }
 
 function toCalendarTimestamp(date: Date) {
