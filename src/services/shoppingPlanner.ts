@@ -16,6 +16,7 @@ export interface ShoppingItem {
   category: ShoppingCategory;
   completed: boolean;
   addedAt: string;
+  source?: 'manual' | 'voice' | 'meal_plan';
 }
 
 export interface ShoppingPlan {
@@ -219,6 +220,7 @@ function mergeAiItems(
       category,
       completed: false,
       addedAt: new Date().toISOString(),
+      source: 'manual',
     };
     existingByName.set(normalized, item);
     nextItems.push(item);
@@ -262,6 +264,7 @@ function normalizeStoredItem(item: ShoppingItem): ShoppingItem {
     quantity: normalizeQuantity(parsed.quantity || item.quantity || ''),
     category: normalizeCategory(item.category),
     id: item.id?.startsWith('shopping-') ? item.id : createShoppingItemId(),
+    source: item.source ?? 'manual',
   };
 }
 

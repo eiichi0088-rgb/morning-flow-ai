@@ -1223,8 +1223,91 @@ h1 {
   padding-top: 6px;
 }
 
+.shopping-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.shopping-mode-tabs button {
+  min-height: 46px;
+  border: 1px solid rgba(223, 247, 255, 0.14);
+  border-radius: 14px;
+  color: rgba(238, 246, 255, 0.78);
+  background: rgba(223, 247, 255, 0.06);
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.shopping-mode-tabs button.selected {
+  color: #11151d;
+  background: linear-gradient(135deg, #ffffff, #dff7ff 52%, #f7e7be);
+}
+
 .shopping-editor {
   gap: 14px;
+}
+
+.meal-servings-control {
+  display: grid;
+  gap: 8px;
+  color: rgba(226, 235, 245, 0.78);
+  font-size: 0.84rem;
+  font-weight: 820;
+}
+
+.meal-servings-control select {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(6, 11, 20, 0.5);
+  color: #fff;
+  font: inherit;
+  padding: 12px 13px;
+}
+
+.meal-candidate-card {
+  gap: 13px;
+}
+
+.meal-candidate-note {
+  margin: 0;
+  color: rgba(226, 235, 245, 0.72);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.meal-candidate-list {
+  display: grid;
+  gap: 8px;
+}
+
+.meal-candidate-row {
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px 46px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 8px;
+}
+
+.meal-candidate-row div {
+  display: grid;
+  gap: 4px;
+}
+
+.meal-candidate-row span {
+  color: rgba(247, 231, 190, 0.84);
+  font-size: 0.76rem;
+  font-weight: 820;
+}
+
+.meal-candidate-row strong {
+  color: rgba(238, 246, 255, 0.92);
+  font-size: 0.98rem;
+  line-height: 1.35;
 }
 
 .shopping-result-card {

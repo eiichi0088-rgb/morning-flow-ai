@@ -145,10 +145,21 @@ type AnalyticsEventType = 'app_install' | 'app_open' | 'feature_use' | 'feedback
 type AnalyticsFeature =
   | 'morning_flow'
   | 'shopping_list'
+  | 'meal_to_shopping'
   | 'follow_up'
   | 'google_calendar'
   | 'apple_calendar'
   | 'feedback';
+
+type ShoppingCaptureMode = 'shopping' | 'meal';
+
+type MealIngredientCandidate = {
+  id: string;
+  meal: string;
+  name: string;
+  quantity: string;
+  category: ShoppingItem['category'];
+};
 
 type AnalyticsSummary = {
   totalUsers?: number;
@@ -188,7 +199,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.12.6';
+const appVersion = 'v2.13';
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
   { label: '✓ 完了', value: 'done' },
@@ -533,6 +544,11 @@ function App() {
   const [shoppingUpdatedAt, setShoppingUpdatedAt] = React.useState('');
   const [shoppingError, setShoppingError] = React.useState('');
   const [shoppingShareMessage, setShoppingShareMessage] = React.useState('');
+  const [shoppingCaptureMode, setShoppingCaptureMode] = React.useState<ShoppingCaptureMode>('shopping');
+  const [mealPlanText, setMealPlanText] = React.useState('');
+  const [originalMealPlanText, setOriginalMealPlanText] = React.useState('');
+  const [mealServings, setMealServings] = React.useState(4);
+  const [mealCandidates, setMealCandidates] = React.useState<MealIngredientCandidate[]>([]);
   const [isShoppingOrganizing, setIsShoppingOrganizing] = React.useState(false);
   const [isShoppingResetDialogOpen, setIsShoppingResetDialogOpen] = React.useState(false);
   const [highlightedShoppingIds, setHighlightedShoppingIds] = React.useState<string[]>([]);
@@ -548,11 +564,13 @@ function App() {
   const isFollowUpView = activeView === 'followUp';
   const isFeedbackView = activeView === 'feedback';
   const resultText = [transcript, interimTranscript].filter(Boolean).join('\n');
-  const shoppingResultText = [shoppingText, isShoppingView ? interimTranscript : ''].filter(Boolean).join('\n');
+  const activeShoppingText = shoppingCaptureMode === 'meal' ? mealPlanText : shoppingText;
+  const activeSavedShoppingText = shoppingCaptureMode === 'meal' ? originalMealPlanText : originalShoppingText;
+  const shoppingResultText = [activeShoppingText, isShoppingView ? interimTranscript : ''].filter(Boolean).join('\n');
   const feedbackResultText = [feedbackText, isFeedbackView ? interimTranscript : ''].filter(Boolean).join('\n');
   const canOrganize = Boolean(transcript.trim()) && !isListening && captureMode === 'create';
   const canUpdatePlan = false;
-  const canOrganizeShopping = Boolean(shoppingText.trim()) && !isListening;
+  const canOrganizeShopping = Boolean(activeShoppingText.trim()) && !isListening;
   const canUseNext = canOrganize || canUpdatePlan || Boolean(plan);
   const nextButtonLabel = isOrganizing
     ? canUpdatePlan
@@ -591,11 +609,18 @@ function App() {
           items?: ShoppingItem[];
           text?: string;
           updatedAt?: string;
+          mealText?: string;
+          mealServings?: number;
+          mealCandidates?: MealIngredientCandidate[];
         };
         setShoppingText(parsed.text ?? '');
         setOriginalShoppingText(parsed.text ?? '');
         setShoppingItems(Array.isArray(parsed.items) ? parsed.items : []);
         setShoppingUpdatedAt(parsed.updatedAt ?? '');
+        setMealPlanText(parsed.mealText ?? '');
+        setOriginalMealPlanText(parsed.mealText ?? '');
+        setMealServings(parsed.mealServings ?? 4);
+        setMealCandidates(Array.isArray(parsed.mealCandidates) ? parsed.mealCandidates : []);
       } catch {
         localStorage.removeItem(privateSessionKeys.shopping);
       }
@@ -626,7 +651,7 @@ function App() {
   }, [highlightedScheduleKeys]);
 
   React.useEffect(() => {
-    if (!shoppingText.trim() && !shoppingItems.length) {
+    if (!shoppingText.trim() && !shoppingItems.length && !mealPlanText.trim() && !mealCandidates.length) {
       localStorage.removeItem(privateSessionKeys.shopping);
       return;
     }
@@ -634,12 +659,15 @@ function App() {
     localStorage.setItem(
       privateSessionKeys.shopping,
       JSON.stringify({
+        mealCandidates,
+        mealServings,
+        mealText: mealPlanText,
         items: shoppingItems,
         text: shoppingText,
         updatedAt: shoppingUpdatedAt,
       }),
     );
-  }, [privateSessionKeys.shopping, shoppingItems, shoppingText, shoppingUpdatedAt]);
+  }, [mealCandidates, mealPlanText, mealServings, privateSessionKeys.shopping, shoppingItems, shoppingText, shoppingUpdatedAt]);
 
   React.useEffect(() => {
     if (!followUps.length) {
@@ -704,11 +732,19 @@ function App() {
       if (finalText) {
         const appendText = (current: string) => `${current}${current ? '\n' : ''}${finalText.trim()}`;
         if (activeView === 'shopping') {
-          setShoppingText((current) => {
-            const nextText = appendText(current);
-            setOriginalShoppingText(nextText);
-            return nextText;
-          });
+          if (shoppingCaptureMode === 'meal') {
+            setMealPlanText((current) => {
+              const nextText = appendText(current);
+              setOriginalMealPlanText(nextText);
+              return nextText;
+            });
+          } else {
+            setShoppingText((current) => {
+              const nextText = appendText(current);
+              setOriginalShoppingText(nextText);
+              return nextText;
+            });
+          }
         } else if (activeView === 'feedback') {
           setFeedbackText((current) => appendText(current));
         } else if (captureMode === 'update') {
@@ -736,7 +772,7 @@ function App() {
     return () => {
       instance.abort();
     };
-  }, [activeView, captureMode]);
+  }, [activeView, captureMode, shoppingCaptureMode]);
 
   const startListening = () => {
     if (!recognition || isListening) return;
@@ -912,10 +948,93 @@ function App() {
       });
   };
 
+  const openMealPlanMode = () => {
+    recognition?.abort();
+    setInterimTranscript('');
+    setIsListening(false);
+    setShoppingCaptureMode('meal');
+    setShoppingError('');
+    trackAnalyticsFeature(analyticsUserId, 'meal_to_shopping');
+  };
+
+  const openShoppingInputMode = () => {
+    recognition?.abort();
+    setInterimTranscript('');
+    setIsListening(false);
+    setShoppingCaptureMode('shopping');
+    setShoppingError('');
+  };
+
+  const generateMealCandidates = () => {
+    if (!mealPlanText.trim()) return;
+
+    trackAnalyticsFeature(analyticsUserId, 'meal_to_shopping');
+    const candidates = createMealIngredientCandidates(mealPlanText, mealServings);
+    setMealCandidates(candidates);
+    setOriginalMealPlanText(mealPlanText.trim());
+    if (!candidates.length) {
+      setShoppingError('献立から材料候補を作れませんでした。料理名を少し具体的に入力してください。');
+    } else {
+      setShoppingError('');
+    }
+  };
+
+  const changeMealServings = (servings: number) => {
+    setMealServings(servings);
+    if (mealPlanText.trim() && mealCandidates.length) {
+      setMealCandidates(createMealIngredientCandidates(mealPlanText, servings));
+    }
+  };
+
+  const deleteMealCandidate = (candidateId: string) => {
+    setMealCandidates((current) => current.filter((candidate) => candidate.id !== candidateId));
+  };
+
+  const editMealCandidate = (candidateId: string) => {
+    const candidate = mealCandidates.find((item) => item.id === candidateId);
+    if (!candidate) return;
+
+    const nextText = window.prompt('材料名と分量を編集してください', formatMealCandidateLabel(candidate))?.trim();
+    if (!nextText) return;
+    const parsed = parseShoppingItemInput(nextText);
+    const name = parsed.name || nextText;
+
+    setMealCandidates((current) =>
+      current.map((item) =>
+        item.id === candidateId
+          ? {
+              ...item,
+              name,
+              quantity: parsed.quantity || item.quantity,
+              category: classifyShoppingItem(name),
+            }
+          : item,
+      ),
+    );
+  };
+
+  const addMealCandidatesToShoppingList = () => {
+    if (!mealCandidates.length) return;
+
+    trackAnalyticsFeature(analyticsUserId, 'meal_to_shopping');
+    const previousIds = new Set(shoppingItems.map((item) => item.id));
+    const nextItems = mergeMealCandidatesIntoShoppingItems(shoppingItems, mealCandidates);
+    setShoppingItems(nextItems);
+    setShoppingUpdatedAt(new Date().toISOString());
+    setHighlightedShoppingIds(nextItems.filter((item) => !previousIds.has(item.id)).map((item) => item.id));
+    setMealCandidates([]);
+    setShoppingCaptureMode('shopping');
+  };
+
   const resetShoppingList = () => {
     recognition?.abort();
     setShoppingText('');
     setOriginalShoppingText('');
+    setMealPlanText('');
+    setOriginalMealPlanText('');
+    setMealCandidates([]);
+    setMealServings(4);
+    setShoppingCaptureMode('shopping');
     setShoppingItems([]);
     setShoppingUpdatedAt('');
     setShoppingError('');
@@ -1079,6 +1198,11 @@ function App() {
           isResetDialogOpen={isShoppingResetDialogOpen}
           isSupported={isSupported}
           items={shoppingItems}
+          mealCandidates={mealCandidates}
+          mealPlanText={mealPlanText}
+          mealServings={mealServings}
+          mode={shoppingCaptureMode}
+          onAddMealCandidates={addMealCandidatesToShoppingList}
           onBack={() => {
             recognition?.abort();
             setInterimTranscript('');
@@ -1086,6 +1210,12 @@ function App() {
             setActiveView('morning');
           }}
           onCancelReset={() => setIsShoppingResetDialogOpen(false)}
+          onChangeMealServings={changeMealServings}
+          onDeleteMealCandidate={deleteMealCandidate}
+          onEditMealCandidate={editMealCandidate}
+          onGenerateMealCandidates={generateMealCandidates}
+          onOpenMealMode={openMealPlanMode}
+          onOpenShoppingMode={openShoppingInputMode}
           onOrganize={organizeShoppingList}
           onReset={resetShoppingList}
           onResetRequest={() => setIsShoppingResetDialogOpen(true)}
@@ -1093,15 +1223,19 @@ function App() {
           onStopListening={stopListening}
           onEditItem={editShoppingItem}
           onTextChange={(value) => {
-            setShoppingText(value);
+            if (shoppingCaptureMode === 'meal') {
+              setMealPlanText(value);
+            } else {
+              setShoppingText(value);
+            }
             setShoppingError('');
           }}
           onDeleteItem={deleteShoppingItem}
           onShare={shareShoppingList}
           onToggleItem={toggleShoppingItem}
           resultText={shoppingResultText}
-          savedText={originalShoppingText}
-          text={shoppingText}
+          savedText={activeSavedShoppingText}
+          text={activeShoppingText}
           updatedAt={shoppingUpdatedAt}
           shareMessage={shoppingShareMessage}
         />
@@ -1139,7 +1273,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.12.6</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.13</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -1403,7 +1537,7 @@ function FollowUpManagerPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.6</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13</span></p>
           <h1>FOLLOW UP MANAGER</h1>
         </div>
         <button className="icon-ghost-button" onClick={() => setIsFormOpen((current) => !current)} type="button" aria-label="追加">
@@ -1544,7 +1678,7 @@ function FeedbackBoxPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.6</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13</span></p>
           <h1>FEEDBACK BOX</h1>
         </div>
         <div className="brand-mark" aria-hidden="true">
@@ -1728,7 +1862,7 @@ function AnalyticsDashboardPage({ onBack, userId }: { onBack: () => void; userId
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.6</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13</span></p>
           <h1>{'\u5229\u7528\u72b6\u6cc1'}</h1>
         </div>
         <div className="brand-mark" aria-hidden="true">
@@ -1954,8 +2088,19 @@ function ShoppingListPage({
   isResetDialogOpen,
   isSupported,
   items,
+  mealCandidates,
+  mealPlanText,
+  mealServings,
+  mode,
+  onAddMealCandidates,
   onBack,
   onCancelReset,
+  onChangeMealServings,
+  onDeleteMealCandidate,
+  onEditMealCandidate,
+  onGenerateMealCandidates,
+  onOpenMealMode,
+  onOpenShoppingMode,
   onOrganize,
   onReset,
   onResetRequest,
@@ -1980,8 +2125,19 @@ function ShoppingListPage({
   isResetDialogOpen: boolean;
   isSupported: boolean;
   items: ShoppingItem[];
+  mealCandidates: MealIngredientCandidate[];
+  mealPlanText: string;
+  mealServings: number;
+  mode: ShoppingCaptureMode;
+  onAddMealCandidates: () => void;
   onBack: () => void;
   onCancelReset: () => void;
+  onChangeMealServings: (servings: number) => void;
+  onDeleteMealCandidate: (candidateId: string) => void;
+  onEditMealCandidate: (candidateId: string) => void;
+  onGenerateMealCandidates: () => void;
+  onOpenMealMode: () => void;
+  onOpenShoppingMode: () => void;
   onOrganize: () => void;
   onReset: () => void;
   onResetRequest: () => void;
@@ -2001,6 +2157,7 @@ function ShoppingListPage({
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const groups = groupShoppingItems(items);
   const completedCount = items.filter((item) => item.completed).length;
+  const isMealMode = mode === 'meal';
   const updatedLabel = updatedAt
     ? new Date(updatedAt).toLocaleString('ja-JP', {
         day: 'numeric',
@@ -2021,7 +2178,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.2</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
@@ -2040,6 +2197,15 @@ function ShoppingListPage({
       </div>
 
       <p className="shopping-lead">買いたい物をマイクに向かって話してください。あとから思い出した物も、そのまま追加できます。</p>
+
+      <div className="shopping-mode-tabs" aria-label="買い物リスト入力方法">
+        <button className={!isMealMode ? 'selected' : ''} onClick={onOpenShoppingMode} type="button">
+          音声・手入力で追加
+        </button>
+        <button className={isMealMode ? 'selected' : ''} onClick={onOpenMealMode} type="button">
+          献立から作成
+        </button>
+      </div>
 
       <div className="focus-area shopping-focus">
         <div className={`voice-stage ${isListening ? 'is-listening' : ''}`}>
@@ -2078,8 +2244,8 @@ function ShoppingListPage({
 
       <section className="editor-card shopping-editor" aria-label="買い物メモ編集">
         <div className="editor-header">
-          <span>Shopping Capture</span>
-          <strong>AIで整理する前に編集できます</strong>
+          <span>{isMealMode ? 'Meal Capture' : 'Shopping Capture'}</span>
+          <strong>{isMealMode ? '献立を話すか入力してください' : 'AIで整理する前に編集できます'}</strong>
         </div>
         {text.trim() !== savedText.trim() && (
           <p className="editor-live-note">入力中の内容はこのままAI整理に反映されます。</p>
@@ -2088,22 +2254,72 @@ function ShoppingListPage({
           aria-label="買いたい物のテキストを編集"
           className="transcript-editor"
           onChange={(event) => onTextChange(event.target.value)}
-          placeholder="例：牛乳、卵、ネギ、洗剤、子供のお菓子、ジム用の水"
+          placeholder={isMealMode ? '例：今日の夜はカレーとサラダにしたい' : '例：牛乳、卵、ネギ、洗剤、子供のお菓子、ジム用の水'}
           ref={textareaRef}
           rows={5}
           value={resultText}
         />
+        {isMealMode && (
+          <label className="meal-servings-control">
+            人数
+            <select value={mealServings} onChange={(event) => onChangeMealServings(Number(event.target.value))}>
+              {[1, 2, 3, 4, 5, 6].map((servings) => (
+                <option key={servings} value={servings}>
+                  {servings}人前
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <button
           className={`organize-button ${isOrganizing ? 'is-organizing' : ''}`}
           disabled={!canOrganize || isOrganizing}
-          onClick={onOrganize}
+          onClick={isMealMode ? onGenerateMealCandidates : onOrganize}
           type="button"
         >
           <Brain size={21} />
-          {isOrganizing ? '買い物リストを整理中…' : '買い物リストを整理する'}
+          {isMealMode ? '材料候補を作成' : isOrganizing ? '買い物リストを整理中…' : '買い物リストを整理する'}
           {isOrganizing ? <Loader2 className="button-spinner" size={18} /> : <Sparkles size={18} />}
         </button>
       </section>
+
+      {isMealMode && (
+        <section className="plan-card meal-candidate-card" aria-label="材料候補確認">
+          <div className="plan-title">
+            <span><ShoppingCart size={18} /></span>
+            <h2>材料候補確認</h2>
+          </div>
+          <p className="meal-candidate-note">不要な材料は削除してから、買い物リストに追加してください。</p>
+          {mealCandidates.length ? (
+            <>
+              <div className="meal-candidate-list">
+                {mealCandidates.map((candidate) => (
+                  <div className="meal-candidate-row" key={candidate.id}>
+                    <div>
+                      <span>{candidate.meal}</span>
+                      <strong>{formatMealCandidateLabel(candidate)}</strong>
+                    </div>
+                    <button className="shopping-icon-button" onClick={() => onEditMealCandidate(candidate.id)} type="button">
+                      <Pencil size={17} />
+                    </button>
+                    <button className="shopping-icon-button shopping-delete-button" onClick={() => onDeleteMealCandidate(candidate.id)} type="button">
+                      <Trash2 size={17} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button className="shopping-share-button" onClick={onAddMealCandidates} type="button">
+                <Plus size={18} />
+                買い物リストに追加
+              </button>
+            </>
+          ) : (
+            <p className="calendar-empty">
+              {mealPlanText.trim() ? '材料候補を作成すると、ここに確認リストが表示されます。' : '献立を入力してから材料候補を作成してください。'}
+            </p>
+          )}
+        </section>
+      )}
 
       <section className="plan-card shopping-result-card" aria-label="整理結果">
         <div className="plan-title">
@@ -3042,6 +3258,7 @@ function formatAnalyticsFeatureLabel(feature: string) {
     feedback: 'Feedback',
     follow_up: 'Follow Up',
     google_calendar: 'Google Calendar',
+    meal_to_shopping: '献立から買い物',
     morning_flow: 'Morning Flow',
     shopping_list: '\u8cb7\u3044\u7269\u30ea\u30b9\u30c8',
   };
@@ -3251,6 +3468,126 @@ function normalizeScheduleActionText(text: string) {
 
 function createLocalShoppingItemId(name: string) {
   return `shopping-local-${normalizeTaskText(name)}-${Date.now()}`;
+}
+
+const mealIngredientTemplates: Record<string, Array<{ name: string; quantity: string }>> = {
+  カレー: [
+    { name: '肉', quantity: '300g' },
+    { name: '玉ねぎ', quantity: '2個' },
+    { name: 'にんじん', quantity: '1本' },
+    { name: 'じゃがいも', quantity: '3個' },
+    { name: 'カレールー', quantity: '1/2箱' },
+    { name: '油', quantity: '適量' },
+  ],
+  サラダ: [
+    { name: 'レタス', quantity: '1玉' },
+    { name: 'トマト', quantity: '2個' },
+    { name: 'きゅうり', quantity: '1本' },
+    { name: 'ドレッシング', quantity: '1本' },
+  ],
+  ハンバーグ: [
+    { name: '合いびき肉', quantity: '400g' },
+    { name: '玉ねぎ', quantity: '1個' },
+    { name: '卵', quantity: '1個' },
+    { name: 'パン粉', quantity: '1/2カップ' },
+    { name: '牛乳', quantity: '大さじ3' },
+  ],
+  味噌汁: [
+    { name: '味噌', quantity: '大さじ3' },
+    { name: '豆腐', quantity: '1丁' },
+    { name: 'わかめ', quantity: '適量' },
+    { name: 'ねぎ', quantity: '1本' },
+  ],
+  唐揚げ: [
+    { name: '鶏もも肉', quantity: '600g' },
+    { name: 'しょうゆ', quantity: '大さじ3' },
+    { name: 'しょうが', quantity: '1かけ' },
+    { name: 'にんにく', quantity: '1かけ' },
+    { name: '片栗粉', quantity: '適量' },
+    { name: '揚げ油', quantity: '適量' },
+  ],
+  鍋: [
+    { name: '白菜', quantity: '1/4個' },
+    { name: '長ねぎ', quantity: '2本' },
+    { name: 'きのこ', quantity: '1パック' },
+    { name: '豆腐', quantity: '1丁' },
+    { name: '肉', quantity: '300g' },
+    { name: '鍋つゆ', quantity: '1袋' },
+  ],
+};
+
+function createMealIngredientCandidates(text: string, servings: number): MealIngredientCandidate[] {
+  const meals = extractMealNames(text);
+  const multiplier = Math.max(1, servings) / 4;
+
+  return meals.flatMap((meal) => {
+    const template = mealIngredientTemplates[meal] ?? [
+      { name: `${meal}の主材料`, quantity: `${servings}人前` },
+      { name: `${meal}の調味料`, quantity: '必要分' },
+    ];
+
+    return template.map((ingredient) => ({
+      category: classifyShoppingItem(ingredient.name),
+      id: createLocalId('meal-candidate'),
+      meal,
+      name: ingredient.name,
+      quantity: scaleMealQuantity(ingredient.quantity, multiplier),
+    }));
+  });
+}
+
+function extractMealNames(text: string) {
+  const knownMeals = Object.keys(mealIngredientTemplates).filter((meal) => text.includes(meal));
+  if (knownMeals.length) return Array.from(new Set(knownMeals));
+
+  const cleaned = text
+    .replace(/今日の夜は|今日|今夜は|晩ご飯は|夕飯は|明日は|作りたい|にしたい|食べたい|料理/g, '')
+    .trim();
+
+  return cleaned
+    .split(/[、,と]/)
+    .map((meal) => meal.trim())
+    .filter((meal) => meal.length >= 2)
+    .slice(0, 3);
+}
+
+function scaleMealQuantity(quantity: string, multiplier: number) {
+  if (quantity.includes('適量') || quantity.includes('必要分')) return quantity;
+  return quantity.replace(/^(\d+(?:\.\d+)?)(.*)$/, (_match, amount, unit) => {
+    const scaled = Number(amount) * multiplier;
+    const rounded = Number.isInteger(scaled) ? String(scaled) : String(Math.round(scaled * 10) / 10);
+    return `${rounded}${unit}`;
+  });
+}
+
+function formatMealCandidateLabel(candidate: Pick<MealIngredientCandidate, 'name' | 'quantity'>) {
+  return [candidate.name, candidate.quantity].filter(Boolean).join(' ');
+}
+
+function mergeMealCandidatesIntoShoppingItems(
+  currentItems: ShoppingItem[],
+  candidates: MealIngredientCandidate[],
+): ShoppingItem[] {
+  const existingNames = new Set(currentItems.map((item) => normalizeTaskText(item.name)));
+  const nextItems = [...currentItems];
+
+  candidates.forEach((candidate) => {
+    const normalized = normalizeTaskText(candidate.name);
+    if (!normalized || existingNames.has(normalized)) return;
+
+    existingNames.add(normalized);
+    nextItems.push({
+      addedAt: new Date().toISOString(),
+      category: candidate.category,
+      completed: false,
+      id: createLocalShoppingItemId(candidate.name),
+      name: candidate.name,
+      quantity: candidate.quantity,
+      source: 'meal_plan',
+    });
+  });
+
+  return groupShoppingItems(nextItems).flatMap((group) => group.items);
 }
 
 function isSameLocalDate(date: Date, baseDate: Date) {

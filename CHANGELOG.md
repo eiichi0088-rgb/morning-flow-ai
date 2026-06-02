@@ -1,6 +1,16 @@
 ﻿# CHANGELOG
 
 
+## Version 2.13 - 2026-06-02
+
+- Added Meal to Shopping List initial implementation inside the existing shopping list screen.
+- Added "献立から作成" mode without adding a new home button.
+- Meal mode supports microphone input, text input, serving size selection, ingredient candidate generation, candidate edit/delete, and adding confirmed items to the existing shopping list.
+- Meal-generated shopping items use source: "meal_plan" and existing shopping category grouping.
+- Added Analytics Lite feature_use event for meal_to_shopping when opening meal mode, generating candidates, and adding confirmed items.
+- Web search, recipe site search, prices, inventory, nutrition, and calorie calculation are not included in v2.13.
+- Existing shopping list, Google Calendar, Apple Calendar export, FOLLOW UP MANAGER, feedback, Developer Mode, Analytics Lite, and private storage behavior are preserved.
+
 ## Version 2.12.6 - 2026-06-02
 
 - Added Developer Mode gate for usage status details.

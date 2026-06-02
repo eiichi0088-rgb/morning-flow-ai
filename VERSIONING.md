@@ -5,7 +5,7 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.12.6 is based on v2.12.5 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.13 is based on v2.12.6 normal UI. Do not mix v3.0 or v3.1 UI.
 
 
 
@@ -15,6 +15,17 @@
 
 
 
+
+## Version 2.13 Meal to Shopping List - 2026-06-02
+
+- Screen display: v2.13
+- ZIP: morning-flow-ai-v2.13.zip
+- Next planned version: Version 2.13.1
+- Meal to Shopping List is added inside the existing shopping list screen only.
+- No new home button is added.
+- Meal mode supports voice/text input, ingredient candidates, serving size, candidate edit/delete, confirmed add to shopping list, existing category grouping, and meal_to_shopping analytics.
+- Web search, recipe sites, prices, inventory, nutrition, and calorie calculation are reserved for later versions.
+- Google Calendar, Apple Calendar export, FOLLOW UP MANAGER, feedback, Developer Mode, Analytics Lite, snapshots, and session behavior are preserved.
 
 ## Version 2.12.6 Developer Mode - 2026-06-02
 
