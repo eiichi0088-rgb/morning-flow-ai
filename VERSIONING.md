@@ -1,21 +1,23 @@
-﻿# MORNING FLOW AI Versioning Rules
+# MORNING FLOW AI Versioning Rules
 
 1. UI version label and ZIP version must match.
 2. ZIP name must be `morning-flow-ai-vX.Y.zip`.
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.13.3 is based on v2.13.2 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.13.4 is based on v2.13.3 normal UI. Do not mix v3.0 or v3.1 UI.
 
 
 
+## Version 2.13.4 Shopping List Stabilization - 2026-06-02
 
-
-
-
-
-
-
+- Screen display: v2.13.4
+- ZIP: morning-flow-ai-v2.13.4.zip
+- Next planned version: Version 2.13.5
+- Meal Database UI and the meal-to-shopping entry button are hidden from the shopping list screen.
+- Meal Database code and src/services/recipeDatabase.ts remain in the codebase as an experimental feature for v4.0 or later.
+- Automatic meal-plan routing is disabled so the shopping list remains stable for voice/manual item entry.
+- Existing shopping list, FOLLOW UP MANAGER, Google Calendar, Apple Calendar export, Analytics Lite, feedback, Developer Mode, snapshots, and session behavior are preserved.
 ## Version 2.13.3 Meal Database Connection Fix - 2026-06-02
 
 - Screen display: v2.13.3
@@ -232,3 +234,5 @@
 - Next planned version: Version 2.7
 - Fixed user data mixing risk by isolating local data per private app-start session.
 - Disabled Google Calendar automatic reconnect; login is manual and account selection is requested every time.
+
+

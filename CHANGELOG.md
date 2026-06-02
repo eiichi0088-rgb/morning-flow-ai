@@ -1,6 +1,13 @@
-﻿# CHANGELOG
+# CHANGELOG
 
 
+## Version 2.13.4 - 2026-06-02
+
+- Temporarily hid the Meal Database UI and the meal-to-shopping entry button from the shopping list screen.
+- Kept the Meal Database code and recipe database in place as an experimental feature for a future restart.
+- Disabled automatic meal-plan routing so the shopping list stays in the stable voice/manual add flow.
+- Preserved normal shopping list functions: voice add, manual add, category grouping, check completion, and delete.
+- Existing Google Calendar, Apple Calendar export, FOLLOW UP MANAGER, Analytics Lite, feedback, Developer Mode, snapshots, and session behavior are unchanged.
 ## Version 2.13.3 - 2026-06-02
 
 - Fixed Meal Database connection flow so known recipes always show ingredient candidates instead of an unknown recipe message.
@@ -181,4 +188,6 @@
 - Google login now requests account selection with `select_account consent`.
 - Added a second calendar registration path: open selected events in Google Calendar's new event screen.
 - Updated screen display to `v2.6` and saved as `morning-flow-ai-v2.6.zip`.
+
+
 

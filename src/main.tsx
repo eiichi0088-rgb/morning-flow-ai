@@ -212,7 +212,8 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.13.3';
+const appVersion = 'v2.13.4';
+const isMealDatabaseExperimentalEnabled = false;
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
   { label: '✓ 完了', value: 'done' },
@@ -941,7 +942,7 @@ function App() {
   const organizeShoppingList = () => {
     if (!shoppingText.trim()) return;
 
-    if (detectMealPlanIntent(shoppingText)) {
+    if (isMealDatabaseExperimentalEnabled && detectMealPlanIntent(shoppingText)) {
       trackAnalyticsFeature(analyticsUserId, 'meal_to_shopping');
       const mealResult = createMealPlanCandidateResult(shoppingText, mealServings);
       trackAnalyticsFeature(analyticsUserId, mealResult.candidates.length ? 'meal_database_match' : 'meal_unknown_recipe');
@@ -1232,7 +1233,7 @@ function App() {
           mealDebug={mealPlanDebug}
           mealPlanText={mealPlanText}
           mealServings={mealServings}
-          mode={shoppingCaptureMode}
+          mode="shopping"
           onAddMealCandidates={addMealCandidatesToShoppingList}
           onBack={() => {
             recognition?.abort();
@@ -1304,7 +1305,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.13.3</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.13.4</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -1568,7 +1569,7 @@ function FollowUpManagerPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.13.3</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13.4</span></p>
           <h1>FOLLOW UP MANAGER</h1>
         </div>
         <button className="icon-ghost-button" onClick={() => setIsFormOpen((current) => !current)} type="button" aria-label="追加">
@@ -1709,7 +1710,7 @@ function FeedbackBoxPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.13.3</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13.4</span></p>
           <h1>FEEDBACK BOX</h1>
         </div>
         <div className="brand-mark" aria-hidden="true">
@@ -1893,7 +1894,7 @@ function AnalyticsDashboardPage({ onBack, userId }: { onBack: () => void; userId
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.13.3</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13.4</span></p>
           <h1>{'\u5229\u7528\u72b6\u6cc1'}</h1>
         </div>
         <div className="brand-mark" aria-hidden="true">
@@ -2211,7 +2212,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.13.3</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13.4</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
@@ -2231,14 +2232,16 @@ function ShoppingListPage({
 
       <p className="shopping-lead">買いたい物をマイクに向かって話してください。あとから思い出した物も、そのまま追加できます。</p>
 
-      <div className="shopping-mode-tabs" aria-label="買い物リスト入力方法">
-        <button className={!isMealMode ? 'selected' : ''} onClick={onOpenShoppingMode} type="button">
-          音声・手入力で追加
-        </button>
-        <button className={isMealMode ? 'selected' : ''} onClick={onOpenMealMode} type="button">
-          献立から作成
-        </button>
-      </div>
+      {isMealDatabaseExperimentalEnabled && (
+        <div className="shopping-mode-tabs" aria-label="買い物リスト入力方法">
+          <button className={!isMealMode ? 'selected' : ''} onClick={onOpenShoppingMode} type="button">
+            音声・手入力で追加
+          </button>
+          <button className={isMealMode ? 'selected' : ''} onClick={onOpenMealMode} type="button">
+            献立から作成
+          </button>
+        </div>
+      )}
 
       <div className="focus-area shopping-focus">
         <div className={`voice-stage ${isListening ? 'is-listening' : ''}`}>
@@ -4009,3 +4012,4 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>,
 );
+

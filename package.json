@@ -1,5 +1,5 @@
 {
-  "version": "2.13.3",
+  "version": "2.13.4",
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "tsc --noEmit && vite build",
