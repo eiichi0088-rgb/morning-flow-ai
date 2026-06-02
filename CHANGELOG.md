@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 2.13.8 - 2026-06-03
+
+- Changed Apple Calendar import from POST response handling to a direct GET `.ics` URL for iPhone Safari and home screen PWA.
+- Added `/api/apple-calendar.ics?payload=...` so iOS receives a URL and response that both look like an ICS calendar file.
+- Kept Apple Calendar Debug visible with API URL, response status, headers, fallback state, and appVersion.
+- Existing ICS generation, Google Calendar, shopping list, Follow Up Manager, and Analytics behavior are unchanged.
+
 ## Version 2.13.7 - 2026-06-02
 
 - Changed the iPhone Safari and home screen PWA Apple Calendar action from file sharing to direct calendar import.

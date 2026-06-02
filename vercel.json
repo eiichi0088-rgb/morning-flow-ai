@@ -11,6 +11,9 @@
     },
     "api/apple-calendar.mjs": {
       "maxDuration": 30
+    },
+    "api/apple-calendar.ics.mjs": {
+      "maxDuration": 30
     }
   }
 }

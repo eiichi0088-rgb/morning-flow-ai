@@ -224,7 +224,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.13.7';
+const appVersion = 'v2.13.8';
 const isMealDatabaseExperimentalEnabled = false;
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
@@ -3986,17 +3986,19 @@ async function openAppleCalendarIcs(
   const fileName = 'morning-flow-event.ics';
 
   if (isAppleMobileBrowser()) {
-    const debug = await verifyAppleCalendarApi(icsContent);
+    const importUrl = createAppleCalendarImportUrl(icsContent);
+    const debug = await verifyAppleCalendarGetUrl(importUrl);
     onDebug?.(debug);
     console.info('[MORNING FLOW AI] Apple Calendar API debug', debug);
 
     if (!debug.responseStatus?.startsWith('200')) {
-      return 'AppleカレンダーAPIの応答を確認できませんでした。Debug表示を確認してください。';
+      await copyIcsToClipboard(icsContent);
+      return 'AppleカレンダーGET URLの応答を確認できませんでした。Debug表示を確認してください。予定データはコピーを試みました。';
     }
 
-    await wait(900);
-    submitIcsToCalendarImport(icsContent);
-    return 'AppleカレンダーAPIは応答しました。登録画面を開きます。';
+    await wait(700);
+    window.location.href = importUrl;
+    return 'Appleカレンダー用ICS URLを開きます。登録画面が表示されたら追加を押してください。';
   }
 
   const url = URL.createObjectURL(blob);
@@ -4010,26 +4012,28 @@ async function openAppleCalendarIcs(
   return 'Appleカレンダー用の予定ファイルを作成しました。';
 }
 
-async function verifyAppleCalendarApi(icsContent: string): Promise<AppleCalendarDebugInfo> {
-  const apiUrl = new URL('/api/apple-calendar', window.location.href).toString();
+function createAppleCalendarImportUrl(icsContent: string) {
+  const url = new URL('/api/apple-calendar.ics', window.location.href);
+  url.searchParams.set('payload', encodeIcsPayload(icsContent));
+  return url.toString();
+}
+
+async function verifyAppleCalendarGetUrl(apiUrl: string): Promise<AppleCalendarDebugInfo> {
   const baseDebug: AppleCalendarDebugInfo = {
     apiUrl,
     appVersion,
     fallbackUsed: 'none',
-    mode: 'api-post-text-calendar',
+    mode: 'api-get-ics-url',
     userAgent: navigator.userAgent,
   };
 
   try {
-    const body = new URLSearchParams({ ics: icsContent });
     const response = await fetch(apiUrl, {
-      body,
       cache: 'no-store',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
         'X-MFAI-Apple-Debug': '1',
       },
-      method: 'POST',
+      method: 'GET',
     });
     const responseText = await response.text();
 
@@ -4051,22 +4055,29 @@ async function verifyAppleCalendarApi(icsContent: string): Promise<AppleCalendar
   }
 }
 
-function submitIcsToCalendarImport(icsContent: string) {
-  const form = document.createElement('form');
-  form.action = '/api/apple-calendar';
-  form.method = 'POST';
-  form.enctype = 'application/x-www-form-urlencoded';
-  form.target = '_self';
+function encodeIcsPayload(icsContent: string) {
+  const bytes = new TextEncoder().encode(icsContent);
+  let binary = '';
+  const chunkSize = 0x8000;
 
-  const input = document.createElement('textarea');
-  input.name = 'ics';
-  input.value = icsContent;
-  input.hidden = true;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.slice(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
 
-  form.appendChild(input);
-  document.body.appendChild(form);
-  form.submit();
-  window.setTimeout(() => form.remove(), 1000);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function createIcsDataUrl(icsContent: string) {
+  return `data:text/calendar;charset=utf-8,${encodeURIComponent(icsContent)}`;
+}
+
+async function copyIcsToClipboard(icsContent: string) {
+  try {
+    await navigator.clipboard?.writeText(icsContent);
+  } catch (error) {
+    console.info('[MORNING FLOW AI] Apple Calendar clipboard fallback failed', error);
+  }
 }
 
 function wait(milliseconds: number) {

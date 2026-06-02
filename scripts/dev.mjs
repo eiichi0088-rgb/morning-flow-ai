@@ -30,7 +30,7 @@ createServer(async (request, response) => {
     return;
   }
 
-  if (url.pathname === '/api/apple-calendar') {
+  if (url.pathname === '/api/apple-calendar' || url.pathname === '/api/apple-calendar.ics') {
     await handleAppleCalendarRequest(request, response);
     return;
   }

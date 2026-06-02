@@ -14,16 +14,36 @@ export async function handleAppleCalendarRequest(request, response) {
   if (request.method === 'GET' && requestUrl.searchParams.get('debug') === '1') {
     sendJson(response, 200, {
       app: 'MORNING FLOW AI',
-      endpoint: '/api/apple-calendar',
+      endpoint: requestUrl.pathname,
       ok: true,
       runtime: 'node-serverless',
-      expectedMethod: 'POST',
+      expectedMethod: 'GET',
       expectedResponse: {
         contentDisposition: 'inline; filename="morning-flow-event.ics"',
         contentType: 'text/calendar; charset=utf-8',
         status: 200,
       },
     });
+    return;
+  }
+
+  if (request.method === 'GET') {
+    const payload = requestUrl.searchParams.get('payload') ?? '';
+    const ics = decodeIcsPayload(payload);
+    console.info('[MORNING FLOW AI] Apple Calendar API parsed GET payload', {
+      hasBegin: ics.includes('BEGIN:VCALENDAR'),
+      hasEvent: ics.includes('BEGIN:VEVENT'),
+      length: ics.length,
+      pathname: requestUrl.pathname,
+    });
+
+    if (!isValidIcsContent(ics)) {
+      response.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+      response.end('Invalid calendar file.');
+      return;
+    }
+
+    sendIcsResponse(response, ics);
     return;
   }
 
@@ -58,6 +78,18 @@ export async function handleAppleCalendarRequest(request, response) {
 
 export function isValidIcsContent(ics) {
   return ics.includes('BEGIN:VCALENDAR') && ics.includes('END:VCALENDAR') && ics.includes('BEGIN:VEVENT');
+}
+
+export function decodeIcsPayload(payload) {
+  if (!payload) return '';
+
+  try {
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    return Buffer.from(padded, 'base64').toString('utf8');
+  } catch {
+    return '';
+  }
 }
 
 export function sendIcsResponse(response, ics) {
