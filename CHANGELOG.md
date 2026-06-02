@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 2.14.0 - 2026-06-03
+
+- Started the Future AI UI design refresh while keeping existing MORNING FLOW AI features intact.
+- Updated the home background, title area, microphone, primary buttons, calendar buttons, cards, and Follow Up Manager surfaces with dark navy, black, cyan glow, and glass-style styling.
+- Added the home copy `Your Day. Optimized.` and `Speak. Organize. Move.`.
+- Kept Apple Calendar, Google Calendar, Upstash Redis storage, shopping list, Follow Up Manager behavior, and Analytics behavior unchanged.
+
 ## Version 2.13.12 - 2026-06-03
 
 - Changed Apple Calendar ICS event times from `TZID=Asia/Tokyo` to UTC `Z` timestamps for stricter iOS import compatibility.

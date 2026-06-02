@@ -5,9 +5,19 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.13.12 is based on v2.13.11 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.14.0 is based on v2.13.12 normal UI plus a Future AI design refresh. Do not mix v3.0 or v3.1 UI.
 
 
+
+## Version 2.14.0 Future AI UI Design Start - 2026-06-03
+
+- Screen display: v2.14.0
+- ZIP: morning-flow-ai-v2.14.0.zip
+- Next planned version: Version 2.14.1
+- UI refresh is CSS-first and keeps the existing app structure.
+- Home background, title area, microphone, primary buttons, calendar buttons, cards, and FOLLOW UP MANAGER surfaces use dark navy, black, cyan glow, and glass-style styling.
+- Home copy now includes `Your Day. Optimized.` and `Speak. Organize. Move.`.
+- Apple Calendar, Google Calendar, Upstash Redis storage, shopping list, FOLLOW UP MANAGER behavior, feedback, Analytics Lite, Developer Mode, snapshots, and session behavior are preserved.
 
 ## Version 2.13.12 Apple Calendar iOS ICS Format Fix - 2026-06-03
 

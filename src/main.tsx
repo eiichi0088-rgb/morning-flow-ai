@@ -232,7 +232,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.13.12';
+const appVersion = 'v2.14.0';
 const isMealDatabaseExperimentalEnabled = false;
 type AppleCalendarDisposition = 'inline' | 'attachment';
 
@@ -1328,6 +1328,8 @@ function App() {
           <div>
             <p className="eyebrow">MORNING FLOW AI <span>{appVersion}</span></p>
             <h1>話して人生を整える</h1>
+            <p className="hero-subtitle">Your Day. Optimized.</p>
+            <p className="hero-kicker">Speak. Organize. Move.</p>
           </div>
           <div className="brand-mark" aria-hidden="true">
             <Sparkles size={21} />
