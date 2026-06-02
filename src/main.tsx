@@ -3912,10 +3912,26 @@ function createIcsContent(events: CalendarEvent[]) {
 function openAppleCalendarIcs(events: CalendarEvent[]) {
   const icsContent = createIcsContent(events);
   const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
   const fileName = 'morning-flow-event.ics';
 
   if (isAppleMobileBrowser()) {
+    const shareFile = typeof File === 'function' ? new File([icsContent], fileName, { type: 'text/calendar' }) : null;
+    const shareData: ShareData & { files?: File[] } = {
+      files: shareFile ? [shareFile] : undefined,
+      title: 'MORNING FLOW AI 予定',
+      text: 'Appleカレンダーに追加する予定ファイルです。',
+    };
+
+    if (shareFile && navigator.canShare?.(shareData) && navigator.share) {
+      void navigator.share(shareData).catch((error) => {
+        if (!isShareCancelError(error)) {
+          console.error(error);
+        }
+      });
+      return '共有メニューを開きます。Appleカレンダーまたはファイルに保存を選べます。';
+    }
+
+    const url = URL.createObjectURL(blob);
     const opened = window.open(url, '_blank');
     if (!opened) {
       window.location.href = url;
@@ -3924,6 +3940,7 @@ function openAppleCalendarIcs(events: CalendarEvent[]) {
     return 'Appleカレンダー用の予定ファイルを開きます。うまく開けない場合はSafariでMORNING FLOW AIを開いてから、もう一度Appleカレンダーに追加を押してください。';
   }
 
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   link.download = fileName;
