@@ -125,6 +125,7 @@ type FollowUpItem = {
   dueDate: string;
   dueTime?: string;
   kind: FollowUpKind;
+  source?: 'manual' | 'voice';
   completed: boolean;
   createdAt: string;
   completedAt?: string;
@@ -379,6 +380,7 @@ function App() {
             return nextInstruction;
           });
         } else {
+          addVoiceFollowUpsFromText(finalText);
           setTranscript((current) => {
             const nextTranscript = appendText(current);
             setOriginalTranscript(nextTranscript);
@@ -457,6 +459,7 @@ function App() {
 
     setIsOrganizing(true);
     setError('');
+    addVoiceFollowUpsFromText(transcript);
 
     Promise.all([createAiMorningPlan(transcript), createShoppingPlan(transcript, shoppingItems)])
       .then(([nextPlan, shoppingPlan]) => {
@@ -623,9 +626,22 @@ function App() {
       completed: false,
       createdAt: new Date().toISOString(),
       id: createLocalId('follow-up'),
+      source: item.source ?? 'manual',
     };
     setFollowUps((current) => [...current, nextItem]);
     notifyFollowUpDueToday(nextItem);
+  };
+
+  const addVoiceFollowUpsFromText = (text: string) => {
+    const extracted = extractFollowUpsFromText(text);
+    if (!extracted.length) return;
+
+    setFollowUps((current) => {
+      const existingKeys = new Set(current.map(createFollowUpDedupeKey));
+      const nextItems = extracted.filter((item) => !existingKeys.has(createFollowUpDedupeKey(item)));
+      nextItems.forEach(notifyFollowUpDueToday);
+      return nextItems.length ? [...current, ...nextItems] : current;
+    });
   };
 
   const completeFollowUp = (itemId: string) => {
@@ -763,7 +779,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.12.0</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.12.1</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -994,7 +1010,7 @@ function FollowUpManagerPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.0</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.1</span></p>
           <h1>FOLLOW UP MANAGER</h1>
         </div>
         <button className="icon-ghost-button" onClick={() => setIsFormOpen((current) => !current)} type="button" aria-label="追加">
@@ -1224,7 +1240,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.0</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.1</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
@@ -2030,6 +2046,77 @@ function includesAny(text: string, keywords: string[]) {
   return keywords.some((keyword) => text.includes(keyword));
 }
 
+function detectFollowUpIntent(text: string) {
+  return includesAny(text, [
+    '\u6298\u308a\u8fd4\u3057',
+    '\u96fb\u8a71',
+    '\u8fd4\u4fe1',
+    '\u9023\u7d61',
+    'LINE',
+    'line',
+    '\u30e1\u30fc\u30eb',
+    '\u8fd4\u3059',
+    '\u8fd4\u4e8b',
+    '\u672a\u8fd4\u4fe1',
+    '\u78ba\u8a8d\u3057\u3066\u8fd4\u4e8b',
+  ]);
+}
+
+function extractFollowUpsFromText(text: string): FollowUpItem[] {
+  return splitInputItems(text)
+    .filter(detectFollowUpIntent)
+    .map((rawText) => createVoiceFollowUp(rawText.trim()))
+    .filter((item): item is FollowUpItem => Boolean(item));
+}
+
+function createVoiceFollowUp(text: string): FollowUpItem | null {
+  if (!text) return null;
+
+  const suggestion = suggestFollowUp(text);
+  const duePreset = detectFollowUpDuePreset(text);
+
+  return {
+    completed: false,
+    content: normalizeFollowUpContent(text),
+    createdAt: new Date().toISOString(),
+    dueDate: resolveFollowUpDueDate(duePreset, formatDateInput(new Date())),
+    duePreset,
+    id: createLocalId('follow-up-voice'),
+    kind: suggestion.kind,
+    name: extractFollowUpName(text),
+    priority: suggestion.priority,
+    source: 'voice',
+  };
+}
+
+function splitInputItems(text: string) {
+  return text
+    .split(/[\n。．.!！?？、,]+|\s*(?:して|それから|あと|そして)\s*/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function detectFollowUpDuePreset(text: string): FollowUpDuePreset {
+  if (includesAny(text, ['\u660e\u65e5', '\u3042\u3057\u305f'])) return 'tomorrow';
+  if (includesAny(text, ['\u4eca\u9031', '\u6765\u9031'])) return 'thisWeek';
+  return 'today';
+}
+
+function extractFollowUpName(text: string) {
+  const cleaned = text.replace(/^(今日は|今日|明日|あした|あとで)/, '').trim();
+  const match = cleaned.match(/^(.+?)(?:さん)?(?:に|へ)(?:.*)$/);
+  const rawName = match?.[1] ?? cleaned.replace(/(へ|に)?(電話|折り返し|返信|連絡|返事|メール|LINE|SMS).*/, '').trim();
+  return rawName || '\u9023\u7d61\u5148\u672a\u8a2d\u5b9a';
+}
+
+function normalizeFollowUpContent(text: string) {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+function createFollowUpDedupeKey(item: Pick<FollowUpItem, 'content' | 'dueDate' | 'kind' | 'name'>) {
+  return [normalizeTaskText(item.name), normalizeTaskText(item.content), item.dueDate, item.kind].join('::');
+}
+
 function resolveFollowUpDueDate(preset: FollowUpDuePreset, customDate: string) {
   const today = startOfLocalDay(new Date());
   if (preset === 'tomorrow') return formatDateInput(addDays(today, 1));
@@ -2077,7 +2164,7 @@ function formatFollowUpTitle(item: FollowUpItem) {
 }
 
 function followUpPriorityLabel(priority: FollowUpPriority) {
-  return priority === 'high' ? '?' : priority === 'medium' ? '?' : '?';
+  return priority === 'high' ? '\u9ad8' : priority === 'medium' ? '\u4e2d' : '\u4f4e';
 }
 
 function followUpPriorityWeight(priority: FollowUpPriority) {

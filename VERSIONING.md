@@ -5,13 +5,23 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.12.0 is based on v2.11.6 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.12.1 is based on v2.12.0 normal UI. Do not mix v3.0 or v3.1 UI.
 
 
 
 
 
 
+
+
+## Version 2.12.1 FOLLOW UP Voice Routing Patch - 2026-06-02
+
+- Screen display: v2.12.1
+- ZIP: morning-flow-ai-v2.12.1.zip
+- Next planned version: Version 2.12.2
+- Voice input with follow-up intent is routed into FOLLOW UP MANAGER.
+- Follow-up data remains under morning-flow-ai:session:{sessionId}:follow-ups.
+- Google Calendar, Apple Calendar export, normal tasks, shopping, snapshots, and session behavior are preserved.
 
 ## Version 2.12.0 FOLLOW UP MANAGER - 2026-06-02
 

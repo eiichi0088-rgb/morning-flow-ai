@@ -1,6 +1,13 @@
 ﻿# CHANGELOG
 
 
+## Version 2.12.1 - 2026-06-02
+
+- Fixed voice input not being reflected in FOLLOW UP MANAGER.
+- Added follow-up intent detection for callback, phone, reply, contact, LINE, email, response, and unread-reply language.
+- Voice follow-ups are saved to the existing private follow-up storage key and update the home pending counts.
+- Google Calendar, Apple Calendar export, normal task flow, shopping, snapshots, and session separation are preserved.
+
 ## Version 2.12.0 - 2026-06-02
 
 - Added FOLLOW UP MANAGER initial implementation for missed replies and callback management.
