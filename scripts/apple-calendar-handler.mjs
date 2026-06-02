@@ -1,6 +1,32 @@
 const maxIcsBodySize = 256 * 1024;
 
 export async function handleAppleCalendarRequest(request, response) {
+  const requestUrl = new URL(request.url ?? '/api/apple-calendar', `https://${request.headers.host ?? 'localhost'}`);
+  const requestInfo = {
+    contentType: request.headers['content-type'] ?? '',
+    debug: request.headers['x-mfai-apple-debug'] ?? requestUrl.searchParams.get('debug') ?? '',
+    method: request.method,
+    userAgent: request.headers['user-agent'] ?? '',
+  };
+
+  console.info('[MORNING FLOW AI] Apple Calendar API request', requestInfo);
+
+  if (request.method === 'GET' && requestUrl.searchParams.get('debug') === '1') {
+    sendJson(response, 200, {
+      app: 'MORNING FLOW AI',
+      endpoint: '/api/apple-calendar',
+      ok: true,
+      runtime: 'node-serverless',
+      expectedMethod: 'POST',
+      expectedResponse: {
+        contentDisposition: 'inline; filename="morning-flow-event.ics"',
+        contentType: 'text/calendar; charset=utf-8',
+        status: 200,
+      },
+    });
+    return;
+  }
+
   if (request.method !== 'POST') {
     response.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
     response.end('POST only.');
@@ -11,6 +37,11 @@ export async function handleAppleCalendarRequest(request, response) {
     const body = await readFormBody(request);
     const params = new URLSearchParams(body);
     const ics = String(params.get('ics') ?? '');
+    console.info('[MORNING FLOW AI] Apple Calendar API parsed body', {
+      hasBegin: ics.includes('BEGIN:VCALENDAR'),
+      hasEvent: ics.includes('BEGIN:VEVENT'),
+      length: ics.length,
+    });
 
     if (!isValidIcsContent(ics)) {
       response.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -30,13 +61,28 @@ export function isValidIcsContent(ics) {
 }
 
 export function sendIcsResponse(response, ics) {
-  response.writeHead(200, {
+  const headers = {
     'Content-Type': 'text/calendar; charset=utf-8',
     'Content-Disposition': 'inline; filename="morning-flow-event.ics"',
     'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff',
+  };
+  console.info('[MORNING FLOW AI] Apple Calendar API response', {
+    contentDisposition: headers['Content-Disposition'],
+    contentType: headers['Content-Type'],
+    length: ics.length,
+    status: 200,
   });
+  response.writeHead(200, headers);
   response.end(ics);
+}
+
+function sendJson(response, status, payload) {
+  response.writeHead(status, {
+    'Cache-Control': 'no-store',
+    'Content-Type': 'application/json; charset=utf-8',
+  });
+  response.end(JSON.stringify(payload));
 }
 
 function readFormBody(request) {

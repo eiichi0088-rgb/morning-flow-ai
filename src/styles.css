@@ -2077,6 +2077,46 @@ h1 {
   color: rgba(247, 231, 190, 0.9);
 }
 
+.apple-calendar-debug {
+  display: grid;
+  gap: 8px;
+  padding: 10px 11px;
+  border: 1px solid rgba(247, 231, 190, 0.2);
+  border-radius: 14px;
+  color: rgba(232, 240, 248, 0.82);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.apple-calendar-debug strong {
+  color: rgba(247, 231, 190, 0.92);
+  font-size: 0.78rem;
+}
+
+.apple-calendar-debug dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.apple-calendar-debug div {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.35fr) 1fr;
+  gap: 8px;
+}
+
+.apple-calendar-debug dt {
+  color: rgba(223, 247, 255, 0.62);
+  font-weight: 760;
+}
+
+.apple-calendar-debug dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .calendar-download-button {
   width: 100%;
   border: 0;

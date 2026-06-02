@@ -199,6 +199,18 @@ type AnalyticsDebugEntry = {
   feature: string;
 };
 
+type AppleCalendarDebugInfo = {
+  apiUrl: string;
+  appVersion: string;
+  bodyPreview?: string;
+  contentDisposition?: string;
+  contentType?: string;
+  fallbackUsed: string;
+  mode: string;
+  responseStatus?: string;
+  userAgent: string;
+};
+
 type PrivateSessionKeys = {
   draft: string;
   followUps: string;
@@ -2790,6 +2802,7 @@ function GoogleCalendarExportPanel({ analyticsUserId, events }: { analyticsUserI
   const [accessToken, setAccessToken] = React.useState('');
   const [selectedEventIds, setSelectedEventIds] = React.useState(() => events.map((event) => event.id));
   const [statusMessage, setStatusMessage] = React.useState('');
+  const [appleDebug, setAppleDebug] = React.useState<AppleCalendarDebugInfo | null>(null);
   const [isSigningIn, setIsSigningIn] = React.useState(false);
   const [isRegistering, setIsRegistering] = React.useState(false);
   const isConfigured = isGoogleCalendarConfigured();
@@ -2867,6 +2880,12 @@ function GoogleCalendarExportPanel({ analyticsUserId, events }: { analyticsUserI
         setStatusMessage(reason instanceof Error ? reason.message : 'Google Calendar registration failed.');
       })
       .finally(() => setIsRegistering(false));
+  };
+
+  const openAppleCalendar = () => {
+    trackAnalyticsFeature(analyticsUserId, 'apple_calendar');
+    setStatusMessage('AppleカレンダーAPIを確認しています。');
+    void openAppleCalendarIcs(events, setAppleDebug).then(setStatusMessage);
   };
 
   if (!events.length) {
@@ -2969,21 +2988,25 @@ function GoogleCalendarExportPanel({ analyticsUserId, events }: { analyticsUserI
 
       <button
         className="calendar-download-button"
-        onClick={() => {
-          trackAnalyticsFeature(analyticsUserId, 'apple_calendar');
-          setStatusMessage(openAppleCalendarIcs(events));
-        }}
+        onClick={openAppleCalendar}
         type="button"
       >
         <Download size={18} />
         Appleカレンダーに追加
       </button>
+      {appleDebug && <AppleCalendarDebugPanel debug={appleDebug} />}
     </div>
   );
 }
 
 function CalendarExportPanel({ events }: { events: CalendarEvent[] }) {
   const [appleStatusMessage, setAppleStatusMessage] = React.useState('');
+  const [appleDebug, setAppleDebug] = React.useState<AppleCalendarDebugInfo | null>(null);
+
+  const openAppleCalendar = () => {
+    setAppleStatusMessage('AppleカレンダーAPIを確認しています。');
+    void openAppleCalendarIcs(events, setAppleDebug).then(setAppleStatusMessage);
+  };
 
   if (!events.length) {
     return (
@@ -3028,12 +3051,57 @@ function CalendarExportPanel({ events }: { events: CalendarEvent[] }) {
         ))}
       </div>
 
-      <button className="calendar-download-button" onClick={() => setAppleStatusMessage(openAppleCalendarIcs(events))} type="button">
+      <button className="calendar-download-button" onClick={openAppleCalendar} type="button">
         <Download size={18} />
         Appleカレンダーに追加
       </button>
       {appleStatusMessage && <p className="calendar-status">{appleStatusMessage}</p>}
+      {appleDebug && <AppleCalendarDebugPanel debug={appleDebug} />}
     </div>
+  );
+}
+
+function AppleCalendarDebugPanel({ debug }: { debug: AppleCalendarDebugInfo }) {
+  return (
+    <section className="apple-calendar-debug" aria-label="Apple Calendar Debug">
+      <strong>Apple Calendar Debug</strong>
+      <dl>
+        <div>
+          <dt>Apple ICS mode</dt>
+          <dd>{debug.mode}</dd>
+        </div>
+        <div>
+          <dt>API URL</dt>
+          <dd>{debug.apiUrl}</dd>
+        </div>
+        <div>
+          <dt>API response status</dt>
+          <dd>{debug.responseStatus ?? 'not checked'}</dd>
+        </div>
+        <div>
+          <dt>Content-Type</dt>
+          <dd>{debug.contentType ?? 'not received'}</dd>
+        </div>
+        <div>
+          <dt>Content-Disposition</dt>
+          <dd>{debug.contentDisposition ?? 'not received'}</dd>
+        </div>
+        <div>
+          <dt>fallback used</dt>
+          <dd>{debug.fallbackUsed}</dd>
+        </div>
+        <div>
+          <dt>current appVersion</dt>
+          <dd>{debug.appVersion}</dd>
+        </div>
+        {debug.bodyPreview && (
+          <div>
+            <dt>Response Body</dt>
+            <dd>{debug.bodyPreview}</dd>
+          </div>
+        )}
+      </dl>
+    </section>
   );
 }
 
@@ -3909,14 +3977,26 @@ function createIcsContent(events: CalendarEvent[]) {
   return `${lines.join('\r\n')}\r\n`;
 }
 
-function openAppleCalendarIcs(events: CalendarEvent[]) {
+async function openAppleCalendarIcs(
+  events: CalendarEvent[],
+  onDebug?: (debug: AppleCalendarDebugInfo) => void,
+) {
   const icsContent = createIcsContent(events);
   const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
   const fileName = 'morning-flow-event.ics';
 
   if (isAppleMobileBrowser()) {
+    const debug = await verifyAppleCalendarApi(icsContent);
+    onDebug?.(debug);
+    console.info('[MORNING FLOW AI] Apple Calendar API debug', debug);
+
+    if (!debug.responseStatus?.startsWith('200')) {
+      return 'AppleカレンダーAPIの応答を確認できませんでした。Debug表示を確認してください。';
+    }
+
+    await wait(900);
     submitIcsToCalendarImport(icsContent);
-    return 'Appleカレンダーの登録画面を開きます。画面が表示されたら追加を押してください。';
+    return 'AppleカレンダーAPIは応答しました。登録画面を開きます。';
   }
 
   const url = URL.createObjectURL(blob);
@@ -3928,6 +4008,47 @@ function openAppleCalendarIcs(events: CalendarEvent[]) {
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   return 'Appleカレンダー用の予定ファイルを作成しました。';
+}
+
+async function verifyAppleCalendarApi(icsContent: string): Promise<AppleCalendarDebugInfo> {
+  const apiUrl = new URL('/api/apple-calendar', window.location.href).toString();
+  const baseDebug: AppleCalendarDebugInfo = {
+    apiUrl,
+    appVersion,
+    fallbackUsed: 'none',
+    mode: 'api-post-text-calendar',
+    userAgent: navigator.userAgent,
+  };
+
+  try {
+    const body = new URLSearchParams({ ics: icsContent });
+    const response = await fetch(apiUrl, {
+      body,
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        'X-MFAI-Apple-Debug': '1',
+      },
+      method: 'POST',
+    });
+    const responseText = await response.text();
+
+    return {
+      ...baseDebug,
+      bodyPreview: responseText.slice(0, 180).replace(/\r/g, '\\r').replace(/\n/g, '\\n'),
+      contentDisposition: response.headers.get('content-disposition') ?? undefined,
+      contentType: response.headers.get('content-type') ?? undefined,
+      fallbackUsed: response.ok ? 'none' : 'api_status_error',
+      responseStatus: `${response.status} ${response.statusText}`.trim(),
+    };
+  } catch (error) {
+    return {
+      ...baseDebug,
+      bodyPreview: error instanceof Error ? error.message : 'Unknown API verification error.',
+      fallbackUsed: 'api_fetch_error',
+      responseStatus: 'fetch failed',
+    };
+  }
 }
 
 function submitIcsToCalendarImport(icsContent: string) {
@@ -3946,6 +4067,10 @@ function submitIcsToCalendarImport(icsContent: string) {
   document.body.appendChild(form);
   form.submit();
   window.setTimeout(() => form.remove(), 1000);
+}
+
+function wait(milliseconds: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
 function isAppleMobileBrowser() {
