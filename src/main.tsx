@@ -229,7 +229,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.13.10';
+const appVersion = 'v2.13.11';
 const isMealDatabaseExperimentalEnabled = false;
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
@@ -4082,7 +4082,7 @@ async function createAppleCalendarImportSession(icsContent: string) {
       fallbackUsed: 'none',
       id: result.id,
       importUrl: new URL(result.url, window.location.href).toString(),
-      storage: result.storage ?? 'vercel-kv',
+      storage: result.storage ?? 'upstash-redis',
     };
   } catch (error) {
     console.info('[MORNING FLOW AI] Apple Calendar short URL creation failed', error);

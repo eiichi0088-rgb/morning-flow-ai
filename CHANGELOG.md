@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## Version 2.13.11 - 2026-06-03
+
+- Changed Apple Calendar persistent ICS storage from Vercel KV naming to direct Upstash Redis REST configuration.
+- `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are now the primary storage environment variables.
+- `KV_REST_API_URL` and `KV_REST_API_TOKEN` remain as compatibility fallbacks.
+- Apple Calendar Debug reports successful storage as `upstash-redis`.
+- Existing ICS generation, Google Calendar, shopping list, Follow Up Manager, and Analytics behavior are unchanged.
+
 ## Version 2.13.10 - 2026-06-03
 
 - Replaced Apple Calendar import ID memory storage with Vercel KV REST storage.

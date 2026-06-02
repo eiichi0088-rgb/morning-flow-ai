@@ -5,9 +5,21 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.13.10 is based on v2.13.9 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.13.11 is based on v2.13.10 normal UI. Do not mix v3.0 or v3.1 UI.
 
 
+
+## Version 2.13.11 Upstash Redis Free Storage Fix - 2026-06-03
+
+- Screen display: v2.13.11
+- ZIP: morning-flow-ai-v2.13.11.zip
+- Next planned version: Version 2.13.12
+- Apple Calendar ICS storage now uses direct Upstash Redis REST settings first.
+- Required primary environment variables: `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
+- Compatibility environment variables remain supported: `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
+- Import IDs are stored with a 10 minute TTL and retrieved by `/api/apple-calendar.ics?id=...`.
+- Apple Calendar Debug reports successful storage as `upstash-redis`.
+- Existing ICS generation, Google Calendar, shopping list, FOLLOW UP MANAGER, feedback, Analytics Lite, Developer Mode, snapshots, and session behavior are preserved.
 
 ## Version 2.13.10 Apple Calendar Persistent Storage Fix - 2026-06-03
 

@@ -40,7 +40,7 @@ export async function handleAppleCalendarRequest(request, response) {
           found: Boolean(ics),
           id: importId,
           pathname: requestUrl.pathname,
-          storage: 'vercel-kv',
+          storage: 'upstash-redis',
         });
 
         if (!ics) {
@@ -105,14 +105,14 @@ export async function handleAppleCalendarRequest(request, response) {
       console.info('[MORNING FLOW AI] Apple Calendar API created import id', {
         id,
         length: ics.length,
-        storage: 'vercel-kv',
+        storage: 'upstash-redis',
         urlLength: url.length,
       });
       sendJson(response, 200, {
         expiresInSeconds: importTtlSeconds,
         id,
         ok: true,
-        storage: 'vercel-kv',
+        storage: 'upstash-redis',
         url,
       });
       return;
@@ -157,11 +157,13 @@ function createAppleCalendarKey(id) {
 }
 
 async function runKvCommand(command) {
-  const apiUrl = process.env.KV_REST_API_URL;
-  const token = process.env.KV_REST_API_TOKEN;
+  const apiUrl = process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
 
   if (!apiUrl || !token) {
-    throw new Error('Vercel KV is not configured. Please set KV_REST_API_URL and KV_REST_API_TOKEN.');
+    throw new Error(
+      'Upstash Redis is not configured. Please set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN.',
+    );
   }
 
   const response = await fetch(apiUrl, {
@@ -175,7 +177,7 @@ async function runKvCommand(command) {
   const data = await response.json().catch(() => null);
 
   if (!response.ok || !data || data.error) {
-    throw new Error(data?.error ?? `Vercel KV request failed: ${response.status}`);
+    throw new Error(data?.error ?? `Upstash Redis request failed: ${response.status}`);
   }
 
   return data;
