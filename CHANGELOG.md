@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 2.13.9 - 2026-06-03
+
+- Investigated the long Base64 payload URL used by Apple Calendar import and added visible URL length diagnostics.
+- Changed iPhone Safari and home screen PWA import to create a short-lived server import ID before opening `/api/apple-calendar.ics?id=...`.
+- Kept the long payload URL only as a diagnostic fallback if short ID creation fails.
+- Existing ICS generation, Google Calendar, shopping list, Follow Up Manager, and Analytics behavior are unchanged.
+
 ## Version 2.13.8 - 2026-06-03
 
 - Changed Apple Calendar import from POST response handling to a direct GET `.ics` URL for iPhone Safari and home screen PWA.

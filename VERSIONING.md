@@ -5,9 +5,19 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.13.8 is based on v2.13.7 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.13.9 is based on v2.13.8 normal UI. Do not mix v3.0 or v3.1 UI.
 
 
+
+## Version 2.13.9 Apple Calendar Payload URL Investigation - 2026-06-03
+
+- Screen display: v2.13.9
+- ZIP: morning-flow-ai-v2.13.9.zip
+- Next planned version: Version 2.14.0
+- Apple Calendar Debug now shows ICS length, payload URL length, short URL length, and import ID.
+- Primary iPhone Safari/PWA import creates a short-lived server import ID via POST, then opens `/api/apple-calendar.ics?id=...`.
+- Long Base64 payload URL remains only as a diagnostic fallback when short ID creation fails.
+- Existing ICS generation, Google Calendar, shopping list, FOLLOW UP MANAGER, feedback, Analytics Lite, Developer Mode, snapshots, and session behavior are preserved.
 
 ## Version 2.13.8 Apple Calendar Native ICS Import Fix - 2026-06-03
 

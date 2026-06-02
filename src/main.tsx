@@ -206,8 +206,12 @@ type AppleCalendarDebugInfo = {
   contentDisposition?: string;
   contentType?: string;
   fallbackUsed: string;
+  importId?: string;
+  icsLength?: number;
   mode: string;
+  payloadUrlLength?: number;
   responseStatus?: string;
+  shortUrlLength?: number;
   userAgent: string;
 };
 
@@ -224,7 +228,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.13.8';
+const appVersion = 'v2.13.9';
 const isMealDatabaseExperimentalEnabled = false;
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
@@ -3074,6 +3078,30 @@ function AppleCalendarDebugPanel({ debug }: { debug: AppleCalendarDebugInfo }) {
           <dt>API URL</dt>
           <dd>{debug.apiUrl}</dd>
         </div>
+        {debug.importId && (
+          <div>
+            <dt>Import ID</dt>
+            <dd>{debug.importId}</dd>
+          </div>
+        )}
+        {typeof debug.icsLength === 'number' && (
+          <div>
+            <dt>ICS length</dt>
+            <dd>{debug.icsLength}</dd>
+          </div>
+        )}
+        {typeof debug.payloadUrlLength === 'number' && (
+          <div>
+            <dt>payload URL length</dt>
+            <dd>{debug.payloadUrlLength}</dd>
+          </div>
+        )}
+        {typeof debug.shortUrlLength === 'number' && (
+          <div>
+            <dt>short URL length</dt>
+            <dd>{debug.shortUrlLength}</dd>
+          </div>
+        )}
         <div>
           <dt>API response status</dt>
           <dd>{debug.responseStatus ?? 'not checked'}</dd>
@@ -3986,8 +4014,15 @@ async function openAppleCalendarIcs(
   const fileName = 'morning-flow-event.ics';
 
   if (isAppleMobileBrowser()) {
-    const importUrl = createAppleCalendarImportUrl(icsContent);
-    const debug = await verifyAppleCalendarGetUrl(importUrl);
+    const payloadUrl = createAppleCalendarPayloadUrl(icsContent);
+    const session = await createAppleCalendarImportSession(icsContent);
+    const debug = await verifyAppleCalendarGetUrl(session.importUrl, {
+      fallbackUsed: session.fallbackUsed,
+      icsLength: icsContent.length,
+      importId: session.id,
+      payloadUrlLength: payloadUrl.length,
+      shortUrlLength: session.importUrl.length,
+    });
     onDebug?.(debug);
     console.info('[MORNING FLOW AI] Apple Calendar API debug', debug);
 
@@ -3997,8 +4032,8 @@ async function openAppleCalendarIcs(
     }
 
     await wait(700);
-    window.location.href = importUrl;
-    return 'Appleカレンダー用ICS URLを開きます。登録画面が表示されたら追加を押してください。';
+    window.location.href = session.importUrl;
+    return 'Appleカレンダー用の短いICS URLを開きます。登録画面が表示されたら追加を押してください。';
   }
 
   const url = URL.createObjectURL(blob);
@@ -4012,18 +4047,59 @@ async function openAppleCalendarIcs(
   return 'Appleカレンダー用の予定ファイルを作成しました。';
 }
 
-function createAppleCalendarImportUrl(icsContent: string) {
+function createAppleCalendarPayloadUrl(icsContent: string) {
   const url = new URL('/api/apple-calendar.ics', window.location.href);
   url.searchParams.set('payload', encodeIcsPayload(icsContent));
   return url.toString();
 }
 
-async function verifyAppleCalendarGetUrl(apiUrl: string): Promise<AppleCalendarDebugInfo> {
+async function createAppleCalendarImportSession(icsContent: string) {
+  const apiUrl = new URL('/api/apple-calendar', window.location.href).toString();
+
+  try {
+    const response = await fetch(apiUrl, {
+      body: new URLSearchParams({ ics: icsContent }),
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        'X-MFAI-Apple-Create-Import': '1',
+      },
+      method: 'POST',
+    });
+    const result = (await response.json()) as { id?: string; url?: string };
+
+    if (!response.ok || !result.id || !result.url) {
+      throw new Error(`Import session failed: ${response.status}`);
+    }
+
+    return {
+      fallbackUsed: 'none',
+      id: result.id,
+      importUrl: new URL(result.url, window.location.href).toString(),
+    };
+  } catch (error) {
+    console.info('[MORNING FLOW AI] Apple Calendar short URL creation failed', error);
+    return {
+      fallbackUsed: 'payload_url',
+      id: undefined,
+      importUrl: createAppleCalendarPayloadUrl(icsContent),
+    };
+  }
+}
+
+async function verifyAppleCalendarGetUrl(
+  apiUrl: string,
+  details: Partial<AppleCalendarDebugInfo> = {},
+): Promise<AppleCalendarDebugInfo> {
   const baseDebug: AppleCalendarDebugInfo = {
     apiUrl,
     appVersion,
-    fallbackUsed: 'none',
-    mode: 'api-get-ics-url',
+    fallbackUsed: details.fallbackUsed ?? 'none',
+    icsLength: details.icsLength,
+    importId: details.importId,
+    mode: details.importId ? 'api-get-short-id-ics-url' : 'api-get-payload-ics-url',
+    payloadUrlLength: details.payloadUrlLength,
+    shortUrlLength: details.shortUrlLength,
     userAgent: navigator.userAgent,
   };
 
@@ -4042,7 +4118,7 @@ async function verifyAppleCalendarGetUrl(apiUrl: string): Promise<AppleCalendarD
       bodyPreview: responseText.slice(0, 180).replace(/\r/g, '\\r').replace(/\n/g, '\\n'),
       contentDisposition: response.headers.get('content-disposition') ?? undefined,
       contentType: response.headers.get('content-type') ?? undefined,
-      fallbackUsed: response.ok ? 'none' : 'api_status_error',
+      fallbackUsed: response.ok ? baseDebug.fallbackUsed : 'api_status_error',
       responseStatus: `${response.status} ${response.statusText}`.trim(),
     };
   } catch (error) {

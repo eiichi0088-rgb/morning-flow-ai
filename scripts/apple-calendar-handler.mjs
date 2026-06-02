@@ -1,4 +1,9 @@
+import { randomUUID } from 'node:crypto';
+
 const maxIcsBodySize = 256 * 1024;
+const importTtlMs = 10 * 60 * 1000;
+const appleCalendarImports = globalThis.__mfaiAppleCalendarImports ?? new Map();
+globalThis.__mfaiAppleCalendarImports = appleCalendarImports;
 
 export async function handleAppleCalendarRequest(request, response) {
   const requestUrl = new URL(request.url ?? '/api/apple-calendar', `https://${request.headers.host ?? 'localhost'}`);
@@ -28,6 +33,26 @@ export async function handleAppleCalendarRequest(request, response) {
   }
 
   if (request.method === 'GET') {
+    const importId = requestUrl.searchParams.get('id') ?? '';
+    if (importId) {
+      cleanupExpiredImports();
+      const saved = appleCalendarImports.get(importId);
+      console.info('[MORNING FLOW AI] Apple Calendar API parsed GET id', {
+        found: Boolean(saved),
+        id: importId,
+        pathname: requestUrl.pathname,
+      });
+
+      if (!saved) {
+        response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+        response.end('Calendar file expired. Please create it again.');
+        return;
+      }
+
+      sendIcsResponse(response, saved.ics);
+      return;
+    }
+
     const payload = requestUrl.searchParams.get('payload') ?? '';
     const ics = decodeIcsPayload(payload);
     console.info('[MORNING FLOW AI] Apple Calendar API parsed GET payload', {
@@ -69,6 +94,23 @@ export async function handleAppleCalendarRequest(request, response) {
       return;
     }
 
+    if (request.headers['x-mfai-apple-create-import'] === '1') {
+      const id = createAppleCalendarImport(ics);
+      const url = `/api/apple-calendar.ics?id=${encodeURIComponent(id)}`;
+      console.info('[MORNING FLOW AI] Apple Calendar API created import id', {
+        id,
+        length: ics.length,
+        urlLength: url.length,
+      });
+      sendJson(response, 200, {
+        expiresInSeconds: Math.floor(importTtlMs / 1000),
+        id,
+        ok: true,
+        url,
+      });
+      return;
+    }
+
     sendIcsResponse(response, ics);
   } catch (error) {
     response.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -89,6 +131,25 @@ export function decodeIcsPayload(payload) {
     return Buffer.from(padded, 'base64').toString('utf8');
   } catch {
     return '';
+  }
+}
+
+function createAppleCalendarImport(ics) {
+  cleanupExpiredImports();
+  const id = randomUUID().replace(/-/g, '').slice(0, 12);
+  appleCalendarImports.set(id, {
+    createdAt: Date.now(),
+    ics,
+  });
+  return id;
+}
+
+function cleanupExpiredImports() {
+  const now = Date.now();
+  for (const [id, item] of appleCalendarImports.entries()) {
+    if (now - item.createdAt > importTtlMs) {
+      appleCalendarImports.delete(id);
+    }
   }
 }
 
