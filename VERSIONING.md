@@ -5,9 +5,18 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.13.6 is based on v2.13.5 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.13.7 is based on v2.13.6 normal UI. Do not mix v3.0 or v3.1 UI.
 
 
+
+## Version 2.13.7 Apple Calendar Direct Import Fix - 2026-06-02
+
+- Screen display: v2.13.7
+- ZIP: morning-flow-ai-v2.13.7.zip
+- Next planned version: Version 2.13.8
+- iPhone Safari and home screen PWA Apple Calendar action opens the generated ICS as a text/calendar data URL.
+- Web Share API is no longer used for Apple Calendar import because Calendar is not a reliable share target for ICS files.
+- Existing ICS content, Google Calendar, shopping list, FOLLOW UP MANAGER, feedback, Analytics Lite, Developer Mode, snapshots, and session behavior are preserved.
 
 ## Version 2.13.6 Version Display Sync Fix - 2026-06-02
 

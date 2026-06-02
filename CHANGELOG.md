@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 2.13.7 - 2026-06-02
+
+- Changed the iPhone Safari and home screen PWA Apple Calendar action from file sharing to direct calendar import.
+- Apple mobile now opens the generated ICS as a text/calendar data URL so the Calendar import screen can appear.
+- Existing ICS content, Google Calendar registration, and shopping list behavior are unchanged.
+
 ## Version 2.13.6 - 2026-06-02
 
 - Synced the app display version, package version, and lockfile version to v2.13.6.

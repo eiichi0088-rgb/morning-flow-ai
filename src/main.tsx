@@ -212,7 +212,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.13.6';
+const appVersion = 'v2.13.7';
 const isMealDatabaseExperimentalEnabled = false;
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
@@ -3915,29 +3915,8 @@ function openAppleCalendarIcs(events: CalendarEvent[]) {
   const fileName = 'morning-flow-event.ics';
 
   if (isAppleMobileBrowser()) {
-    const shareFile = typeof File === 'function' ? new File([icsContent], fileName, { type: 'text/calendar' }) : null;
-    const shareData: ShareData & { files?: File[] } = {
-      files: shareFile ? [shareFile] : undefined,
-      title: 'MORNING FLOW AI 予定',
-      text: 'Appleカレンダーに追加する予定ファイルです。',
-    };
-
-    if (shareFile && navigator.canShare?.(shareData) && navigator.share) {
-      void navigator.share(shareData).catch((error) => {
-        if (!isShareCancelError(error)) {
-          console.error(error);
-        }
-      });
-      return '共有メニューを開きます。Appleカレンダーまたはファイルに保存を選べます。';
-    }
-
-    const url = URL.createObjectURL(blob);
-    const opened = window.open(url, '_blank');
-    if (!opened) {
-      window.location.href = url;
-    }
-    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
-    return 'Appleカレンダー用の予定ファイルを開きます。うまく開けない場合はSafariでMORNING FLOW AIを開いてから、もう一度Appleカレンダーに追加を押してください。';
+    window.location.href = createIcsDataUrl(icsContent);
+    return 'Appleカレンダーの登録画面を開きます。画面が表示されたら追加を押してください。';
   }
 
   const url = URL.createObjectURL(blob);
@@ -3949,6 +3928,10 @@ function openAppleCalendarIcs(events: CalendarEvent[]) {
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   return 'Appleカレンダー用の予定ファイルを作成しました。';
+}
+
+function createIcsDataUrl(icsContent: string) {
+  return `data:text/calendar;charset=utf-8,${encodeURIComponent(icsContent)}`;
 }
 
 function isAppleMobileBrowser() {
