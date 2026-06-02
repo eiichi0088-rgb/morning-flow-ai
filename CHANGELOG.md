@@ -1,6 +1,16 @@
 ﻿# CHANGELOG
 
 
+## Version 2.13.2 - 2026-06-02
+
+- Added internal Meal Database 200 in src/services/recipeDatabase.ts.
+- Meal ingredient generation now searches the internal recipe database first.
+- Unknown dishes are not added to the shopping list as dish names.
+- Unknown dishes show an unregistered recipe message and send meal_unknown_recipe analytics.
+- Added meal_database analytics for successful database-based meal candidate generation.
+- Web search, recipe site search, price comparison, inventory, nutrition, and calorie calculation remain out of scope for v2.13.2.
+- Existing shopping list, FOLLOW UP MANAGER, Google Calendar, Apple Calendar export, Analytics Lite, feedback, Developer Mode, and private storage behavior are preserved.
+
 ## Version 2.13.1 - 2026-06-02
 
 - Fixed meal-plan sentences being treated as shopping item names.
