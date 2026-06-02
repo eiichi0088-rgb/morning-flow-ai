@@ -8,6 +8,9 @@
     },
     "api/shopping.mjs": {
       "maxDuration": 30
+    },
+    "api/apple-calendar.mjs": {
+      "maxDuration": 30
     }
   }
 }

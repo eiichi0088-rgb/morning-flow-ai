@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { createServer as createViteServer } from 'vite';
+import { handleAppleCalendarRequest } from './apple-calendar-handler.mjs';
 import { handlePlanRequest, loadEnvFile } from './openai-plan-handler.mjs';
 import { handleShoppingRequest } from './openai-shopping-handler.mjs';
 
@@ -26,6 +27,11 @@ createServer(async (request, response) => {
 
   if (url.pathname === '/api/shopping') {
     await handleShoppingRequest(request, response);
+    return;
+  }
+
+  if (url.pathname === '/api/apple-calendar') {
+    await handleAppleCalendarRequest(request, response);
     return;
   }
 

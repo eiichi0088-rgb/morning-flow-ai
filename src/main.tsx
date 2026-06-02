@@ -3915,7 +3915,7 @@ function openAppleCalendarIcs(events: CalendarEvent[]) {
   const fileName = 'morning-flow-event.ics';
 
   if (isAppleMobileBrowser()) {
-    window.location.href = createIcsDataUrl(icsContent);
+    submitIcsToCalendarImport(icsContent);
     return 'Appleカレンダーの登録画面を開きます。画面が表示されたら追加を押してください。';
   }
 
@@ -3930,8 +3930,22 @@ function openAppleCalendarIcs(events: CalendarEvent[]) {
   return 'Appleカレンダー用の予定ファイルを作成しました。';
 }
 
-function createIcsDataUrl(icsContent: string) {
-  return `data:text/calendar;charset=utf-8,${encodeURIComponent(icsContent)}`;
+function submitIcsToCalendarImport(icsContent: string) {
+  const form = document.createElement('form');
+  form.action = '/api/apple-calendar';
+  form.method = 'POST';
+  form.enctype = 'application/x-www-form-urlencoded';
+  form.target = '_self';
+
+  const input = document.createElement('textarea');
+  input.name = 'ics';
+  input.value = icsContent;
+  input.hidden = true;
+
+  form.appendChild(input);
+  document.body.appendChild(form);
+  form.submit();
+  window.setTimeout(() => form.remove(), 1000);
 }
 
 function isAppleMobileBrowser() {

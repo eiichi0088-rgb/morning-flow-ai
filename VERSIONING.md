@@ -14,8 +14,9 @@
 - Screen display: v2.13.7
 - ZIP: morning-flow-ai-v2.13.7.zip
 - Next planned version: Version 2.13.8
-- iPhone Safari and home screen PWA Apple Calendar action opens the generated ICS as a text/calendar data URL.
+- iPhone Safari and home screen PWA Apple Calendar action posts the generated ICS to `/api/apple-calendar` and opens the inline `text/calendar` response.
 - Web Share API is no longer used for Apple Calendar import because Calendar is not a reliable share target for ICS files.
+- Follow-up investigation found iOS still rejects client-generated data/blob/download paths for this flow.
 - Existing ICS content, Google Calendar, shopping list, FOLLOW UP MANAGER, feedback, Analytics Lite, Developer Mode, snapshots, and session behavior are preserved.
 
 ## Version 2.13.6 Version Display Sync Fix - 2026-06-02
