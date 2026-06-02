@@ -212,6 +212,7 @@ type AppleCalendarDebugInfo = {
   payloadUrlLength?: number;
   responseStatus?: string;
   shortUrlLength?: number;
+  storage?: string;
   userAgent: string;
 };
 
@@ -228,7 +229,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.13.9';
+const appVersion = 'v2.13.10';
 const isMealDatabaseExperimentalEnabled = false;
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
@@ -3119,6 +3120,10 @@ function AppleCalendarDebugPanel({ debug }: { debug: AppleCalendarDebugInfo }) {
           <dd>{debug.fallbackUsed}</dd>
         </div>
         <div>
+          <dt>storage</dt>
+          <dd>{debug.storage ?? 'not checked'}</dd>
+        </div>
+        <div>
           <dt>current appVersion</dt>
           <dd>{debug.appVersion}</dd>
         </div>
@@ -4022,6 +4027,7 @@ async function openAppleCalendarIcs(
       importId: session.id,
       payloadUrlLength: payloadUrl.length,
       shortUrlLength: session.importUrl.length,
+      storage: session.storage,
     });
     onDebug?.(debug);
     console.info('[MORNING FLOW AI] Apple Calendar API debug', debug);
@@ -4066,7 +4072,7 @@ async function createAppleCalendarImportSession(icsContent: string) {
       },
       method: 'POST',
     });
-    const result = (await response.json()) as { id?: string; url?: string };
+    const result = (await response.json()) as { id?: string; storage?: string; url?: string };
 
     if (!response.ok || !result.id || !result.url) {
       throw new Error(`Import session failed: ${response.status}`);
@@ -4076,6 +4082,7 @@ async function createAppleCalendarImportSession(icsContent: string) {
       fallbackUsed: 'none',
       id: result.id,
       importUrl: new URL(result.url, window.location.href).toString(),
+      storage: result.storage ?? 'vercel-kv',
     };
   } catch (error) {
     console.info('[MORNING FLOW AI] Apple Calendar short URL creation failed', error);
@@ -4083,6 +4090,7 @@ async function createAppleCalendarImportSession(icsContent: string) {
       fallbackUsed: 'payload_url',
       id: undefined,
       importUrl: createAppleCalendarPayloadUrl(icsContent),
+      storage: 'payload-url-fallback',
     };
   }
 }
@@ -4100,6 +4108,7 @@ async function verifyAppleCalendarGetUrl(
     mode: details.importId ? 'api-get-short-id-ics-url' : 'api-get-payload-ics-url',
     payloadUrlLength: details.payloadUrlLength,
     shortUrlLength: details.shortUrlLength,
+    storage: details.storage,
     userAgent: navigator.userAgent,
   };
 

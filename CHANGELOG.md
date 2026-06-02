@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 2.13.10 - 2026-06-03
+
+- Replaced Apple Calendar import ID memory storage with Vercel KV REST storage.
+- `/api/apple-calendar.ics?id=...` now reads the ICS from persistent KV storage with a 10 minute TTL.
+- Apple Calendar Debug now shows the storage backend.
+- Existing ICS generation, Google Calendar, shopping list, Follow Up Manager, and Analytics behavior are unchanged.
+
 ## Version 2.13.9 - 2026-06-03
 
 - Investigated the long Base64 payload URL used by Apple Calendar import and added visible URL length diagnostics.
