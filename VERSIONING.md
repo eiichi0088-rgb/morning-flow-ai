@@ -5,7 +5,7 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.12.1 is based on v2.12.0 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.12.2 is based on v2.12.1 normal UI. Do not mix v3.0 or v3.1 UI.
 
 
 
@@ -13,6 +13,16 @@
 
 
 
+
+
+## Version 2.12.2 FEEDBACK BOX - 2026-06-02
+
+- Screen display: v2.12.2
+- ZIP: morning-flow-ai-v2.12.2.zip
+- Next planned version: Version 2.12.3
+- FEEDBACK BOX is added with microphone input, manual text input, summary, editable body, and mailto sending.
+- Feedback mail recipient: eiichi0088@gmail.com.
+- Google Calendar, Apple Calendar export, FOLLOW UP MANAGER, shopping, snapshots, and session behavior are preserved.
 
 ## Version 2.12.1 FOLLOW UP Voice Routing Patch - 2026-06-02
 

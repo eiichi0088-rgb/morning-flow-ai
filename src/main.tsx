@@ -109,7 +109,7 @@ type CalendarEvent = {
 };
 
 type CaptureMode = 'create' | 'update';
-type AppView = 'morning' | 'shopping' | 'followUp';
+type AppView = 'morning' | 'shopping' | 'followUp' | 'feedback';
 
 type FollowUpPriority = 'high' | 'medium' | 'low';
 type FollowUpKind = 'phone' | 'line' | 'email' | 'sms' | 'other';
@@ -129,6 +129,16 @@ type FollowUpItem = {
   completed: boolean;
   createdAt: string;
   completedAt?: string;
+};
+
+type FeedbackType = 'usability' | 'improvement' | 'bug' | 'feature' | 'other';
+type FeedbackUrgency = 'high' | 'medium' | 'low';
+
+type FeedbackSummary = {
+  summary: string;
+  detail: string;
+  type: FeedbackType;
+  urgency: FeedbackUrgency;
 };
 
 type PrivateSessionKeys = {
@@ -211,6 +221,7 @@ function App() {
   const [isShoppingOrganizing, setIsShoppingOrganizing] = React.useState(false);
   const [isShoppingResetDialogOpen, setIsShoppingResetDialogOpen] = React.useState(false);
   const [highlightedShoppingIds, setHighlightedShoppingIds] = React.useState<string[]>([]);
+  const [feedbackText, setFeedbackText] = React.useState('');
   const [followUps, setFollowUps] = React.useState<FollowUpItem[]>([]);
   const [previousSnapshot, setPreviousSnapshot] = React.useState<MorningSnapshot | null>(null);
   const [reviewStatuses, setReviewStatuses] = React.useState<Record<string, ReviewStatus>>({});
@@ -220,8 +231,10 @@ function App() {
   const isSupported = Boolean(SpeechRecognition);
   const isShoppingView = activeView === 'shopping';
   const isFollowUpView = activeView === 'followUp';
+  const isFeedbackView = activeView === 'feedback';
   const resultText = [transcript, interimTranscript].filter(Boolean).join('\n');
   const shoppingResultText = [shoppingText, isShoppingView ? interimTranscript : ''].filter(Boolean).join('\n');
+  const feedbackResultText = [feedbackText, isFeedbackView ? interimTranscript : ''].filter(Boolean).join('\n');
   const canOrganize = Boolean(transcript.trim()) && !isListening && captureMode === 'create';
   const canUpdatePlan = false;
   const canOrganizeShopping = Boolean(shoppingText.trim()) && !isListening;
@@ -373,6 +386,8 @@ function App() {
             setOriginalShoppingText(nextText);
             return nextText;
           });
+        } else if (activeView === 'feedback') {
+          setFeedbackText((current) => appendText(current));
         } else if (captureMode === 'update') {
           setUpdateInstruction((current) => {
             const nextInstruction = appendText(current);
@@ -775,11 +790,27 @@ function App() {
           onReopen={reopenFollowUp}
           pendingCount={pendingFollowUps.length}
         />
+      ) : isFeedbackView ? (
+        <FeedbackBoxPage
+          isListening={isListening}
+          isSupported={isSupported}
+          onBack={() => {
+            recognition?.abort();
+            setInterimTranscript('');
+            setIsListening(false);
+            setActiveView('morning');
+          }}
+          onStartListening={startListening}
+          onStopListening={stopListening}
+          onTextChange={setFeedbackText}
+          resultText={feedbackResultText}
+          text={feedbackText}
+        />
       ) : (
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.12.1</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.12.2</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -834,6 +865,10 @@ function App() {
             <MessageCircle size={18} />
             {'\u672a\u8fd4\u4fe1\u30fb\u6298\u308a\u8fd4\u3057'}
             <span className="follow-up-badge">{'\u672a\u8fd4\u4fe1'} {pendingFollowUps.length}{'\u4ef6'} / {'\u4eca\u65e5'} {dueTodayFollowUps.length}{'\u4ef6'}</span>
+          </button>
+          <button type="button" onClick={() => setActiveView('feedback')}>
+            <Mail size={18} />
+            {'\u3054\u610f\u898b\u30fb\u6539\u5584\u8981\u671b'}
           </button>
         </div>
 
@@ -1010,7 +1045,7 @@ function FollowUpManagerPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.1</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.2</span></p>
           <h1>FOLLOW UP MANAGER</h1>
         </div>
         <button className="icon-ghost-button" onClick={() => setIsFormOpen((current) => !current)} type="button" aria-label="追加">
@@ -1101,6 +1136,150 @@ function FollowUpManagerPage({
 
       <FollowUpList items={pendingItems} mode="pending" onComplete={onComplete} onDelete={onDelete} onReopen={onReopen} />
       <FollowUpList items={completedItems} mode="completed" onComplete={onComplete} onDelete={onDelete} onReopen={onReopen} />
+    </section>
+  );
+}
+
+function FeedbackBoxPage({
+  isListening,
+  isSupported,
+  onBack,
+  onStartListening,
+  onStopListening,
+  onTextChange,
+  resultText,
+  text,
+}: {
+  isListening: boolean;
+  isSupported: boolean;
+  onBack: () => void;
+  onStartListening: () => void;
+  onStopListening: () => void;
+  onTextChange: (text: string) => void;
+  resultText: string;
+  text: string;
+}) {
+  const [senderName, setSenderName] = React.useState('');
+  const [feedbackType, setFeedbackType] = React.useState<FeedbackType>('improvement');
+  const [summary, setSummary] = React.useState<FeedbackSummary>(() => createFeedbackSummary('', 'improvement'));
+  const [editableBody, setEditableBody] = React.useState('');
+
+  const summarize = () => {
+    const nextSummary = createFeedbackSummary(text, feedbackType);
+    setSummary(nextSummary);
+    setEditableBody(formatFeedbackEmailBody(nextSummary, text, senderName));
+  };
+
+  const sendFeedback = () => {
+    const nextSummary = editableBody ? summary : createFeedbackSummary(text, feedbackType);
+    const body = editableBody || formatFeedbackEmailBody(nextSummary, text, senderName);
+    window.location.href = createFeedbackMailto(body);
+  };
+
+  return (
+    <section className="hero-panel feedback-page" aria-label="FEEDBACK BOX">
+      <div className="top-bar">
+        <button className="icon-ghost-button" onClick={onBack} type="button" aria-label="戻る">
+          <Home size={20} />
+        </button>
+        <div>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.2</span></p>
+          <h1>FEEDBACK BOX</h1>
+        </div>
+        <div className="brand-mark" aria-hidden="true">
+          <Mail size={21} />
+        </div>
+      </div>
+
+      <p className="feedback-warning">
+        {'\u3053\u306e\u5185\u5bb9\u306f\u958b\u767a\u8005\u306b\u9001\u4fe1\u3055\u308c\u307e\u3059\u3002\u500b\u4eba\u60c5\u5831\u3084\u30d1\u30b9\u30ef\u30fc\u30c9\u306a\u3069\u306f\u5165\u529b\u3057\u306a\u3044\u3067\u304f\u3060\u3055\u3044\u3002'}
+      </p>
+
+      <div className="feedback-mic">
+        <button
+          className={`mic-button ${isListening ? 'is-listening' : ''}`}
+          disabled={!isSupported}
+          onClick={isListening ? onStopListening : onStartListening}
+          type="button"
+        >
+          {isListening ? <Square size={32} fill="currentColor" /> : <Mic size={44} />}
+        </button>
+      </div>
+
+      <section className="feedback-form" aria-label="ご意見・改善要望">
+        <label>
+          {'\u540d\u524d \u4efb\u610f'}
+          <input value={senderName} onChange={(event) => setSenderName(event.target.value)} placeholder="未入力でも送信できます" />
+        </label>
+        <label>
+          {'\u7a2e\u985e'}
+          <select value={feedbackType} onChange={(event) => setFeedbackType(event.target.value as FeedbackType)}>
+            <option value="usability">使いにくかったところ</option>
+            <option value="improvement">改善してほしいところ</option>
+            <option value="bug">不具合報告</option>
+            <option value="feature">追加してほしい機能</option>
+            <option value="other">その他</option>
+          </select>
+        </label>
+        <label>
+          {'\u30d5\u30a3\u30fc\u30c9\u30d0\u30c3\u30af\u5185\u5bb9'}
+          <textarea
+            onChange={(event) => onTextChange(event.target.value)}
+            placeholder="使いにくかった点、改善要望、不具合などを入力してください。"
+            rows={6}
+            value={resultText}
+          />
+        </label>
+        <button className="organize-button" disabled={!text.trim()} onClick={summarize} type="button">
+          <Brain size={19} />
+          AI要約
+        </button>
+      </section>
+
+      <section className="feedback-result" aria-label="要約結果">
+        <div className="feedback-result-grid">
+          <label>
+            {'\u8981\u7d04'}
+            <textarea value={summary.summary} onChange={(event) => setSummary((current) => ({ ...current, summary: event.target.value }))} rows={3} />
+          </label>
+          <label>
+            {'\u8a73\u7d30'}
+            <textarea value={summary.detail} onChange={(event) => setSummary((current) => ({ ...current, detail: event.target.value }))} rows={5} />
+          </label>
+        </div>
+        <div className="follow-up-grid">
+          <label>
+            {'\u7a2e\u985e'}
+            <select value={summary.type} onChange={(event) => setSummary((current) => ({ ...current, type: event.target.value as FeedbackType }))}>
+              <option value="usability">使いにくかったところ</option>
+              <option value="improvement">改善してほしいところ</option>
+              <option value="bug">不具合報告</option>
+              <option value="feature">追加してほしい機能</option>
+              <option value="other">その他</option>
+            </select>
+          </label>
+          <label>
+            {'\u7dca\u6025\u5ea6'}
+            <select value={summary.urgency} onChange={(event) => setSummary((current) => ({ ...current, urgency: event.target.value as FeedbackUrgency }))}>
+              <option value="high">高</option>
+              <option value="medium">中</option>
+              <option value="low">低</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          {'\u9001\u4fe1\u524d\u306b\u7de8\u96c6\u3067\u304d\u308b\u30e1\u30fc\u30eb\u672c\u6587'}
+          <textarea
+            onChange={(event) => setEditableBody(event.target.value)}
+            rows={8}
+            value={editableBody || formatFeedbackEmailBody(summary, text, senderName)}
+          />
+        </label>
+        <button className="calendar-register-button" disabled={!text.trim()} onClick={sendFeedback} type="button">
+          <Mail size={18} />
+          送信メールを開く
+        </button>
+      </section>
     </section>
   );
 }
@@ -1240,7 +1419,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.1</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.2</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
@@ -2180,6 +2359,69 @@ function followUpKindLabel(kind: FollowUpKind) {
     other: '\u305d\u306e\u4ed6',
   };
   return labels[kind];
+}
+
+
+function createFeedbackSummary(text: string, selectedType: FeedbackType): FeedbackSummary {
+  const normalized = text.trim();
+  const sentences = normalized.split(/[?.!???\n]+/).map((item) => item.trim()).filter(Boolean);
+  const summary = sentences[0] || '\u307e\u3060\u8981\u7d04\u304c\u3042\u308a\u307e\u305b\u3093\u3002';
+  return {
+    detail: normalized || '\u8a73\u7d30\u306f\u672a\u5165\u529b\u3067\u3059\u3002',
+    summary: summary.length > 90 ? summary.slice(0, 90) + '...' : summary,
+    type: selectedType,
+    urgency: detectFeedbackUrgency(normalized),
+  };
+}
+
+function detectFeedbackUrgency(text: string): FeedbackUrgency {
+  if (includesAny(text, ['\u52d5\u304b\u306a\u3044', '\u9001\u4fe1\u3067\u304d\u306a\u3044', '\u6d88\u3048\u305f', '\u4f7f\u3048\u306a\u3044', '\u91cd\u5927'])) return 'high';
+  if (includesAny(text, ['\u5206\u304b\u308a\u306b\u304f\u3044', '\u898b\u3064\u3051\u306b\u304f\u3044', '\u6539\u5584', '\u4e0d\u5177\u5408'])) return 'medium';
+  return 'low';
+}
+
+function feedbackTypeLabel(type: FeedbackType) {
+  const labels: Record<FeedbackType, string> = {
+    usability: '\u4f7f\u3044\u306b\u304f\u304b\u3063\u305f\u3068\u3053\u308d',
+    improvement: '\u6539\u5584\u3057\u3066\u307b\u3057\u3044\u3068\u3053\u308d',
+    bug: '\u4e0d\u5177\u5408\u5831\u544a',
+    feature: '\u8ffd\u52a0\u3057\u3066\u307b\u3057\u3044\u6a5f\u80fd',
+    other: '\u305d\u306e\u4ed6',
+  };
+  return labels[type];
+}
+
+function feedbackUrgencyLabel(urgency: FeedbackUrgency) {
+  return urgency === 'high' ? '\u9ad8' : urgency === 'medium' ? '\u4e2d' : '\u4f4e';
+}
+
+function formatFeedbackEmailBody(summary: FeedbackSummary, originalText: string, senderName: string) {
+  return [
+    'MORNING FLOW AI\u306b\u30d5\u30a3\u30fc\u30c9\u30d0\u30c3\u30af\u304c\u5c4a\u304d\u307e\u3057\u305f\u3002',
+    '',
+    '\u25a0 \u8981\u7d04',
+    summary.summary,
+    '',
+    '\u25a0 \u8a73\u7d30',
+    summary.detail || originalText || '\u672a\u5165\u529b',
+    '',
+    '\u25a0 \u7a2e\u985e',
+    feedbackTypeLabel(summary.type),
+    '',
+    '\u25a0 \u7dca\u6025\u5ea6',
+    feedbackUrgencyLabel(summary.urgency),
+    '',
+    '\u25a0 \u9001\u4fe1\u65e5\u6642',
+    new Date().toLocaleString('ja-JP'),
+    '',
+    '\u25a0 \u9001\u4fe1\u8005',
+    senderName.trim() || '\u672a\u5165\u529b',
+  ].join('\n');
+}
+
+function createFeedbackMailto(body: string) {
+  const subject = '\u3010MORNING FLOW AI \u30d5\u30a3\u30fc\u30c9\u30d0\u30c3\u30af\u3011';
+  return `mailto:eiichi0088@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 function notifyFollowUpDueToday(item: FollowUpItem) {

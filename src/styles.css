@@ -999,6 +999,79 @@ h1 {
   cursor: pointer;
 }
 
+.feedback-page {
+  padding-bottom: 28px;
+}
+
+.feedback-warning,
+.feedback-form,
+.feedback-result {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.045)),
+    rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.feedback-warning {
+  margin: 0;
+  padding: 13px;
+  color: rgba(247, 231, 190, 0.9);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.feedback-mic {
+  display: grid;
+  place-items: center;
+  padding: 4px 0;
+}
+
+.feedback-form,
+.feedback-result,
+.feedback-result-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.feedback-form,
+.feedback-result {
+  padding: 14px;
+}
+
+.feedback-form label,
+.feedback-result label {
+  display: grid;
+  gap: 7px;
+  color: rgba(226, 235, 245, 0.68);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.feedback-form input,
+.feedback-form textarea,
+.feedback-form select,
+.feedback-result textarea,
+.feedback-result select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid rgba(223, 247, 255, 0.16);
+  border-radius: 14px;
+  padding: 11px 12px;
+  outline: none;
+  color: rgba(255, 255, 255, 0.94);
+  background: rgba(2, 6, 14, 0.32);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.feedback-form textarea,
+.feedback-result textarea {
+  resize: vertical;
+}
+
 .shopping-lead {
   margin: 0;
   color: rgba(226, 235, 245, 0.76);

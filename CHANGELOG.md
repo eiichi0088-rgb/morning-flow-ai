@@ -1,6 +1,14 @@
 ﻿# CHANGELOG
 
 
+## Version 2.12.2 - 2026-06-02
+
+- Added FEEDBACK BOX initial implementation.
+- Added a home screen button for ご意見・改善要望.
+- Feedback supports microphone input, manual text input, local AI-style summary, editable send body, and mailto sending to eiichi0088@gmail.com.
+- Sending opens the user's mail app with recipient, subject, summary, detail, type, urgency, timestamp, and optional sender name.
+- Existing Google Calendar, Apple Calendar export, FOLLOW UP MANAGER, shopping, snapshots, and session separation are preserved.
+
 ## Version 2.12.1 - 2026-06-02
 
 - Fixed voice input not being reflected in FOLLOW UP MANAGER.
