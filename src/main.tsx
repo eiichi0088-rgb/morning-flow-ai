@@ -163,6 +163,7 @@ type AnalyticsSendResult = {
   endpointConfigured: boolean;
   endpointPreview?: string;
   payload?: Record<string, string>;
+  transport?: string;
 };
 
 type AnalyticsDebugEntry = {
@@ -185,7 +186,7 @@ const privateSessionIdStorageKey = 'morning-flow-ai:session-id:v2';
 const analyticsUserIdStorageKey = 'morning-flow-ai:analytics-user-id:v1';
 const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1';
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
-const appVersion = 'v2.12.4';
+const appVersion = 'v2.12.5';
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
   { label: '✓ 完了', value: 'done' },
@@ -252,19 +253,122 @@ function writeAnalyticsDebugLog(entry: Omit<AnalyticsDebugEntry, 'id' | 'at'>) {
   localStorage.setItem(analyticsDebugStorageKey, JSON.stringify(nextLog));
 }
 
-async function sendAnalyticsEvent(
-  userId: string,
-  eventType: AnalyticsEventType,
-  feature = '--------',
-): Promise<AnalyticsSendResult> {
-  const endpoint = getAnalyticsEndpoint();
-  const payload = {
+function createAnalyticsPayload(userId: string, eventType: AnalyticsEventType, feature = '--------') {
+  return {
     eventType,
     feature,
     timestamp: new Date().toISOString(),
     userId,
     version: appVersion,
   };
+}
+
+function postAnalyticsWithHiddenForm(endpoint: string, payload: Record<string, string>) {
+  return new Promise<void>((resolve) => {
+    const frameName = `analytics-post-frame-${Date.now()}`;
+    const iframe = document.createElement('iframe');
+    iframe.name = frameName;
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+
+    const form = document.createElement('form');
+    form.action = endpoint;
+    form.method = 'POST';
+    form.target = frameName;
+    form.style.display = 'none';
+
+    const fields = {
+      ...payload,
+      payload: JSON.stringify(payload),
+    };
+
+    Object.entries(fields).forEach(([name, value]) => {
+      const input = document.createElement('input');
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    });
+
+    document.body.appendChild(form);
+
+    const cleanup = () => {
+      form.remove();
+      window.setTimeout(() => iframe.remove(), 1000);
+      resolve();
+    };
+
+    iframe.addEventListener('load', cleanup, { once: true });
+    window.setTimeout(cleanup, 3000);
+    form.submit();
+  });
+}
+
+async function fetchAnalyticsNoCors(endpoint: string, payload: Record<string, string>) {
+  await fetch(endpoint, {
+    body: JSON.stringify(payload),
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8',
+    },
+    method: 'POST',
+    mode: 'no-cors',
+  });
+}
+
+async function forceAnalyticsGetWrite(userId: string): Promise<AnalyticsSendResult> {
+  const endpoint = getAnalyticsEndpoint();
+  const payload = createAnalyticsPayload(userId, 'test', 'manual_test');
+
+  if (!endpoint) {
+    return {
+      endpointConfigured: false,
+      message: 'VITE_ANALYTICS_ENDPOINT is not configured.',
+      ok: false,
+      payload,
+      transport: 'get_write_test',
+    };
+  }
+
+  const url = new URL(endpoint);
+  url.searchParams.set('writeTest', '1');
+  Object.entries(payload).forEach(([key, value]) => url.searchParams.set(key, value));
+
+  try {
+    const response = await fetch(url.toString(), { method: 'GET' });
+    const text = await response.text();
+    const ok = response.ok && text.includes('"ok":true');
+    const message = ok
+      ? 'GET write test returned ok:true. Check analytics_logs for test / manual_test.'
+      : `GET write test response: ${text.slice(0, 180)}`;
+    writeAnalyticsDebugLog({ eventType: 'test', feature: 'manual_test', message, ok });
+    return {
+      endpointConfigured: true,
+      endpointPreview: maskAnalyticsEndpoint(endpoint),
+      message,
+      ok,
+      payload,
+      transport: 'get_write_test',
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    writeAnalyticsDebugLog({ eventType: 'test', feature: 'manual_test', message, ok: false });
+    return {
+      endpointConfigured: true,
+      endpointPreview: maskAnalyticsEndpoint(endpoint),
+      message,
+      ok: false,
+      payload,
+      transport: 'get_write_test',
+    };
+  }
+}
+
+async function sendAnalyticsEvent(
+  userId: string,
+  eventType: AnalyticsEventType,
+  feature = '--------',
+): Promise<AnalyticsSendResult> {
+  const endpoint = getAnalyticsEndpoint();
+  const payload = createAnalyticsPayload(userId, eventType, feature);
 
   if (!endpoint) {
     const result = {
@@ -272,6 +376,7 @@ async function sendAnalyticsEvent(
       message: 'VITE_ANALYTICS_ENDPOINT is not configured.',
       ok: false,
       payload,
+      transport: 'form_post_fields',
     };
     console.error('[Analytics Lite] endpoint missing', result);
     writeAnalyticsDebugLog({ eventType, feature, message: result.message, ok: false });
@@ -284,21 +389,15 @@ async function sendAnalyticsEvent(
   });
 
   try {
-    await fetch(endpoint, {
-      body: JSON.stringify(payload),
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
-      method: 'POST',
-      mode: 'no-cors',
-    });
+    await postAnalyticsWithHiddenForm(endpoint, payload);
     const result = {
       endpointConfigured: true,
       endpointPreview: maskAnalyticsEndpoint(endpoint),
       message:
-        'Send request completed. Google Apps Script uses no-cors, so confirm the actual row in analytics_logs.',
+        'Form POST submitted. Check Network tab for the Apps Script POST and analytics_logs for test / manual_test.',
       ok: true,
       payload,
+      transport: 'form_post_fields',
     };
     console.info('[Analytics Lite] send completed', result);
     writeAnalyticsDebugLog({ eventType, feature, message: result.message, ok: true });
@@ -311,10 +410,52 @@ async function sendAnalyticsEvent(
       message,
       ok: false,
       payload,
+      transport: 'form_post_fields',
     };
     console.error('[Analytics Lite] send failed', result);
     writeAnalyticsDebugLog({ eventType, feature, message, ok: false });
     return result;
+  }
+}
+
+async function sendAnalyticsFetchDebug(userId: string): Promise<AnalyticsSendResult> {
+  const endpoint = getAnalyticsEndpoint();
+  const payload = createAnalyticsPayload(userId, 'test', 'manual_test');
+
+  if (!endpoint) {
+    return {
+      endpointConfigured: false,
+      message: 'VITE_ANALYTICS_ENDPOINT is not configured.',
+      ok: false,
+      payload,
+      transport: 'fetch_no_cors_json',
+    };
+  }
+
+  try {
+    await fetchAnalyticsNoCors(endpoint, payload);
+    const message =
+      'fetch no-cors POST completed as an opaque request. It does not prove doPost succeeded; check Network and analytics_logs.';
+    writeAnalyticsDebugLog({ eventType: 'test', feature: 'manual_test', message, ok: true });
+    return {
+      endpointConfigured: true,
+      endpointPreview: maskAnalyticsEndpoint(endpoint),
+      message,
+      ok: true,
+      payload,
+      transport: 'fetch_no_cors_json',
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    writeAnalyticsDebugLog({ eventType: 'test', feature: 'manual_test', message, ok: false });
+    return {
+      endpointConfigured: true,
+      endpointPreview: maskAnalyticsEndpoint(endpoint),
+      message,
+      ok: false,
+      payload,
+      transport: 'fetch_no_cors_json',
+    };
   }
 }
 
@@ -992,7 +1133,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.12.4</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.12.5</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -1256,7 +1397,7 @@ function FollowUpManagerPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.4</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.5</span></p>
           <h1>FOLLOW UP MANAGER</h1>
         </div>
         <button className="icon-ghost-button" onClick={() => setIsFormOpen((current) => !current)} type="button" aria-label="追加">
@@ -1397,7 +1538,7 @@ function FeedbackBoxPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.4</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.5</span></p>
           <h1>FEEDBACK BOX</h1>
         </div>
         <div className="brand-mark" aria-hidden="true">
@@ -1526,6 +1667,24 @@ function AnalyticsDashboardPage({ onBack, userId }: { onBack: () => void; userId
     setIsTesting(false);
   };
 
+  const runFetchPostTest = async () => {
+    setIsTesting(true);
+    const result = await sendAnalyticsFetchDebug(userId);
+    setTestResult(result);
+    setDebugLog(readAnalyticsDebugLog());
+    window.setTimeout(reloadSummary, 1200);
+    setIsTesting(false);
+  };
+
+  const runForceWriteTest = async () => {
+    setIsTesting(true);
+    const result = await forceAnalyticsGetWrite(userId);
+    setTestResult(result);
+    setDebugLog(readAnalyticsDebugLog());
+    window.setTimeout(reloadSummary, 1200);
+    setIsTesting(false);
+  };
+
   return (
     <section className="hero-panel analytics-page" aria-label="Analytics Lite">
       <div className="top-bar">
@@ -1533,7 +1692,7 @@ function AnalyticsDashboardPage({ onBack, userId }: { onBack: () => void; userId
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.12.4</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.12.5</span></p>
           <h1>{'\u5229\u7528\u72b6\u6cc1'}</h1>
         </div>
         <div className="brand-mark" aria-hidden="true">
@@ -1588,6 +1747,12 @@ function AnalyticsDashboardPage({ onBack, userId }: { onBack: () => void; userId
           {isTesting ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
           Analytics Test
         </button>
+        <button className="secondary-action-button" disabled={isTesting} onClick={runFetchPostTest} type="button">
+          Fetch POST Test
+        </button>
+        <button className="secondary-action-button" disabled={isTesting} onClick={runForceWriteTest} type="button">
+          Force Row Test
+        </button>
         <p className="follow-up-empty">
           {endpoint
             ? `Endpoint: ${maskAnalyticsEndpoint(endpoint)}`
@@ -1602,6 +1767,7 @@ function AnalyticsDashboardPage({ onBack, userId }: { onBack: () => void; userId
                 {testResult.payload.eventType} / {testResult.payload.feature} / {testResult.payload.version}
               </small>
             )}
+            {testResult.transport && <small>transport: {testResult.transport}</small>}
           </div>
         )}
       </section>

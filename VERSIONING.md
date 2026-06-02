@@ -5,7 +5,7 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.12.4 is based on v2.12.3 normal UI. Do not mix v3.0 or v3.1 UI.
+6. v2.12.5 is based on v2.12.4 normal UI. Do not mix v3.0 or v3.1 UI.
 
 
 
@@ -15,6 +15,17 @@
 
 
 
+
+## Version 2.12.5 Analytics Lite POST Debug Patch - 2026-06-02
+
+- Screen display: v2.12.5
+- ZIP: morning-flow-ai-v2.12.5.zip
+- Next planned version: Version 2.12.6
+- Analytics Test now uses hidden-form POST to make Apps Script doPost checks easier in Network tab.
+- Fetch POST Test is kept as a comparison for no-cors fetch behavior.
+- Force Row Test supports Apps Script writeTest=1 diagnostics when the script is updated.
+- Analytics payload remains anonymous and content-free.
+- Google Calendar, Apple Calendar export, FOLLOW UP MANAGER, shopping, feedback, snapshots, and session behavior are preserved.
 
 ## Version 2.12.4 Analytics Lite Debug Patch - 2026-06-02
 

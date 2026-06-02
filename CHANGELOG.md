@@ -1,6 +1,14 @@
 ﻿# CHANGELOG
 
 
+## Version 2.12.5 - 2026-06-02
+
+- Changed Analytics Test to submit a real hidden-form POST to Apps Script so doPost can be checked in the browser Network tab.
+- Added Fetch POST Test to compare the previous no-cors fetch behavior.
+- Added Force Row Test for Apps Script deployments that support writeTest=1 GET diagnostics.
+- Added transport names to the visible Analytics Lite send result.
+- Existing anonymous Analytics payload remains timestamp, userId, eventType, feature, and version only.
+
 ## Version 2.12.4 - 2026-06-02
 
 - Added Analytics Test button on the usage status screen.
