@@ -1,6 +1,15 @@
 ﻿# CHANGELOG
 
 
+## Version 2.13.1 - 2026-06-02
+
+- Fixed meal-plan sentences being treated as shopping item names.
+- Meal context such as 今日の夜ご飯, 夕飯, 晩ご飯, 今夜, 作る, にします, 食べたい, and 献立 now routes to ingredient candidate confirmation.
+- Added lasagna ingredient expansion.
+- Added tarako spaghetti ingredient expansion.
+- Kept explicit shopping phrases such as 冷凍ラザニアを買う and たらこスパゲティーの素を買う as normal shopping items.
+- Meal names are not added directly to the shopping list when meal-plan intent is detected.
+
 ## Version 2.13 - 2026-06-02
 
 - Added Meal to Shopping List initial implementation inside the existing shopping list screen.

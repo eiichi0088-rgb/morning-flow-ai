@@ -199,7 +199,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.13';
+const appVersion = 'v2.13.1';
 
 const reviewOptions: { label: string; value: ReviewStatus }[] = [
   { label: '✓ 完了', value: 'done' },
@@ -927,6 +927,17 @@ function App() {
   const organizeShoppingList = () => {
     if (!shoppingText.trim()) return;
 
+    if (detectMealPlanIntent(shoppingText)) {
+      trackAnalyticsFeature(analyticsUserId, 'meal_to_shopping');
+      const candidates = createMealIngredientCandidates(shoppingText, mealServings);
+      setMealPlanText(shoppingText.trim());
+      setOriginalMealPlanText(shoppingText.trim());
+      setMealCandidates(candidates);
+      setShoppingCaptureMode('meal');
+      setShoppingError(candidates.length ? '' : '献立から材料候補を作れませんでした。料理名を少し具体的に入力してください。');
+      return;
+    }
+
     trackAnalyticsFeature(analyticsUserId, 'shopping_list');
     const previousIds = new Set(shoppingItems.map((item) => item.id));
     setIsShoppingOrganizing(true);
@@ -1273,7 +1284,7 @@ function App() {
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
-            <p className="eyebrow">MORNING FLOW AI <span>v2.13</span></p>
+            <p className="eyebrow">MORNING FLOW AI <span>v2.13.1</span></p>
             <h1>話して人生を整える</h1>
           </div>
           <div className="brand-mark" aria-hidden="true">
@@ -1537,7 +1548,7 @@ function FollowUpManagerPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.13</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13.1</span></p>
           <h1>FOLLOW UP MANAGER</h1>
         </div>
         <button className="icon-ghost-button" onClick={() => setIsFormOpen((current) => !current)} type="button" aria-label="追加">
@@ -1678,7 +1689,7 @@ function FeedbackBoxPage({
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.13</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13.1</span></p>
           <h1>FEEDBACK BOX</h1>
         </div>
         <div className="brand-mark" aria-hidden="true">
@@ -1862,7 +1873,7 @@ function AnalyticsDashboardPage({ onBack, userId }: { onBack: () => void; userId
           <Home size={20} />
         </button>
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.13</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13.1</span></p>
           <h1>{'\u5229\u7528\u72b6\u6cc1'}</h1>
         </div>
         <div className="brand-mark" aria-hidden="true">
@@ -2178,7 +2189,7 @@ function ShoppingListPage({
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
       <div className="top-bar">
         <div>
-          <p className="eyebrow">MORNING FLOW AI <span>v2.13</span></p>
+          <p className="eyebrow">MORNING FLOW AI <span>v2.13.1</span></p>
           <h1>買い物リスト</h1>
         </div>
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
@@ -3521,7 +3532,7 @@ function createMealIngredientCandidates(text: string, servings: number): MealIng
   const multiplier = Math.max(1, servings) / 4;
 
   return meals.flatMap((meal) => {
-    const template = mealIngredientTemplates[meal] ?? [
+    const template = getMealIngredientTemplate(meal) ?? [
       { name: `${meal}の主材料`, quantity: `${servings}人前` },
       { name: `${meal}の調味料`, quantity: '必要分' },
     ];
@@ -3536,12 +3547,53 @@ function createMealIngredientCandidates(text: string, servings: number): MealIng
   });
 }
 
+function getMealIngredientTemplate(meal: string) {
+  if (meal.includes('ラザニア')) {
+    return [
+      { name: 'ラザニアシート', quantity: '1箱' },
+      { name: 'ひき肉', quantity: '400g' },
+      { name: '玉ねぎ', quantity: '1個' },
+      { name: 'トマト缶', quantity: '1缶' },
+      { name: 'ホワイトソース', quantity: '1缶' },
+      { name: 'チーズ', quantity: '200g' },
+      { name: '牛乳', quantity: '300ml' },
+      { name: 'バター', quantity: '30g' },
+      { name: '小麦粉', quantity: '30g' },
+      { name: '塩', quantity: '少々' },
+      { name: 'こしょう', quantity: '少々' },
+    ];
+  }
+
+  if (meal.includes('たらこスパゲティ') || meal.includes('たらこパスタ')) {
+    return [
+      { name: 'スパゲティ', quantity: '400g' },
+      { name: 'たらこ', quantity: '120g' },
+      { name: 'バター', quantity: '40g' },
+      { name: '醤油', quantity: '小さじ2' },
+      { name: '刻み海苔', quantity: '適量' },
+      { name: '大葉', quantity: '4枚' },
+      { name: '生クリーム', quantity: '100ml' },
+      { name: '牛乳', quantity: '100ml' },
+      { name: '塩', quantity: '少々' },
+    ];
+  }
+
+  return mealIngredientTemplates[meal];
+}
+
 function extractMealNames(text: string) {
+  const aliasMeals = [
+    { pattern: /ラザニア/, name: 'ラザニア' },
+    { pattern: /たらこスパゲティー?|たらこパスタ/, name: 'たらこスパゲティー' },
+  ];
+  const aliasMatches = aliasMeals.filter((meal) => meal.pattern.test(text)).map((meal) => meal.name);
+  if (aliasMatches.length) return Array.from(new Set(aliasMatches));
+
   const knownMeals = Object.keys(mealIngredientTemplates).filter((meal) => text.includes(meal));
   if (knownMeals.length) return Array.from(new Set(knownMeals));
 
   const cleaned = text
-    .replace(/今日の夜は|今日|今夜は|晩ご飯は|夕飯は|明日は|作りたい|にしたい|食べたい|料理/g, '')
+    .replace(/今日の夜ご飯は|今日の晩ご飯は|今日の夜は|今日|今夜は|夜ご飯は|ご飯は|晩ご飯は|夕飯は|明日は|作る|作ります|作りたい|にします|にしたい|食べたい|献立|料理/g, '')
     .trim();
 
   return cleaned
@@ -3588,6 +3640,15 @@ function mergeMealCandidatesIntoShoppingItems(
   });
 
   return groupShoppingItems(nextItems).flatMap((group) => group.items);
+}
+
+function detectMealPlanIntent(text: string) {
+  if (detectExplicitShoppingIntent(text)) return false;
+  return /今日の夜ご飯|今日の晩ご飯|夕飯|晩ご飯|今夜|夜ご飯|ご飯は|作る|作ります|にします|食べたい|献立/.test(text);
+}
+
+function detectExplicitShoppingIntent(text: string) {
+  return /(買う|買います|買いたい|購入|冷凍|の素)/.test(text);
 }
 
 function isSameLocalDate(date: Date, baseDate: Date) {
