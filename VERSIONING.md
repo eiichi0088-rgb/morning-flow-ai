@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.15.5 is based on v2.15.4 plus Follow Up person-boundary accuracy improvements. Do not mix v3.0 or v3.1 UI.
+6. v2.15.6 is based on v2.15.5 plus package-driven app version display. Do not mix v3.0 or v3.1 UI.
 
+
+## Version 2.15.6 Version Display Sync Fix - 2026-06-04
+
+- Screen display: v2.15.6
+- ZIP: morning-flow-ai-v2.15.6.zip
+- Next planned version: Version 2.15.7
+- Visible MORNING FLOW AI version labels are generated from `package.json` at build time.
+- `src/main.tsx` reads the build-time `__APP_VERSION__` value instead of a manually edited literal.
+- Follow Up Accuracy behavior, Future AI UI, Apple Calendar, Google Calendar, Upstash Redis storage, Analytics Lite, shopping list behavior, morning schedule logic, feedback, Developer Mode, snapshots, and session behavior are preserved.
 
 ## Version 2.15.5 Follow Up Accuracy Upgrade - 2026-06-03
 

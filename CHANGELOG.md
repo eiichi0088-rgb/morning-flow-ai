@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 2.15.6 - 2026-06-04
+
+- Fixed the visible MORNING FLOW AI version label so the top screen shows `v2.15.6`.
+- App UI version display is now generated from `package.json` during the Vite build via `__APP_VERSION__`.
+- This prevents future manual update drift between package version and on-screen version labels.
+- Follow Up Accuracy behavior is unchanged.
+
 ## Version 2.15.5 - 2026-06-03
 
 - Upgraded Follow Up Capture accuracy with person-boundary splitting for `さん`, `君`, `様`, and `氏`.
