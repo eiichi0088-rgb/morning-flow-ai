@@ -115,6 +115,7 @@ type AppView = 'morning' | 'shopping' | 'followUp' | 'feedback' | 'analytics';
 type FollowUpPriority = 'high' | 'medium' | 'low';
 type FollowUpKind = 'phone' | 'line' | 'email' | 'sms' | 'other';
 type FollowUpDuePreset = 'today' | 'tomorrow' | 'thisWeek' | 'custom';
+type FollowUpStatus = 'pending' | 'contacted' | 'waiting' | 'done';
 
 type FollowUpItem = {
   id: string;
@@ -127,6 +128,7 @@ type FollowUpItem = {
   dueTime?: string;
   kind: FollowUpKind;
   source?: 'manual' | 'voice';
+  status?: FollowUpStatus;
   completed: boolean;
   createdAt: string;
   completedAt?: string;
@@ -232,7 +234,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.14.6';
+const appVersion = 'v2.15.0';
 const isMealDatabaseExperimentalEnabled = false;
 type AppleCalendarDisposition = 'inline' | 'attachment';
 
@@ -591,6 +593,8 @@ function App() {
   const [highlightedShoppingIds, setHighlightedShoppingIds] = React.useState<string[]>([]);
   const [selectedShoppingShareIds, setSelectedShoppingShareIds] = React.useState<string[]>([]);
   const [feedbackText, setFeedbackText] = React.useState('');
+  const [followUpCaptureText, setFollowUpCaptureText] = React.useState('');
+  const [isFollowUpClearConfirmOpen, setIsFollowUpClearConfirmOpen] = React.useState(false);
   const [followUps, setFollowUps] = React.useState<FollowUpItem[]>([]);
   const [previousSnapshot, setPreviousSnapshot] = React.useState<MorningSnapshot | null>(null);
   const [reviewStatuses, setReviewStatuses] = React.useState<Record<string, ReviewStatus>>({});
@@ -606,6 +610,7 @@ function App() {
   const activeSavedShoppingText = shoppingCaptureMode === 'meal' ? originalMealPlanText : originalShoppingText;
   const shoppingResultText = [activeShoppingText, isShoppingView ? interimTranscript : ''].filter(Boolean).join('\n');
   const feedbackResultText = [feedbackText, isFeedbackView ? interimTranscript : ''].filter(Boolean).join('\n');
+  const followUpResultText = [followUpCaptureText, isFollowUpView ? interimTranscript : ''].filter(Boolean).join('\n');
   const canOrganize = Boolean(transcript.trim()) && !isListening && captureMode === 'create';
   const canUpdatePlan = false;
   const canOrganizeShopping = Boolean(activeShoppingText.trim()) && !isListening;
@@ -734,6 +739,8 @@ function App() {
       setIsListening(true);
       if (activeView === 'shopping') {
         setShoppingError('');
+      } else if (activeView === 'followUp') {
+        setIsFollowUpClearConfirmOpen(false);
       } else {
         setError('');
       }
@@ -785,6 +792,9 @@ function App() {
           }
         } else if (activeView === 'feedback') {
           setFeedbackText((current) => appendText(current));
+        } else if (activeView === 'followUp') {
+          setFollowUpCaptureText((current) => appendText(current));
+          setIsFollowUpClearConfirmOpen(false);
         } else if (captureMode === 'update') {
           setUpdateInstruction((current) => {
             const nextInstruction = appendText(current);
@@ -1211,10 +1221,44 @@ function App() {
       createdAt: new Date().toISOString(),
       id: createLocalId('follow-up'),
       source: item.source ?? 'manual',
+      status: item.status ?? 'pending',
     };
     trackAnalyticsFeature(analyticsUserId, 'follow_up');
     setFollowUps((current) => [...current, nextItem]);
     notifyFollowUpDueToday(nextItem);
+  };
+
+  const organizeFollowUpCapture = () => {
+    const normalized = followUpResultText.trim();
+    if (!normalized) return 0;
+
+    const captureItem = createVoiceFollowUp(normalized);
+    const nextItems = captureItem ? [captureItem] : extractFollowUpsFromText(normalized);
+    nextItems.forEach((item) => {
+      addFollowUp({
+        company: item.company,
+        content: item.content,
+        dueDate: item.dueDate,
+        duePreset: item.duePreset,
+        dueTime: item.dueTime,
+        kind: item.kind,
+        name: item.name,
+        priority: item.priority,
+        source: 'voice',
+      });
+    });
+    setFollowUpCaptureText('');
+    setInterimTranscript('');
+    setIsFollowUpClearConfirmOpen(false);
+    return nextItems.length;
+  };
+
+  const clearFollowUpCapture = () => {
+    recognition?.abort();
+    setFollowUpCaptureText('');
+    setInterimTranscript('');
+    setIsListening(false);
+    setIsFollowUpClearConfirmOpen(false);
   };
 
   const addVoiceFollowUpsFromText = (text: string) => {
@@ -1237,6 +1281,7 @@ function App() {
               ...item,
               completed: true,
               completedAt: new Date().toISOString(),
+              status: 'done',
             }
           : item,
       ),
@@ -1251,6 +1296,7 @@ function App() {
               ...item,
               completed: false,
               completedAt: undefined,
+              status: 'pending',
             }
           : item,
       ),
@@ -1383,13 +1429,28 @@ function App() {
       ) : isFollowUpView ? (
         <FollowUpManagerPage
           dueTodayCount={dueTodayFollowUps.length}
+          isClearConfirmOpen={isFollowUpClearConfirmOpen}
+          isListening={isListening}
+          isSupported={isSupported}
           items={followUps}
           onAdd={addFollowUp}
           onBack={() => setActiveView('morning')}
+          onCancelClear={() => setIsFollowUpClearConfirmOpen(false)}
+          onClear={clearFollowUpCapture}
+          onClearRequest={() => setIsFollowUpClearConfirmOpen(true)}
           onComplete={completeFollowUp}
           onDelete={deleteFollowUp}
+          onOrganizeCapture={organizeFollowUpCapture}
           onReopen={reopenFollowUp}
+          onStartListening={startListening}
+          onStopListening={stopListening}
+          onTextChange={(value) => {
+            setFollowUpCaptureText(value);
+            setInterimTranscript('');
+            setIsFollowUpClearConfirmOpen(false);
+          }}
           pendingCount={pendingFollowUps.length}
+          resultText={followUpResultText}
         />
       ) : isFeedbackView ? (
         <FeedbackBoxPage
@@ -1615,22 +1676,44 @@ function App() {
 
 function FollowUpManagerPage({
   dueTodayCount,
+  isClearConfirmOpen,
+  isListening,
+  isSupported,
   items,
   onAdd,
   onBack,
+  onCancelClear,
+  onClear,
+  onClearRequest,
   onComplete,
   onDelete,
+  onOrganizeCapture,
   onReopen,
+  onStartListening,
+  onStopListening,
+  onTextChange,
   pendingCount,
+  resultText,
 }: {
   dueTodayCount: number;
+  isClearConfirmOpen: boolean;
+  isListening: boolean;
+  isSupported: boolean;
   items: FollowUpItem[];
   onAdd: (item: Omit<FollowUpItem, 'completed' | 'completedAt' | 'createdAt' | 'id'>) => void;
   onBack: () => void;
+  onCancelClear: () => void;
+  onClear: () => void;
+  onClearRequest: () => void;
   onComplete: (itemId: string) => void;
   onDelete: (itemId: string) => void;
+  onOrganizeCapture: () => number;
   onReopen: (itemId: string) => void;
+  onStartListening: () => void;
+  onStopListening: () => void;
+  onTextChange: (text: string) => void;
   pendingCount: number;
+  resultText: string;
 }) {
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [name, setName] = React.useState('');
@@ -1641,6 +1724,8 @@ function FollowUpManagerPage({
   const [customDate, setCustomDate] = React.useState(formatDateInput(new Date()));
   const [dueTime, setDueTime] = React.useState('');
   const [kind, setKind] = React.useState<FollowUpKind>('phone');
+  const [captureMessage, setCaptureMessage] = React.useState('');
+  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   const suggestion = React.useMemo(() => suggestFollowUp(content), [content]);
   const pendingItems = React.useMemo(() => sortFollowUps(items.filter((item) => !item.completed)), [items]);
@@ -1651,6 +1736,13 @@ function FollowUpManagerPage({
     setPriority((current) => (current === 'medium' ? suggestion.priority : current));
     setKind((current) => (current === 'phone' ? suggestion.kind : current));
   }, [content, suggestion.kind, suggestion.priority]);
+
+  React.useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [resultText]);
 
   const resetForm = () => {
     setName('');
@@ -1679,6 +1771,11 @@ function FollowUpManagerPage({
     setIsFormOpen(false);
   };
 
+  const organizeCapture = () => {
+    const count = onOrganizeCapture();
+    setCaptureMessage(count ? `${count}件のフォローを保存しました。` : 'フォローとして整理できる内容が見つかりませんでした。');
+  };
+
   return (
     <section className="hero-panel follow-up-page" aria-label="FOLLOW UP MANAGER">
       <div className="top-bar">
@@ -1704,6 +1801,83 @@ function FollowUpManagerPage({
           <strong>{dueTodayCount}件</strong>
         </div>
       </div>
+
+      <div className="focus-area follow-up-capture">
+        <div className={`voice-stage ${isListening ? 'is-listening' : ''}`}>
+          <div className="waveform" aria-hidden="true">
+            {Array.from({ length: 17 }).map((_, index) => (
+              <span key={index} style={{ animationDelay: `${index * 72}ms` }} />
+            ))}
+          </div>
+
+          <button
+            aria-label={isListening ? '音声入力を止める' : 'フォローアップを音声入力する'}
+            className={`mic-button ${isListening ? 'is-listening' : ''}`}
+            disabled={!isSupported}
+            onClick={isListening ? onStopListening : onStartListening}
+            type="button"
+          >
+            <span className="pulse-ring ring-one" aria-hidden="true" />
+            <span className="pulse-ring ring-two" aria-hidden="true" />
+            <span className="mic-glass" aria-hidden="true" />
+            {isListening ? <Square size={38} fill="currentColor" /> : <Mic size={56} />}
+          </button>
+        </div>
+
+        <div className="status-row" role="status" aria-live="polite">
+          <span className={`status-dot ${isListening ? 'active' : ''}`} />
+          {isListening ? '音声認識中' : 'フォロー内容を話して整理できます'}
+        </div>
+      </div>
+
+      <section className="editor-card follow-up-capture-card" aria-label="フォローアップ音声入力">
+        <div className="editor-header">
+          <span>FOLLOW UP CAPTURE</span>
+          <strong>AIで整理する前に編集できます</strong>
+        </div>
+        <textarea
+          aria-label="フォローアップ内容を編集"
+          className="transcript-editor"
+          onChange={(event) => {
+            onTextChange(event.target.value);
+            setCaptureMessage('');
+          }}
+          placeholder="例：山田さんに見積もりの返事を確認する。金曜日までに連絡する。"
+          ref={textareaRef}
+          rows={4}
+          value={resultText}
+        />
+        <div className="editor-actions">
+          <button className="secondary-button" disabled={!resultText.trim()} onClick={onClearRequest} type="button">
+            全文削除
+          </button>
+          <button className="primary-button" disabled={!resultText.trim()} onClick={organizeCapture} type="button">
+            フォローを整理する
+          </button>
+        </div>
+        {isClearConfirmOpen && (
+          <section className="inline-confirm-card transcript-clear-confirm" aria-label="フォロー入力削除確認">
+            <strong>入力をすべて削除しますか？</strong>
+            <p>入力欄の文章と音声入力中の一時テキストを削除します。</p>
+            <div className="confirm-dialog-actions">
+              <button className="secondary-button" type="button" onClick={onCancelClear}>
+                キャンセル
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                onClick={() => {
+                  onClear();
+                  setCaptureMessage('');
+                }}
+              >
+                削除する
+              </button>
+            </div>
+          </section>
+        )}
+        {captureMessage && <p className="follow-up-suggestion">{captureMessage}</p>}
+      </section>
 
       {isFormOpen && (
         <section className="follow-up-form" aria-label="未返信・折り返し登録">
@@ -2202,6 +2376,10 @@ function FollowUpList({
             <div className="follow-up-meta">
               <Clock size={15} />
               <span>期限 {formatFollowUpDue(item)}</span>
+            </div>
+            <div className="follow-up-meta">
+              <CheckCircle2 size={15} />
+              <span>状態 {followUpStatusLabel(item)}</span>
             </div>
             <div className="follow-up-actions">
               {mode === 'pending' ? (
@@ -3426,18 +3604,20 @@ function createVoiceFollowUp(text: string): FollowUpItem | null {
 
   const suggestion = suggestFollowUp(text);
   const duePreset = detectFollowUpDuePreset(text);
+  const dueDate = detectFollowUpDueDate(text, duePreset);
 
   return {
     completed: false,
     content: normalizeFollowUpContent(text),
     createdAt: new Date().toISOString(),
-    dueDate: resolveFollowUpDueDate(duePreset, formatDateInput(new Date())),
+    dueDate,
     duePreset,
     id: createLocalId('follow-up-voice'),
     kind: suggestion.kind,
     name: extractFollowUpName(text),
     priority: suggestion.priority,
     source: 'voice',
+    status: 'pending',
   };
 }
 
@@ -3450,8 +3630,26 @@ function splitInputItems(text: string) {
 
 function detectFollowUpDuePreset(text: string): FollowUpDuePreset {
   if (includesAny(text, ['\u660e\u65e5', '\u3042\u3057\u305f'])) return 'tomorrow';
+  if (detectWeekdayDate(text)) return 'custom';
   if (includesAny(text, ['\u4eca\u9031', '\u6765\u9031'])) return 'thisWeek';
   return 'today';
+}
+
+function detectFollowUpDueDate(text: string, preset: FollowUpDuePreset) {
+  return detectWeekdayDate(text) ?? resolveFollowUpDueDate(preset, formatDateInput(new Date()));
+}
+
+function detectWeekdayDate(text: string) {
+  const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+  const match = text.match(/(日曜|月曜|火曜|水曜|木曜|金曜|土曜|日曜日|月曜日|火曜日|水曜日|木曜日|金曜日|土曜日)/);
+  if (!match) return null;
+
+  const target = weekdays.findIndex((weekday) => match[1].startsWith(weekday));
+  if (target < 0) return null;
+
+  const today = startOfLocalDay(new Date());
+  const diff = (target - today.getDay() + 7) % 7;
+  return formatDateInput(addDays(today, diff || 7));
 }
 
 function extractFollowUpName(text: string) {
@@ -3534,6 +3732,16 @@ function followUpKindLabel(kind: FollowUpKind) {
   return labels[kind];
 }
 
+function followUpStatusLabel(item: FollowUpItem) {
+  const status = item.completed ? 'done' : item.status ?? 'pending';
+  const labels: Record<FollowUpStatus, string> = {
+    contacted: '連絡済み',
+    done: '完了',
+    pending: '未対応',
+    waiting: '返信待ち',
+  };
+  return labels[status];
+}
 
 function createFeedbackSummary(text: string, selectedType: FeedbackType): FeedbackSummary {
   const normalized = text.trim();

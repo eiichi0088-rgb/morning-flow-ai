@@ -5,9 +5,19 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.14.6 is based on v2.14.5 plus food event classification fixes. Do not mix v3.0 or v3.1 UI.
+6. v2.15.0 is based on v2.14.6 plus Follow Up Manager voice input UI. Do not mix v3.0 or v3.1 UI.
 
 
+
+## Version 2.15.0 Follow Up Manager Voice Input UI - 2026-06-03
+
+- Screen display: v2.15.0
+- ZIP: morning-flow-ai-v2.15.0.zip
+- Next planned version: Version 2.15.1
+- FOLLOW UP MANAGER now has microphone input, editable transcript review, `全文削除`, inline delete confirmation, and `フォローを整理する`.
+- Voice-captured follow-up text is saved as an incomplete follow-up and reflected in home pending/today counts.
+- Follow-up status labels support `未対応`, `連絡済み`, `返信待ち`, and `完了`.
+- Apple Calendar, Google Calendar, Upstash Redis storage, Analytics Lite, shopping list logic, morning plan logic, feedback, Developer Mode, snapshots, session behavior, and Future AI UI design are preserved.
 
 ## Version 2.14.6 Food Event Classification Fix - 2026-06-03
 

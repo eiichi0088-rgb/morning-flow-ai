@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## Version 2.15.0 - 2026-06-03
+
+- Added voice input capture UI to FOLLOW UP MANAGER.
+- Follow Up Manager now supports microphone input, editable transcript review, `全文削除`, inline delete confirmation, and `フォローを整理する`.
+- Voice-captured follow-up text is saved as an incomplete follow-up item and reflected in the home pending/today counts.
+- Added follow-up status labeling for `未対応`, `連絡済み`, `返信待ち`, and `完了`.
+- Future AI UI styling is preserved, and Apple Calendar, Google Calendar, Upstash Redis, Analytics, shopping list logic, and morning plan logic are unchanged.
+
 ## Version 2.14.6 - 2026-06-03
 
 - Fixed food event classification so food names inside scheduled events are not treated as shopping items.

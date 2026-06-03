@@ -884,6 +884,14 @@ h1 {
   padding-bottom: 28px;
 }
 
+.follow-up-capture {
+  padding-top: 4px;
+}
+
+.follow-up-capture-card .editor-actions {
+  grid-template-columns: 0.9fr 1.3fr;
+}
+
 .follow-up-badge {
   display: block;
   color: rgba(3, 16, 28, 0.72);
