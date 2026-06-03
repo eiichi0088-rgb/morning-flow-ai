@@ -234,7 +234,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.15.1';
+const appVersion = 'v2.15.2';
 const isMealDatabaseExperimentalEnabled = false;
 type AppleCalendarDisposition = 'inline' | 'attachment';
 
@@ -1232,9 +1232,15 @@ function App() {
     const normalized = followUpResultText.trim();
     if (!normalized) return 0;
 
-    const splitItems = extractFollowUpsFromText(normalized);
+    const splitResult = createFollowUpsFromSplitText(normalized);
+    const splitItems = splitResult.items;
     const fallbackItem = createVoiceFollowUp(normalized);
     const nextItems = splitItems.length ? splitItems : fallbackItem ? [fallbackItem] : [];
+    console.info('[MORNING FLOW AI] Follow Up split debug', {
+      generatedItemCount: nextItems.length,
+      personCount: splitResult.debug.personCount,
+      persons: splitResult.debug.persons,
+    });
     nextItems.forEach((item) => {
       addFollowUp({
         company: item.company,
@@ -3597,10 +3603,24 @@ function detectFollowUpIntent(text: string) {
 }
 
 function extractFollowUpsFromText(text: string): FollowUpItem[] {
-  return splitInputItems(text)
+  return createFollowUpsFromSplitText(text).items;
+}
+
+function createFollowUpsFromSplitText(text: string) {
+  const persons = extractFollowUpPersons(text);
+  const items = splitInputItems(text)
     .filter(detectFollowUpIntent)
     .map((rawText) => createVoiceFollowUp(rawText.trim()))
     .filter((item): item is FollowUpItem => Boolean(item));
+
+  return {
+    debug: {
+      generatedItemCount: items.length,
+      personCount: persons.length,
+      persons,
+    },
+    items,
+  };
 }
 
 function createVoiceFollowUp(text: string): FollowUpItem | null {
@@ -3635,8 +3655,14 @@ function splitInputItems(text: string) {
 function normalizeFollowUpSplitText(text: string) {
   return text
     .replace(/\s+/g, ' ')
-    .replace(/(?!^)([^、。,.!?！？\n\s]+さん(?:に|へ))/g, '\n$1')
+    .replace(/(?!^)([^、。,.!?！？\n\s]+(?:さん|君|様|氏)(?:に|へ))/g, '\n$1')
     .trim();
+}
+
+function extractFollowUpPersons(text: string) {
+  return Array.from(text.matchAll(/([^、。,.!?！？\n\s]+(?:さん|君|様|氏))(?:に|へ)/g))
+    .map((match) => match[1].trim())
+    .filter(Boolean);
 }
 
 function detectFollowUpDuePreset(text: string): FollowUpDuePreset {
@@ -3665,7 +3691,7 @@ function detectWeekdayDate(text: string) {
 
 function extractFollowUpName(text: string) {
   const cleaned = text.replace(/^(今日は|今日|明日|あした|あとで)/, '').trim();
-  const match = cleaned.match(/^(.+?)(?:さん)?(?:に|へ)(?:.*)$/);
+  const match = cleaned.match(/^(.+?(?:さん|君|様|氏)?)(?:に|へ)(?:.*)$/);
   const rawName = match?.[1] ?? cleaned.replace(/(へ|に)?(電話|折り返し|返信|連絡|返事|メール|LINE|SMS).*/, '').trim();
   return rawName || '\u9023\u7d61\u5148\u672a\u8a2d\u5b9a';
 }
@@ -3673,12 +3699,12 @@ function extractFollowUpName(text: string) {
 function normalizeFollowUpContent(text: string) {
   const withoutLead = text
     .replace(/^(今日は|今日|明日|あした|あとで)/, '')
-    .replace(/^(.+?)(?:さん)?(?:に|へ)/, '')
+    .replace(/^(.+?(?:さん|君|様|氏)?)(?:に|へ)/, '')
     .replace(/(今日中|明日中|今週中|来週中|日曜日|月曜日|火曜日|水曜日|木曜日|金曜日|土曜日)(まで|に)?/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 
-  if (/line/i.test(withoutLead) && /(返す|返信|返事)/.test(withoutLead)) return 'LINE返信';
+  if (/line/i.test(withoutLead) && /(返す|返信|返事)/.test(withoutLead)) return 'LINEを返す';
   if (/メール/.test(withoutLead) && /(返す|返信|返事)/.test(withoutLead)) return 'メール返信';
   return withoutLead || text.replace(/\s+/g, ' ').trim();
 }

@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## Version 2.15.2 - 2026-06-03
+
+- Fixed Follow Up Capture person-based splitting so changed contacts create separate follow-up cards.
+- Person detection now supports `さん`, `君`, `様`, and `氏`.
+- Preserved each case's own contact, content, and due date so actions from another person do not mix in.
+- Added Follow Up split debug logging for detected person count, generated item count, and detected names.
+- Apple Calendar, Google Calendar, Upstash Redis, Analytics, and shopping list behavior are unchanged.
+
 ## Version 2.15.1 - 2026-06-03
 
 - Fixed Follow Up Capture so multiple spoken or typed cases are split into multiple follow-up cards.

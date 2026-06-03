@@ -5,9 +5,20 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.15.1 is based on v2.15.0 plus Follow Up multi-item split handling. Do not mix v3.0 or v3.1 UI.
+6. v2.15.2 is based on v2.15.1 plus person-based Follow Up split handling. Do not mix v3.0 or v3.1 UI.
 
 
+
+## Version 2.15.2 Follow Up Person-Based Split Fix - 2026-06-03
+
+- Screen display: v2.15.2
+- ZIP: morning-flow-ai-v2.15.2.zip
+- Next planned version: Version 2.15.3
+- Follow Up Capture splits cases when the person changes.
+- Person detection supports `さん`, `君`, `様`, and `氏`.
+- Each generated follow-up keeps its own contact, content, due date, and status.
+- Debug logging reports detected person count, generated item count, and detected names.
+- Apple Calendar, Google Calendar, Upstash Redis storage, Analytics Lite, shopping list behavior, feedback, Developer Mode, snapshots, session behavior, and Future AI UI design are preserved.
 
 ## Version 2.15.1 Follow Up Multi-Item Split Fix - 2026-06-03
 
