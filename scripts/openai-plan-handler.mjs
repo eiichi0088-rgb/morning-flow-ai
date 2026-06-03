@@ -161,6 +161,8 @@ export async function createPlanFromTranscript(transcript, context = {}) {
     'Do not drop existing items when adding new items. Insert new schedule items at a reasonable time between existing items when possible.',
     'Keep shopping list items separate from day planning. Purchase item names such as 卵, 牛乳, 玉ねぎ, 豚肉 must not become todos or schedule tasks.',
     'Only include explicit shopping actions the user said, such as 買い物へ行く or スーパーへ行く.',
+    'Food-related events with verbs or event words such as 食べる, 食事する, ランチ, 夕食, 朝食, 外食, or 行く are schedule/todo items, not shopping items.',
+    'When a sentence has a time expression, treat it as a schedule candidate first even if it contains a food name.',
     'Never invent shopping support chores such as 買い物リストを確認する, 食材を冷蔵保存する, 食材を冷凍保存する, or 買った食材を整理する.',
     'Do not create household chores or storage tasks that the user did not say.',
   ].join(' ');

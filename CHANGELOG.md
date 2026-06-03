@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## Version 2.14.6 - 2026-06-03
+
+- Fixed food event classification so food names inside scheduled events are not treated as shopping items.
+- Time expressions such as `16時半から...` are treated as schedule candidates and `半` is parsed as 30 minutes.
+- Food event phrases such as `食べる`, `ランチ`, `夕食`, `朝食`, `外食`, and `食事する` remain in todos and schedule.
+- Morning planning no longer adds shopping items unless the transcript has shopping context such as `買う`, `購入`, `今日買うもの`, or `買い物リスト`.
+- Apple Calendar, Google Calendar, Upstash Redis, Analytics, Follow Up Manager, and Future UI behavior are unchanged.
+
 ## Version 2.14.5 - 2026-06-03
 
 - Moved the Editable Transcript card directly below the microphone area on the morning plan page.

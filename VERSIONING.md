@@ -5,9 +5,20 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.14.5 is based on v2.14.4 plus morning transcript position and clear button fixes. Do not mix v3.0 or v3.1 UI.
+6. v2.14.6 is based on v2.14.5 plus food event classification fixes. Do not mix v3.0 or v3.1 UI.
 
 
+
+## Version 2.14.6 Food Event Classification Fix - 2026-06-03
+
+- Screen display: v2.14.6
+- ZIP: morning-flow-ai-v2.14.6.zip
+- Next planned version: Version 2.14.7
+- Food names inside event phrases are not treated as shopping items.
+- Time expressions are schedule candidates first, including `16時半`.
+- Food event expressions such as `食べる`, `ランチ`, `夕食`, `朝食`, `外食`, and `食事する` stay in todos and schedule.
+- Shopping list updates require shopping context such as `買う`, `購入`, `今日買うもの`, or `買い物リスト`.
+- Apple Calendar, Google Calendar, Upstash Redis storage, Analytics Lite, FOLLOW UP MANAGER behavior, feedback, Developer Mode, snapshots, session behavior, and Future AI UI design are preserved.
 
 ## Version 2.14.5 Transcript Position and Clear Button Fix - 2026-06-03
 

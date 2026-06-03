@@ -70,6 +70,7 @@ export async function createShoppingPlanFromTranscript(text, currentItems = []) 
     'Return the complete merged shopping list: include relevant existing items plus the new items.',
     'Shopping list output must contain purchase items only, such as 卵, 牛乳, 玉ねぎ, 豚肉.',
     'Do not return actions or tasks such as 買い物へ行く, スーパーへ行く, 買い物リストを確認する, 食材を保存する, or 冷蔵する.',
+    'Do not return food event text such as ラーメンを食べる, 友人とランチ, 焼肉に行く, or 朝ごはんを食べる unless the user clearly says to buy it.',
     'Merge duplicates into one item.',
     'Very important: preserve quantities and units. Never delete quantities such as 3キロ, 1.5キロ, 1本, 3パック, 1袋, 1つ, 2個, 500ml, 2L.',
     'Separate item name and quantity. Do not mix quantity into name.',

@@ -232,7 +232,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.14.5';
+const appVersion = 'v2.14.6';
 const isMealDatabaseExperimentalEnabled = false;
 type AppleCalendarDisposition = 'inline' | 'attachment';
 
@@ -876,7 +876,9 @@ function App() {
 
     Promise.all([createAiMorningPlan(transcript), createShoppingPlan(transcript, shoppingItems)])
       .then(([nextPlan, shoppingPlan]) => {
-        const classifiedShoppingItems = mergeShoppingPlans(shoppingPlan.items, extractShoppingItemsFromUnifiedInput(transcript));
+        const classifiedShoppingItems = hasShoppingItemIntent(transcript)
+          ? mergeShoppingPlans(shoppingPlan.items, extractShoppingItemsFromUnifiedInput(transcript))
+          : shoppingItems;
         const planWithCarryover = addCarryoverToPlan(
           prepareUnifiedMorningPlan(nextPlan, transcript, classifiedShoppingItems),
           carriedTodos,
@@ -2857,7 +2859,7 @@ function PlanView({
     [calendarEvents, today],
   );
   const todayTodos = React.useMemo(
-    () => plan.todos.filter((todo) => !isFutureDatedText(todo, today) && !isShoppingItemText(todo)).slice(0, 5),
+    () => plan.todos.filter((todo) => !isFutureDatedText(todo, today) && (isFoodEventText(todo) || !isShoppingItemText(todo))).slice(0, 5),
     [plan.todos, today],
   );
   const visibleShoppingItems = React.useMemo(
@@ -3690,14 +3692,15 @@ function prepareUnifiedMorningPlan(plan: MorningPlan, sourceText: string, shoppi
   const extractedSchedule = extractDatedScheduleItems(sourceText);
   const futureTaskNames = new Set(extractedSchedule.map((item) => normalizeTaskText(item.task)));
   const hasShoppingAction = hasShoppingActionIntent(sourceText);
-  const hasShoppingItems = extractShoppingItemsFromUnifiedInput(sourceText).length > 0;
+  const hasShoppingItems = hasShoppingItemIntent(sourceText) && extractShoppingItemsFromUnifiedInput(sourceText).length > 0;
   const shouldAddShoppingAction = hasShoppingAction || hasShoppingItems;
   const shoppingAction = shouldAddShoppingAction ? ['買い物へ行く'] : [];
   const shoppingSchedule = shouldAddShoppingAction ? [{ time: '時間調整', task: '買い物へ行く' }] : [];
   const isShoppingText = (value: string) =>
-    isGeneratedShoppingSupportTask(value) ||
-    isShoppingItemText(value) ||
-    shoppingItems.some((item) => normalizeTaskText(value).includes(normalizeTaskText(item.name)));
+    !isFoodEventText(value) &&
+    (isGeneratedShoppingSupportTask(value) ||
+      isShoppingItemText(value) ||
+      shoppingItems.some((item) => normalizeTaskText(value).includes(normalizeTaskText(item.name))));
   const isFutureTaskText = (value: string) =>
     Array.from(futureTaskNames).some((task) => task && normalizeTaskText(value).includes(task));
 
@@ -3758,6 +3761,7 @@ function extractShoppingItemsFromUnifiedInput(text: string): ShoppingItem[] {
     .split(/[、。,.]/)
     .map((item) => item.trim())
     .filter(Boolean)
+    .filter((item) => !isFoodEventText(item))
     .filter((item) => !isScheduleActionText(item))
     .filter((item) => isShoppingItemText(item));
 
@@ -3797,6 +3801,22 @@ function hasShoppingActionIntent(text: string) {
   return /(買い物|スーパー|店|ドラッグストア|コンビニ|市場).*(行く|寄る|行って|寄って)|(?:行く|寄る).*(買い物|スーパー|店|ドラッグストア|コンビニ|市場)/.test(text);
 }
 
+function hasShoppingItemIntent(text: string) {
+  return /(今日買うもの|買うもの|買い物リスト|買って|買う|購入|スーパーで|店で|ドラッグストアで|コンビニで)/.test(text);
+}
+
+function isFoodEventText(text: string) {
+  const normalized = normalizeTaskText(text);
+  return (
+    hasScheduleTimeText(normalized) ||
+    /(食べる|食べに行く|食事|食事する|ランチ|昼食|夕食|朝食|朝ごはん|昼ごはん|夜ごはん|晩ごはん|外食|焼肉に行く|ラーメンを食べる)/.test(normalized)
+  );
+}
+
+function hasScheduleTimeText(text: string) {
+  return /(\d{1,2})(?::\d{2}|時(?:\d{1,2}分?|半)?)/.test(text);
+}
+
 function isGeneratedShoppingSupportTask(text: string) {
   const normalized = normalizeTaskText(text);
   if (!normalized) return false;
@@ -3812,18 +3832,28 @@ function isGeneratedShoppingSupportTask(text: string) {
 function extractDatedScheduleItems(text: string): MorningPlan['schedule'] {
   const normalized = normalizeJapaneseDateText(text);
   const explicitDateTime = normalized.match(/(\d{1,2}月\d{1,2}日)\s*(\d{1,2}(?::\d{2}|時(?:\d{1,2}分?)?))\s*(?:から)?(.+)/);
-  if (!explicitDateTime) return [];
+  if (explicitDateTime) {
+    return [
+      {
+        time: `${explicitDateTime[1]} ${explicitDateTime[2]}`,
+        task: normalizeScheduleActionText(explicitDateTime[3]),
+      },
+    ];
+  }
+
+  const todayTime = normalized.match(/(\d{1,2}(?::\d{2}|時(?:\d{1,2}分?|半)?))\s*(?:から|に)?(.+)/);
+  if (!todayTime || !isScheduleActionText(todayTime[2])) return [];
 
   return [
     {
-      time: `${explicitDateTime[1]} ${explicitDateTime[2]}`,
-      task: normalizeScheduleActionText(explicitDateTime[3]),
+      time: todayTime[1],
+      task: normalizeScheduleActionText(todayTime[2]),
     },
   ];
 }
 
 function isScheduleActionText(text: string) {
-  return /(行く|迎え|会う|会議|仕事|病院|銀行|ジム|電話|支払い|送迎|予約|面談|打ち合わせ)/.test(text);
+  return /(行く|迎え|会う|会議|仕事|病院|銀行|ジム|電話|支払い|送迎|予約|面談|打ち合わせ|食べる|食事|ランチ|昼食|夕食|朝食|朝ごはん|昼ごはん|夜ごはん|晩ごはん|外食)/.test(text);
 }
 
 function isShoppingItemText(text: string) {
@@ -3833,6 +3863,7 @@ function isShoppingItemText(text: string) {
 function normalizeScheduleActionText(text: string) {
   return text
     .replace(/^今日は/, '')
+    .replace(/^\d{1,2}(?::\d{2}|時(?:\d{1,2}分?|半)?)\s*(?:から|に)?/, '')
     .replace(/^(から|に|へ|を|帰りに)/, '')
     .replace(/行って$/, '行く')
     .replace(/を?買う.*$/, '')
@@ -4092,13 +4123,13 @@ function parseScheduleTime(timeText: string) {
   const matches = Array.from(
     timeText
       .replace(/：/g, ':')
-      .matchAll(/(\d{1,2})(?::(\d{2})|時(?:\s*(\d{1,2})\s*分?)?)/g),
+      .matchAll(/(\d{1,2})(?::(\d{2})|時(?:\s*(\d{1,2})\s*分?|半)?)/g),
   );
 
   const times = matches
     .map((match) => {
       const hour = Number(match[1]);
-      const minute = Number(match[2] ?? match[3] ?? 0);
+      const minute = match[0].includes('半') ? 30 : Number(match[2] ?? match[3] ?? 0);
       if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
       return hour * 60 + minute;
     })
