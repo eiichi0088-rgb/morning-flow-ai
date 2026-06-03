@@ -102,7 +102,7 @@ export async function createShoppingPlan(
 }
 
 export function groupShoppingItems(items: ShoppingItem[]) {
-  const normalizedItems = items.map(normalizeStoredItem);
+  const normalizedItems = cleanupShoppingItems(items.map(normalizeStoredItem));
 
   return shoppingCategories
     .map((category) => ({
@@ -228,14 +228,14 @@ function mergeAiItems(
   });
 
   return {
-    items: sortShoppingItems(nextItems),
+    items: sortShoppingItems(cleanupShoppingItems(nextItems)),
     updatedAt: new Date().toISOString(),
   };
 }
 
 function extractShoppingItems(text: string): ParsedShoppingInput[] {
   const normalizedText = text
-    .replace(/今日買うものは|買って|買う|買いたい|購入|追加して|追加|入れて|お願い|あと|それと|それから/g, '、')
+    .replace(/今日買うものは|今日買うもの|買うものは|買うもの|買って|買う|買いたい|購入|追加して|追加|入れて|お願い|あと|それと|それから/g, '、')
     .replace(/[。\n\r]/g, '、')
     .replace(/\s*,\s*/g, '、')
     .replace(/と(?=[^、，,。\n\r]*[0-9０-９])/g, '、')
@@ -251,9 +251,14 @@ function extractShoppingItems(text: string): ParsedShoppingInput[] {
 function cleanShoppingItemName(item: string) {
   return item
     .trim()
+    .replace(/^(今日買うものは?|買うものは?|もの)/, '')
     .replace(/^(と|で|には|に|へ|を)+/, '')
     .replace(/(です|ください|して)$/g, '')
     .trim();
+}
+
+function cleanupShoppingItems(items: ShoppingItem[]): ShoppingItem[] {
+  return items.filter((item) => !isTranscriptNoiseItem(item, items));
 }
 
 function normalizeStoredItem(item: ShoppingItem): ShoppingItem {
@@ -299,6 +304,28 @@ function normalizeForMatching(value: string) {
 
 function normalizeName(name: string) {
   return normalizeForMatching(name).replace(/[。、，,]/g, '');
+}
+
+function isTranscriptNoiseItem(item: Pick<ShoppingItem, 'name' | 'quantity'>, allItems: Array<Pick<ShoppingItem, 'name' | 'quantity'>>) {
+  const text = normalizeForMatching([item.name, item.quantity].filter(Boolean).join(''));
+  const name = normalizeForMatching(item.name);
+  if (!text) return true;
+  if (isShoppingMetaOrActionText(item.name)) return true;
+
+  const quantityCount = countShoppingQuantities(text);
+  if (quantityCount >= 2) return true;
+
+  const otherItemMatches = allItems.filter((other) => {
+    const otherName = normalizeForMatching(other.name);
+    return otherName.length >= 2 && otherName !== name && text.includes(otherName);
+  });
+  if (otherItemMatches.length >= 2) return true;
+
+  return /^(今日買うもの|買うもの|もの)/.test(name) && otherItemMatches.length >= 1;
+}
+
+function countShoppingQuantities(text: string) {
+  return (text.match(/[0-9０-９]+(?:[.．][0-9０-９]+)?(?:kg|キロ|ｋｇ|グラム|g|本|個|つ|袋|パック|箱|枚|束|玉|缶|瓶|杯|ロール|ml|ミリ|l|リットル)/gi) ?? []).length;
 }
 
 function isShoppingMetaOrActionText(text: string) {

@@ -232,7 +232,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.14.1';
+const appVersion = 'v2.14.2';
 const isMealDatabaseExperimentalEnabled = false;
 type AppleCalendarDisposition = 'inline' | 'attachment';
 

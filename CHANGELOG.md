@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## Version 2.14.2 - 2026-06-03
+
+- Cleaned up transcript noise in shopping list results after voice input.
+- Shopping list save/display now removes long transcript-like items that contain multiple product names or multiple quantities.
+- Intro phrases such as `今日買うもの`, `買うもの`, and `もの` are stripped from item names.
+- Split purchase items such as `カイワレ 1つ`, `トマト 1個`, `きゅうり 1本`, and `合い挽き肉 500グラム` remain visible.
+- Apple Calendar, Google Calendar, Upstash Redis, Analytics, and Follow Up Manager behavior are unchanged.
+
 ## Version 2.14.1 - 2026-06-03
 
 - Isolated shopping list items from morning todos and schedule generation.

@@ -5,9 +5,19 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.14.1 is based on v2.14.0 Future AI UI plus shopping list isolation. Do not mix v3.0 or v3.1 UI.
+6. v2.14.2 is based on v2.14.1 shopping list isolation plus transcript noise cleanup. Do not mix v3.0 or v3.1 UI.
 
 
+
+## Version 2.14.2 Shopping List Transcript Noise Cleanup - 2026-06-03
+
+- Screen display: v2.14.2
+- ZIP: morning-flow-ai-v2.14.2.zip
+- Next planned version: Version 2.14.3
+- Shopping list save/display filters transcript-like long items that contain multiple product names or multiple quantities.
+- Intro phrases such as `今日買うもの`, `買うもの`, and `もの` are removed from item names.
+- Split product items remain visible with quantities, while combined transcript noise is hidden.
+- Apple Calendar, Google Calendar, Upstash Redis storage, Analytics Lite, FOLLOW UP MANAGER behavior, feedback, Developer Mode, snapshots, and session behavior are preserved.
 
 ## Version 2.14.1 Shopping List Isolation Fix - 2026-06-03
 
