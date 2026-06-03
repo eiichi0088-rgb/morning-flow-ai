@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## Version 2.15.1 - 2026-06-03
+
+- Fixed Follow Up Capture so multiple spoken or typed cases are split into multiple follow-up cards.
+- Added shared split-and-save handling for line breaks, `そして`, `あと`, `それと`, and changed contact names such as `高見さんに` / `近藤さんに`.
+- Improved follow-up intent detection for estimate/request phrases such as `見積もり` and `もらう`.
+- Follow-up content is cleaned so phrases like `高見さんにLINEを返す` display as `LINE返信`.
+- Apple Calendar, Google Calendar, Upstash Redis, Analytics, and shopping list behavior are unchanged.
+
 ## Version 2.15.0 - 2026-06-03
 
 - Added voice input capture UI to FOLLOW UP MANAGER.

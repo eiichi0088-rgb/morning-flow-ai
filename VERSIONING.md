@@ -5,9 +5,19 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.15.0 is based on v2.14.6 plus Follow Up Manager voice input UI. Do not mix v3.0 or v3.1 UI.
+6. v2.15.1 is based on v2.15.0 plus Follow Up multi-item split handling. Do not mix v3.0 or v3.1 UI.
 
 
+
+## Version 2.15.1 Follow Up Multi-Item Split Fix - 2026-06-03
+
+- Screen display: v2.15.1
+- ZIP: morning-flow-ai-v2.15.1.zip
+- Next planned version: Version 2.15.2
+- Follow Up Capture splits multiple spoken or typed cases into multiple saved cards.
+- Split candidates include line breaks, `そして`, `あと`, `それと`, and contact-name changes such as `高見さんに` / `近藤さんに`.
+- Estimate/request phrases such as `見積もり` and `もらう` are recognized as follow-up intent.
+- Apple Calendar, Google Calendar, Upstash Redis storage, Analytics Lite, shopping list behavior, feedback, Developer Mode, snapshots, session behavior, and Future AI UI design are preserved.
 
 ## Version 2.15.0 Follow Up Manager Voice Input UI - 2026-06-03
 

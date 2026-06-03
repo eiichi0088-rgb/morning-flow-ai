@@ -234,7 +234,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.15.0';
+const appVersion = 'v2.15.1';
 const isMealDatabaseExperimentalEnabled = false;
 type AppleCalendarDisposition = 'inline' | 'attachment';
 
@@ -1232,8 +1232,9 @@ function App() {
     const normalized = followUpResultText.trim();
     if (!normalized) return 0;
 
-    const captureItem = createVoiceFollowUp(normalized);
-    const nextItems = captureItem ? [captureItem] : extractFollowUpsFromText(normalized);
+    const splitItems = extractFollowUpsFromText(normalized);
+    const fallbackItem = createVoiceFollowUp(normalized);
+    const nextItems = splitItems.length ? splitItems : fallbackItem ? [fallbackItem] : [];
     nextItems.forEach((item) => {
       addFollowUp({
         company: item.company,
@@ -3587,6 +3588,9 @@ function detectFollowUpIntent(text: string) {
     '\u30e1\u30fc\u30eb',
     '\u8fd4\u3059',
     '\u8fd4\u4e8b',
+    '\u78ba\u8a8d',
+    '\u898b\u7a4d\u3082\u308a',
+    '\u3082\u3089\u3046',
     '\u672a\u8fd4\u4fe1',
     '\u78ba\u8a8d\u3057\u3066\u8fd4\u4e8b',
   ]);
@@ -3622,14 +3626,21 @@ function createVoiceFollowUp(text: string): FollowUpItem | null {
 }
 
 function splitInputItems(text: string) {
-  return text
-    .split(/[\n。．.!！?？、,]+|\s*(?:して|それから|あと|そして)\s*/g)
+  return normalizeFollowUpSplitText(text)
+    .split(/[\n。．.!！?？、,]+|\s*(?:それから|それと|あと|そして)\s*/g)
     .map((item) => item.trim())
     .filter(Boolean);
 }
 
+function normalizeFollowUpSplitText(text: string) {
+  return text
+    .replace(/\s+/g, ' ')
+    .replace(/(?!^)([^、。,.!?！？\n\s]+さん(?:に|へ))/g, '\n$1')
+    .trim();
+}
+
 function detectFollowUpDuePreset(text: string): FollowUpDuePreset {
-  if (includesAny(text, ['\u660e\u65e5', '\u3042\u3057\u305f'])) return 'tomorrow';
+  if (includesAny(text, ['\u660e\u65e5', '\u3042\u3057\u305f', '\u660e\u65e5\u4e2d'])) return 'tomorrow';
   if (detectWeekdayDate(text)) return 'custom';
   if (includesAny(text, ['\u4eca\u9031', '\u6765\u9031'])) return 'thisWeek';
   return 'today';
@@ -3660,7 +3671,16 @@ function extractFollowUpName(text: string) {
 }
 
 function normalizeFollowUpContent(text: string) {
-  return text.replace(/\s+/g, ' ').trim();
+  const withoutLead = text
+    .replace(/^(今日は|今日|明日|あした|あとで)/, '')
+    .replace(/^(.+?)(?:さん)?(?:に|へ)/, '')
+    .replace(/(今日中|明日中|今週中|来週中|日曜日|月曜日|火曜日|水曜日|木曜日|金曜日|土曜日)(まで|に)?/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (/line/i.test(withoutLead) && /(返す|返信|返事)/.test(withoutLead)) return 'LINE返信';
+  if (/メール/.test(withoutLead) && /(返す|返信|返事)/.test(withoutLead)) return 'メール返信';
+  return withoutLead || text.replace(/\s+/g, ' ').trim();
 }
 
 function createFollowUpDedupeKey(item: Pick<FollowUpItem, 'content' | 'dueDate' | 'kind' | 'name'>) {
