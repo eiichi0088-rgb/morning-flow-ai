@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 2.14.3 - 2026-06-03
+
+- Changed the morning plan shopping list section to render from the same cleaned shopping item source used by the shopping list page.
+- Removed raw transcript-style shopping text from the morning plan shopping list display.
+- Added display-level duplicate cleanup so only product name and quantity are shown.
+- Apple Calendar, Google Calendar, Upstash Redis, Analytics, and Follow Up Manager behavior are unchanged.
+
 ## Version 2.14.2 - 2026-06-03
 
 - Cleaned up transcript noise in shopping list results after voice input.

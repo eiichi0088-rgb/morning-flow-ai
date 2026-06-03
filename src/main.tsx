@@ -232,7 +232,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.14.2';
+const appVersion = 'v2.14.3';
 const isMealDatabaseExperimentalEnabled = false;
 type AppleCalendarDisposition = 'inline' | 'attachment';
 
@@ -2729,6 +2729,10 @@ function PlanView({
     () => plan.todos.filter((todo) => !isFutureDatedText(todo, today) && !isShoppingItemText(todo)).slice(0, 5),
     [plan.todos, today],
   );
+  const visibleShoppingItems = React.useMemo(
+    () => dedupeShoppingItemsForDisplay(groupShoppingItems(shoppingItems).flatMap((group) => group.items)),
+    [shoppingItems],
+  );
   const visibleSchedule = todayEvents.slice(0, 5);
   return (
     <section className="plan-stack" aria-label="AI organized result">
@@ -2748,9 +2752,9 @@ function PlanView({
       </PlanSection>
 
       <PlanSection icon={<ShoppingCart size={18} />} title={'\u8cb7\u3044\u7269\u30ea\u30b9\u30c8'}>
-        {shoppingItems.length ? (
+        {visibleShoppingItems.length ? (
           <ul className="clean-list">
-            {shoppingItems.map((item) => (
+            {visibleShoppingItems.map((item) => (
               <li key={item.id}>{formatShoppingItemLabel(item)}</li>
             ))}
           </ul>
@@ -2807,6 +2811,16 @@ function PlanView({
 
     </section>
   );
+}
+
+function dedupeShoppingItemsForDisplay(items: ShoppingItem[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = normalizeTaskText(formatShoppingItemLabel(item));
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function GoogleCalendarExportPanel({ analyticsUserId, events }: { analyticsUserId: string; events: CalendarEvent[] }) {
