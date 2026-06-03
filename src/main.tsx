@@ -53,6 +53,16 @@ import {
 } from './services/shoppingPlanner';
 import { findRecipeMatch } from './services/recipeDatabase';
 import {
+  clearStoredSupabaseAuthSession,
+  getStoredSupabaseAuthSession,
+  getSupabaseAuthConfigStatus,
+  signInWithEmail,
+  signOutSupabaseAuth,
+  signUpWithEmail,
+  storeSupabaseAuthSession,
+  type SupabaseAuthSession,
+} from './services/supabaseAuth';
+import {
   deleteSupabaseFollowUp,
   fetchSupabaseFollowUps,
   getSupabaseFollowUpConfigStatus,
@@ -619,6 +629,9 @@ function App() {
   const privateSessionKeys = React.useMemo(() => createPrivateSessionKeys(privateSessionId), [privateSessionId]);
   const analyticsUserId = React.useMemo(createAnalyticsUserId, []);
   const [activeView, setActiveView] = React.useState<AppView>('morning');
+  const [authSession, setAuthSession] = React.useState<SupabaseAuthSession | null>(() => getStoredSupabaseAuthSession());
+  const [authError, setAuthError] = React.useState('');
+  const [isAuthLoading, setIsAuthLoading] = React.useState(false);
   const [recognition, setRecognition] = React.useState<SpeechRecognitionLike | null>(null);
   const [isListening, setIsListening] = React.useState(false);
   const [transcript, setTranscript] = React.useState('');
@@ -1745,6 +1758,67 @@ function App() {
     target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
+  const loginWithEmail = async (email: string, password: string) => {
+    setIsAuthLoading(true);
+    setAuthError('');
+    try {
+      const session = await signInWithEmail(email, password);
+      if (!session?.access_token || !session.user) {
+        throw new Error('ログイン情報を取得できませんでした。');
+      }
+      storeSupabaseAuthSession(session);
+      setAuthSession(session);
+    } catch (error) {
+      setAuthError(getAuthErrorMessage(error));
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const signUpWithEmailPassword = async (email: string, password: string) => {
+    setIsAuthLoading(true);
+    setAuthError('');
+    try {
+      const session = await signUpWithEmail(email, password);
+      if (session?.access_token && session.user) {
+        storeSupabaseAuthSession(session);
+        setAuthSession(session);
+        return;
+      }
+      setAuthError('確認メールを送信しました。メール内のリンクを開いてからログインしてください。');
+    } catch (error) {
+      setAuthError(getAuthErrorMessage(error));
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const logout = async () => {
+    const accessToken = authSession?.access_token;
+    clearStoredSupabaseAuthSession();
+    setAuthSession(null);
+    setActiveView('morning');
+    if (accessToken) {
+      try {
+        await signOutSupabaseAuth(accessToken);
+      } catch (error) {
+        console.warn('[MORNING FLOW AI] Supabase logout request failed', error);
+      }
+    }
+  };
+
+  if (!authSession?.user) {
+    return (
+      <AuthGate
+        authError={authError}
+        config={getSupabaseAuthConfigStatus()}
+        isLoading={isAuthLoading}
+        onLogin={loginWithEmail}
+        onSignUp={signUpWithEmailPassword}
+      />
+    );
+  }
+
   return (
     <main className="app-shell">
       <div className="ambient-layer" aria-hidden="true">
@@ -1752,6 +1826,7 @@ function App() {
         <span className="morning-orbit orbit-two" />
         <span className="horizon-line" />
       </div>
+      <AuthStatusBar email={authSession.user.email} onLogout={() => void logout()} />
 
       {isShoppingView ? (
         <ShoppingListPage
@@ -2101,6 +2176,98 @@ function App() {
         </div>
       )}
     </main>
+  );
+}
+
+function AuthGate({
+  authError,
+  config,
+  isLoading,
+  onLogin,
+  onSignUp,
+}: {
+  authError: string;
+  config: ReturnType<typeof getSupabaseAuthConfigStatus>;
+  isLoading: boolean;
+  onLogin: (email: string, password: string) => Promise<void>;
+  onSignUp: (email: string, password: string) => Promise<void>;
+}) {
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [mode, setMode] = React.useState<'login' | 'signup'>('login');
+  const canSubmit = Boolean(email.trim() && password.trim().length >= 6 && config.configured && !isLoading);
+
+  const submit = () => {
+    if (!canSubmit) return;
+    if (mode === 'login') {
+      void onLogin(email.trim(), password);
+      return;
+    }
+    void onSignUp(email.trim(), password);
+  };
+
+  return (
+    <main className="app-shell auth-shell">
+      <div className="ambient-layer" aria-hidden="true">
+        <span className="morning-orbit orbit-one" />
+        <span className="morning-orbit orbit-two" />
+        <span className="horizon-line" />
+      </div>
+      <section className="hero-panel auth-panel" aria-label="ログイン">
+        <div className="top-bar">
+          <div>
+            <p className="eyebrow">MORNING FLOW AI <span>{appVersion}</span></p>
+            <h1>Sign In</h1>
+            <p className="hero-subtitle">Your Day. Secured.</p>
+          </div>
+          <div className="brand-mark" aria-hidden="true">
+            <Sparkles size={21} />
+          </div>
+        </div>
+
+        <div className="auth-mode-tabs" aria-label="ログイン方法">
+          <button className={mode === 'login' ? 'selected' : ''} onClick={() => setMode('login')} type="button">
+            ログイン
+          </button>
+          <button className={mode === 'signup' ? 'selected' : ''} onClick={() => setMode('signup')} type="button">
+            新規登録
+          </button>
+        </div>
+
+        <section className="auth-form">
+          <label>
+            メールアドレス
+            <input autoComplete="email" inputMode="email" onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" value={email} />
+          </label>
+          <label>
+            パスワード
+            <input autoComplete={mode === 'login' ? 'current-password' : 'new-password'} onChange={(event) => setPassword(event.target.value)} placeholder="6文字以上" type="password" value={password} />
+          </label>
+          {!config.configured && (
+            <p className="error-message">
+              Supabase Authが未設定です。VITE_SUPABASE_URL と VITE_SUPABASE_ANON_KEY を確認してください。
+            </p>
+          )}
+          {authError && <p className="error-message">{authError}</p>}
+          <button className="organize-button" disabled={!canSubmit} onClick={submit} type="button">
+            {isLoading ? <Loader2 className="button-spinner" size={19} /> : <CheckCircle2 size={19} />}
+            {mode === 'login' ? 'ログインする' : '登録する'}
+          </button>
+          <small className="auth-note">ログイン後にMORNING FLOW AI本体を表示します。今回はデータ分離までは行いません。</small>
+        </section>
+      </section>
+    </main>
+  );
+}
+
+function AuthStatusBar({ email, onLogout }: { email?: string; onLogout: () => void }) {
+  return (
+    <div className="auth-status-bar">
+      <span>ログイン中 {email || 'User'}</span>
+      <button onClick={onLogout} type="button">
+        ログアウト
+      </button>
+    </div>
   );
 }
 
@@ -4475,6 +4642,14 @@ function normalizeSupabaseFollowUpKind(actionType: string | null | undefined): F
 function getSupabaseFollowUpErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return `Supabase同期に失敗しました。${message}`;
+}
+
+function getAuthErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/invalid login credentials/i.test(message)) return 'メールアドレスまたはパスワードが違います。';
+  if (/email not confirmed/i.test(message)) return '確認メール内のリンクを開いてからログインしてください。';
+  if (/password/i.test(message)) return 'パスワードを確認してください。6文字以上が必要です。';
+  return message || 'ログインできませんでした。';
 }
 
 function createFollowUpSupabaseDebug(lastOperation: string, error?: unknown): FollowUpSupabaseDebug {

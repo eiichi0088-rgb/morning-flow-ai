@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 3.4.0 - 2026-06-04
+
+- Added Supabase Auth foundation with email/password login and signup screen.
+- The app body is shown only after a user is logged in.
+- Added logged-in user display and logout button.
+- Existing data separation and RLS behavior are unchanged in this phase.
+
 ## Version 3.3.0 - 2026-06-04
 
 - Added automatic AI Inbox classification confidence.

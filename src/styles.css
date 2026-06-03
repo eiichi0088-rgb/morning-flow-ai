@@ -941,6 +941,114 @@ h1 {
   cursor: pointer;
 }
 
+.auth-shell {
+  min-height: 100vh;
+  justify-content: center;
+}
+
+.auth-panel {
+  margin: auto;
+  max-width: 560px;
+}
+
+.auth-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid rgba(141, 229, 255, 0.16);
+  border-radius: 17px;
+  background: rgba(4, 15, 30, 0.48);
+}
+
+.auth-mode-tabs button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 13px;
+  color: rgba(232, 240, 248, 0.78);
+  background: transparent;
+  font: inherit;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.auth-mode-tabs button.selected {
+  color: #03101c;
+  background: linear-gradient(135deg, #ffffff, #dff7ff 52%, #8de5ff);
+}
+
+.auth-form {
+  display: grid;
+  gap: 13px;
+  border: 1px solid rgba(141, 229, 255, 0.16);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(141, 229, 255, 0.095), rgba(255, 255, 255, 0.035)),
+    rgba(4, 15, 30, 0.52);
+  padding: 15px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 7px;
+  color: rgba(186, 232, 248, 0.76);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.auth-form input {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(6, 11, 20, 0.56);
+  color: #fff;
+  font: inherit;
+  padding: 12px 13px;
+}
+
+.auth-note {
+  color: rgba(226, 235, 245, 0.62);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.auth-status-bar {
+  position: sticky;
+  top: 10px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgba(141, 229, 255, 0.14);
+  border-radius: 15px;
+  color: rgba(226, 235, 245, 0.78);
+  background: rgba(4, 15, 30, 0.58);
+  padding: 9px 11px;
+  backdrop-filter: blur(16px);
+}
+
+.auth-status-bar span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.78rem;
+  font-weight: 820;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-status-bar button {
+  border: 1px solid rgba(141, 229, 255, 0.18);
+  border-radius: 12px;
+  color: rgba(248, 252, 255, 0.9);
+  background: rgba(141, 229, 255, 0.08);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 850;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
 .shopping-page {
   padding-bottom: 26px;
 }

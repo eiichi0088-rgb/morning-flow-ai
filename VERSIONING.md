@@ -5,8 +5,18 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.3.0 is based on v3.2.0 plus AI Inbox Auto Classification.
+6. v3.4.0 is based on v3.3.0 plus Supabase Auth foundation.
 
+
+## Version 3.4.0 User Authentication Foundation - 2026-06-04
+
+- Screen display: v3.4.0
+- ZIP: morning-flow-ai-v3.4.0.zip
+- Next planned version: Version 3.4.1
+- Added Supabase Auth email/password login and signup screen.
+- App body is shown only after login.
+- Added logged-in user display and logout button.
+- Data separation and RLS-wide changes are intentionally not included.
 
 ## Version 3.3.0 AI Inbox Auto Classification - 2026-06-04
 
