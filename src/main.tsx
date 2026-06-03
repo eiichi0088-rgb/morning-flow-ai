@@ -52,6 +52,15 @@ import {
   type ShoppingItem,
 } from './services/shoppingPlanner';
 import { findRecipeMatch } from './services/recipeDatabase';
+import {
+  deleteSupabaseFollowUp,
+  fetchSupabaseFollowUps,
+  insertSupabaseFollowUp,
+  isSupabaseFollowUpConfigured,
+  updateSupabaseFollowUp,
+  type SupabaseFollowUpRow,
+  type SupabaseFollowUpStatus,
+} from './services/supabaseFollowUps';
 import './styles.css';
 
 type SpeechRecognitionResultListLike = SpeechRecognitionResultList;
@@ -615,6 +624,10 @@ function App() {
   const [followUpSplitDebug, setFollowUpSplitDebug] = React.useState<FollowUpSplitDebug | null>(null);
   const [followUpReviewItems, setFollowUpReviewItems] = React.useState<FollowUpDraftItem[]>([]);
   const [followUps, setFollowUps] = React.useState<FollowUpItem[]>([]);
+  const [followUpSyncError, setFollowUpSyncError] = React.useState('');
+  const [followUpSyncStatus, setFollowUpSyncStatus] = React.useState<'local' | 'syncing' | 'synced' | 'error'>(
+    isSupabaseFollowUpConfigured() ? 'syncing' : 'local',
+  );
   const [previousSnapshot, setPreviousSnapshot] = React.useState<MorningSnapshot | null>(null);
   const [reviewStatuses, setReviewStatuses] = React.useState<Record<string, ReviewStatus>>({});
   const [carriedTodos, setCarriedTodos] = React.useState<string[]>([]);
@@ -739,6 +752,35 @@ function App() {
 
     localStorage.setItem(privateSessionKeys.followUps, JSON.stringify(followUps));
   }, [followUps, privateSessionKeys.followUps]);
+
+  const syncFollowUpsFromSupabase = React.useCallback(async () => {
+    if (!isSupabaseFollowUpConfigured()) {
+      setFollowUpSyncStatus('local');
+      return;
+    }
+
+    setFollowUpSyncStatus('syncing');
+    try {
+      const rows = await fetchSupabaseFollowUps();
+      setFollowUps(rows.map(mapSupabaseRowToFollowUpItem));
+      setFollowUpSyncError('');
+      setFollowUpSyncStatus('synced');
+    } catch (error) {
+      setFollowUpSyncError(getSupabaseFollowUpErrorMessage(error));
+      setFollowUpSyncStatus('error');
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void syncFollowUpsFromSupabase();
+
+    if (!isSupabaseFollowUpConfigured()) return;
+    const intervalId = window.setInterval(() => {
+      void syncFollowUpsFromSupabase();
+    }, 10000);
+
+    return () => window.clearInterval(intervalId);
+  }, [syncFollowUpsFromSupabase]);
 
   React.useEffect(() => {
     if (!highlightedShoppingIds.length) return;
@@ -1233,7 +1275,7 @@ function App() {
     setShoppingUpdatedAt(new Date().toISOString());
   };
 
-  const addFollowUp = (item: Omit<FollowUpItem, 'completed' | 'completedAt' | 'createdAt' | 'id'>) => {
+  const addFollowUp = async (item: Omit<FollowUpItem, 'completed' | 'completedAt' | 'createdAt' | 'id'>) => {
     const isDone = item.status === 'done';
     const nextItem: FollowUpItem = {
       ...item,
@@ -1245,6 +1287,23 @@ function App() {
       status: item.status ?? 'pending',
     };
     trackAnalyticsFeature(analyticsUserId, 'follow_up');
+
+    if (isSupabaseFollowUpConfigured()) {
+      try {
+        setFollowUpSyncStatus('syncing');
+        const savedRow = await insertSupabaseFollowUp(mapFollowUpItemToSupabaseInsert(nextItem));
+        const savedItem = mapSupabaseRowToFollowUpItem(savedRow);
+        setFollowUps((current) => [...current.filter((currentItem) => currentItem.id !== savedItem.id), savedItem]);
+        notifyFollowUpDueToday(savedItem);
+        setFollowUpSyncError('');
+        setFollowUpSyncStatus('synced');
+        return;
+      } catch (error) {
+        setFollowUpSyncError(getSupabaseFollowUpErrorMessage(error));
+        setFollowUpSyncStatus('error');
+      }
+    }
+
     setFollowUps((current) => [...current, nextItem]);
     notifyFollowUpDueToday(nextItem);
   };
@@ -1295,12 +1354,12 @@ function App() {
     setFollowUpReviewItems([]);
   };
 
-  const saveFollowUpReviewItems = () => {
+  const saveFollowUpReviewItems = async () => {
     const itemsToSave = followUpReviewItems.filter((item) => item.name.trim() && item.content.trim());
     if (!itemsToSave.length) return 0;
 
-    itemsToSave.forEach((item) => {
-      addFollowUp({
+    for (const item of itemsToSave) {
+      await addFollowUp({
         company: item.company,
         content: item.content.trim(),
         dueDate: item.dueDate,
@@ -1312,7 +1371,7 @@ function App() {
         source: 'voice',
         status: item.status ?? 'pending',
       });
-    });
+    }
     setFollowUpReviewItems([]);
     return itemsToSave.length;
   };
@@ -1340,18 +1399,34 @@ function App() {
   };
 
   const completeFollowUp = (itemId: string) => {
+    const completedAt = new Date().toISOString();
     setFollowUps((current) =>
       current.map((item) =>
         item.id === itemId
           ? {
               ...item,
               completed: true,
-              completedAt: new Date().toISOString(),
+              completedAt,
               status: 'done',
             }
           : item,
       ),
     );
+    if (isSupabaseFollowUpConfigured()) {
+      void updateSupabaseFollowUp(itemId, {
+        completed_at: completedAt,
+        status: 'done',
+      })
+        .then((row) => {
+          if (row) setFollowUps((current) => current.map((item) => (item.id === itemId ? mapSupabaseRowToFollowUpItem(row) : item)));
+          setFollowUpSyncError('');
+          setFollowUpSyncStatus('synced');
+        })
+        .catch((error) => {
+          setFollowUpSyncError(getSupabaseFollowUpErrorMessage(error));
+          setFollowUpSyncStatus('error');
+        });
+    }
   };
 
   const reopenFollowUp = (itemId: string) => {
@@ -1367,10 +1442,69 @@ function App() {
           : item,
       ),
     );
+    if (isSupabaseFollowUpConfigured()) {
+      void updateSupabaseFollowUp(itemId, {
+        completed_at: null,
+        status: 'pending',
+      })
+        .then((row) => {
+          if (row) setFollowUps((current) => current.map((item) => (item.id === itemId ? mapSupabaseRowToFollowUpItem(row) : item)));
+          setFollowUpSyncError('');
+          setFollowUpSyncStatus('synced');
+        })
+        .catch((error) => {
+          setFollowUpSyncError(getSupabaseFollowUpErrorMessage(error));
+          setFollowUpSyncStatus('error');
+        });
+    }
+  };
+
+  const editFollowUp = (itemId: string) => {
+    const item = followUps.find((currentItem) => currentItem.id === itemId);
+    if (!item) return;
+
+    const nextName = window.prompt('相手を編集してください', item.name)?.trim();
+    if (!nextName) return;
+    const nextContent = window.prompt('内容を編集してください', item.content)?.trim();
+    if (!nextContent) return;
+    const nextItem = {
+      ...item,
+      content: nextContent,
+      name: nextName,
+    };
+
+    setFollowUps((current) => current.map((currentItem) => (currentItem.id === itemId ? nextItem : currentItem)));
+    if (isSupabaseFollowUpConfigured()) {
+      void updateSupabaseFollowUp(itemId, {
+        memo: nextContent,
+        person_name: nextName,
+        title: formatFollowUpTitle(nextItem),
+      })
+        .then((row) => {
+          if (row) setFollowUps((current) => current.map((currentItem) => (currentItem.id === itemId ? mapSupabaseRowToFollowUpItem(row) : currentItem)));
+          setFollowUpSyncError('');
+          setFollowUpSyncStatus('synced');
+        })
+        .catch((error) => {
+          setFollowUpSyncError(getSupabaseFollowUpErrorMessage(error));
+          setFollowUpSyncStatus('error');
+        });
+    }
   };
 
   const deleteFollowUp = (itemId: string) => {
     setFollowUps((current) => current.filter((item) => item.id !== itemId));
+    if (isSupabaseFollowUpConfigured()) {
+      void deleteSupabaseFollowUp(itemId)
+        .then(() => {
+          setFollowUpSyncError('');
+          setFollowUpSyncStatus('synced');
+        })
+        .catch((error) => {
+          setFollowUpSyncError(getSupabaseFollowUpErrorMessage(error));
+          setFollowUpSyncStatus('error');
+        });
+    }
   };
 
   const shareShoppingList = async () => {
@@ -1497,6 +1631,8 @@ function App() {
           dueTodayCount={dueTodayFollowUps.length}
           completedCount={followUps.filter((item) => item.completed).length}
           followUpSplitDebug={followUpSplitDebug}
+          followUpSyncError={followUpSyncError}
+          followUpSyncStatus={followUpSyncStatus}
           isClearConfirmOpen={isFollowUpClearConfirmOpen}
           isListening={isListening}
           isSupported={isSupported}
@@ -1508,6 +1644,7 @@ function App() {
           onClearRequest={() => setIsFollowUpClearConfirmOpen(true)}
           onComplete={completeFollowUp}
           onDelete={deleteFollowUp}
+          onEdit={editFollowUp}
           onCancelReview={cancelFollowUpReview}
           onDeleteReviewItem={deleteFollowUpReviewItem}
           onOrganizeCapture={organizeFollowUpCapture}
@@ -1761,6 +1898,8 @@ function FollowUpManagerPage({
   completedCount,
   dueTodayCount,
   followUpSplitDebug,
+  followUpSyncError,
+  followUpSyncStatus,
   isClearConfirmOpen,
   isListening,
   isSupported,
@@ -1774,6 +1913,7 @@ function FollowUpManagerPage({
   onDelete,
   onCancelReview,
   onDeleteReviewItem,
+  onEdit,
   onOrganizeCapture,
   onReopen,
   onSaveReview,
@@ -1788,11 +1928,13 @@ function FollowUpManagerPage({
   completedCount: number;
   dueTodayCount: number;
   followUpSplitDebug: FollowUpSplitDebug | null;
+  followUpSyncError: string;
+  followUpSyncStatus: 'local' | 'syncing' | 'synced' | 'error';
   isClearConfirmOpen: boolean;
   isListening: boolean;
   isSupported: boolean;
   items: FollowUpItem[];
-  onAdd: (item: Omit<FollowUpItem, 'completed' | 'completedAt' | 'createdAt' | 'id'>) => void;
+  onAdd: (item: Omit<FollowUpItem, 'completed' | 'completedAt' | 'createdAt' | 'id'>) => Promise<void>;
   onBack: () => void;
   onCancelClear: () => void;
   onClear: () => void;
@@ -1801,9 +1943,10 @@ function FollowUpManagerPage({
   onDelete: (itemId: string) => void;
   onCancelReview: () => void;
   onDeleteReviewItem: (itemId: string) => void;
+  onEdit: (itemId: string) => void;
   onOrganizeCapture: () => number;
   onReopen: (itemId: string) => void;
-  onSaveReview: () => number;
+  onSaveReview: () => Promise<number>;
   onStartListening: () => void;
   onStopListening: () => void;
   onTextChange: (text: string) => void;
@@ -1854,7 +1997,7 @@ function FollowUpManagerPage({
 
   const submitFollowUp = () => {
     if (!name.trim() || !content.trim()) return;
-    onAdd({
+    void onAdd({
       name: name.trim(),
       company: company.trim() || undefined,
       content: content.trim(),
@@ -1873,8 +2016,8 @@ function FollowUpManagerPage({
     setCaptureMessage(count ? `${count}件のフォロー候補を作成しました。確認してから保存してください。` : 'フォローとして整理できる内容が見つかりませんでした。');
   };
 
-  const saveReviewItems = () => {
-    const count = onSaveReview();
+  const saveReviewItems = async () => {
+    const count = await onSaveReview();
     setCaptureMessage(count ? `${count}件のフォローを保存しました。` : '保存できるフォロー候補がありません。');
   };
 
@@ -1906,6 +2049,11 @@ function FollowUpManagerPage({
           <span>完了履歴</span>
           <strong>{completedCount}件</strong>
         </div>
+      </div>
+
+      <div className={`follow-up-sync-status ${followUpSyncStatus}`}>
+        <span>{getFollowUpSyncStatusLabel(followUpSyncStatus)}</span>
+        {followUpSyncError && <small>{followUpSyncError}</small>}
       </div>
 
       <div className="focus-area follow-up-capture">
@@ -2092,8 +2240,8 @@ function FollowUpManagerPage({
         </section>
       )}
 
-      <FollowUpList items={pendingItems} mode="pending" onComplete={onComplete} onDelete={onDelete} onReopen={onReopen} />
-      <FollowUpList items={completedItems} mode="completed" onComplete={onComplete} onDelete={onDelete} onReopen={onReopen} />
+      <FollowUpList items={pendingItems} mode="pending" onComplete={onComplete} onDelete={onDelete} onEdit={onEdit} onReopen={onReopen} />
+      <FollowUpList items={completedItems} mode="completed" onComplete={onComplete} onDelete={onDelete} onEdit={onEdit} onReopen={onReopen} />
     </section>
   );
 }
@@ -2491,12 +2639,14 @@ function FollowUpList({
   mode,
   onComplete,
   onDelete,
+  onEdit,
   onReopen,
 }: {
   items: FollowUpItem[];
   mode: 'pending' | 'completed';
   onComplete: (itemId: string) => void;
   onDelete: (itemId: string) => void;
+  onEdit: (itemId: string) => void;
   onReopen: (itemId: string) => void;
 }) {
   return (
@@ -2541,6 +2691,10 @@ function FollowUpList({
                   未対応に戻す
                 </button>
               )}
+              <button onClick={() => onEdit(item.id)} type="button">
+                <Pencil size={16} />
+                編集
+              </button>
               <button className="danger-button" onClick={() => onDelete(item.id)} type="button">
                 <Trash2 size={16} />
                 削除
@@ -3839,6 +3993,65 @@ function sortCompletedFollowUps(items: FollowUpItem[]) {
 
 function getFollowUpCompletedTime(item: FollowUpItem) {
   return item.completedAt ? new Date(item.completedAt).getTime() : 0;
+}
+
+function mapSupabaseRowToFollowUpItem(row: SupabaseFollowUpRow): FollowUpItem {
+  const status = normalizeSupabaseFollowUpStatus(row.status);
+  const createdAt = row.created_at || new Date().toISOString();
+  const completedAt = row.completed_at ?? undefined;
+
+  return {
+    completed: status === 'done' || Boolean(completedAt),
+    completedAt,
+    content: row.memo || row.title || '',
+    createdAt,
+    dueDate: formatDateInput(new Date(createdAt)),
+    duePreset: 'today',
+    id: row.id,
+    kind: normalizeSupabaseFollowUpKind(row.action_type),
+    name: row.person_name || '連絡先未設定',
+    priority: 'medium',
+    source: 'voice',
+    status,
+  };
+}
+
+function mapFollowUpItemToSupabaseInsert(item: FollowUpItem) {
+  const status = mapFollowUpStatusToSupabase(item.completed ? 'done' : item.status ?? 'pending');
+  return {
+    action_type: item.kind,
+    completed_at: status === 'done' ? item.completedAt ?? new Date().toISOString() : null,
+    memo: item.content,
+    person_name: item.name,
+    status,
+    title: formatFollowUpTitle(item),
+  };
+}
+
+function mapFollowUpStatusToSupabase(status: FollowUpStatus): SupabaseFollowUpStatus {
+  return status;
+}
+
+function normalizeSupabaseFollowUpStatus(status: string | null | undefined): FollowUpStatus {
+  return status === 'contacted' || status === 'waiting' || status === 'done' ? status : 'pending';
+}
+
+function normalizeSupabaseFollowUpKind(actionType: string | null | undefined): FollowUpKind {
+  return actionType === 'phone' || actionType === 'line' || actionType === 'email' || actionType === 'sms' || actionType === 'other'
+    ? actionType
+    : 'other';
+}
+
+function getSupabaseFollowUpErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return `Supabase同期に失敗しました。${message}`;
+}
+
+function getFollowUpSyncStatusLabel(status: 'local' | 'syncing' | 'synced' | 'error') {
+  if (status === 'synced') return 'Supabase同期済み';
+  if (status === 'syncing') return 'Supabase確認中';
+  if (status === 'error') return 'Supabase同期エラー';
+  return 'ローカル保存';
 }
 
 function suggestFollowUp(text: string): { priority: FollowUpPriority; kind: FollowUpKind } {

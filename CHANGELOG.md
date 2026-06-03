@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## Version 3.0.0 - 2026-06-04
+
+- Started Supabase Sync Phase 1 for Follow Up Manager only.
+- Added a Supabase Follow Up REST client using `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+- Follow Up Manager can load, add, complete, reopen, and delete follow-ups through the `follow_ups` table when Supabase is configured.
+- Existing localStorage Follow Up backup remains in place for fallback and offline safety.
+- Added visible Follow Up sync status and error display.
+
 ## Version 2.17.0 - 2026-06-04
 
 - Improved Follow Up Manager completion history.

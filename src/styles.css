@@ -966,7 +966,7 @@ h1 {
 
 .follow-up-summary {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1003,6 +1003,37 @@ h1 {
 .follow-up-summary strong {
   color: #f8fcff;
   font-size: 1.28rem;
+}
+
+.follow-up-sync-status {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(141, 229, 255, 0.18);
+  border-radius: 15px;
+  background: rgba(141, 229, 255, 0.06);
+  padding: 10px 12px;
+}
+
+.follow-up-sync-status span {
+  color: rgba(141, 229, 255, 0.92);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.follow-up-sync-status small {
+  color: rgba(226, 235, 245, 0.74);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.follow-up-sync-status.error {
+  border-color: rgba(255, 142, 124, 0.28);
+  background: rgba(126, 35, 29, 0.16);
+}
+
+.follow-up-sync-status.error span {
+  color: rgba(255, 214, 204, 0.94);
 }
 
 .follow-up-form,
