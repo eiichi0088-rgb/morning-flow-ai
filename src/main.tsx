@@ -147,6 +147,10 @@ type FollowUpSplitDebug = {
   strategy: 'separator' | 'person-boundary';
 };
 
+type FollowUpDraftItem = Omit<FollowUpItem, 'completed' | 'completedAt' | 'createdAt' | 'id'> & {
+  id: string;
+};
+
 type FeedbackType = 'usability' | 'improvement' | 'bug' | 'feature' | 'other';
 type FeedbackUrgency = 'high' | 'medium' | 'low';
 
@@ -609,6 +613,7 @@ function App() {
   const [followUpCaptureText, setFollowUpCaptureText] = React.useState('');
   const [isFollowUpClearConfirmOpen, setIsFollowUpClearConfirmOpen] = React.useState(false);
   const [followUpSplitDebug, setFollowUpSplitDebug] = React.useState<FollowUpSplitDebug | null>(null);
+  const [followUpReviewItems, setFollowUpReviewItems] = React.useState<FollowUpDraftItem[]>([]);
   const [followUps, setFollowUps] = React.useState<FollowUpItem[]>([]);
   const [previousSnapshot, setPreviousSnapshot] = React.useState<MorningSnapshot | null>(null);
   const [reviewStatuses, setReviewStatuses] = React.useState<Record<string, ReviewStatus>>({});
@@ -1229,9 +1234,11 @@ function App() {
   };
 
   const addFollowUp = (item: Omit<FollowUpItem, 'completed' | 'completedAt' | 'createdAt' | 'id'>) => {
+    const isDone = item.status === 'done';
     const nextItem: FollowUpItem = {
       ...item,
-      completed: false,
+      completed: isDone,
+      completedAt: isDone ? new Date().toISOString() : undefined,
       createdAt: new Date().toISOString(),
       id: createLocalId('follow-up'),
       source: item.source ?? 'manual',
@@ -1256,22 +1263,58 @@ function App() {
     };
     setFollowUpSplitDebug(debug);
     console.info('[MORNING FLOW AI] Follow Up split debug', debug);
-    nextItems.forEach((item) => {
+    setFollowUpReviewItems(nextItems.map((item) => ({
+      company: item.company,
+      content: item.content,
+      dueDate: item.dueDate,
+      duePreset: item.duePreset,
+      dueTime: item.dueTime,
+      id: createLocalId('follow-up-review'),
+      kind: item.kind,
+      name: item.name,
+      priority: item.priority,
+      source: 'voice',
+      status: item.status ?? 'pending',
+    })));
+    setInterimTranscript('');
+    setIsFollowUpClearConfirmOpen(false);
+    return nextItems.length;
+  };
+
+  const updateFollowUpReviewItem = (itemId: string, updates: Partial<FollowUpDraftItem>) => {
+    setFollowUpReviewItems((current) =>
+      current.map((item) => (item.id === itemId ? { ...item, ...updates } : item)),
+    );
+  };
+
+  const deleteFollowUpReviewItem = (itemId: string) => {
+    setFollowUpReviewItems((current) => current.filter((item) => item.id !== itemId));
+  };
+
+  const cancelFollowUpReview = () => {
+    setFollowUpReviewItems([]);
+  };
+
+  const saveFollowUpReviewItems = () => {
+    const itemsToSave = followUpReviewItems.filter((item) => item.name.trim() && item.content.trim());
+    if (!itemsToSave.length) return 0;
+
+    itemsToSave.forEach((item) => {
       addFollowUp({
         company: item.company,
-        content: item.content,
+        content: item.content.trim(),
         dueDate: item.dueDate,
         duePreset: item.duePreset,
         dueTime: item.dueTime,
         kind: item.kind,
-        name: item.name,
+        name: item.name.trim(),
         priority: item.priority,
         source: 'voice',
+        status: item.status ?? 'pending',
       });
     });
-    setInterimTranscript('');
-    setIsFollowUpClearConfirmOpen(false);
-    return nextItems.length;
+    setFollowUpReviewItems([]);
+    return itemsToSave.length;
   };
 
   const clearFollowUpCapture = () => {
@@ -1281,6 +1324,7 @@ function App() {
     setIsListening(false);
     setIsFollowUpClearConfirmOpen(false);
     setFollowUpSplitDebug(null);
+    setFollowUpReviewItems([]);
   };
 
   const addVoiceFollowUpsFromText = (text: string) => {
@@ -1463,8 +1507,11 @@ function App() {
           onClearRequest={() => setIsFollowUpClearConfirmOpen(true)}
           onComplete={completeFollowUp}
           onDelete={deleteFollowUp}
+          onCancelReview={cancelFollowUpReview}
+          onDeleteReviewItem={deleteFollowUpReviewItem}
           onOrganizeCapture={organizeFollowUpCapture}
           onReopen={reopenFollowUp}
+          onSaveReview={saveFollowUpReviewItems}
           onStartListening={startListening}
           onStopListening={stopListening}
           onTextChange={(value) => {
@@ -1472,9 +1519,12 @@ function App() {
             setInterimTranscript('');
             setIsFollowUpClearConfirmOpen(false);
             setFollowUpSplitDebug(null);
+            setFollowUpReviewItems([]);
           }}
+          onUpdateReviewItem={updateFollowUpReviewItem}
           pendingCount={pendingFollowUps.length}
           resultText={followUpResultText}
+          reviewItems={followUpReviewItems}
         />
       ) : isFeedbackView ? (
         <FeedbackBoxPage
@@ -1720,13 +1770,18 @@ function FollowUpManagerPage({
   onClearRequest,
   onComplete,
   onDelete,
+  onCancelReview,
+  onDeleteReviewItem,
   onOrganizeCapture,
   onReopen,
+  onSaveReview,
   onStartListening,
   onStopListening,
   onTextChange,
+  onUpdateReviewItem,
   pendingCount,
   resultText,
+  reviewItems,
 }: {
   dueTodayCount: number;
   followUpSplitDebug: FollowUpSplitDebug | null;
@@ -1741,13 +1796,18 @@ function FollowUpManagerPage({
   onClearRequest: () => void;
   onComplete: (itemId: string) => void;
   onDelete: (itemId: string) => void;
+  onCancelReview: () => void;
+  onDeleteReviewItem: (itemId: string) => void;
   onOrganizeCapture: () => number;
   onReopen: (itemId: string) => void;
+  onSaveReview: () => number;
   onStartListening: () => void;
   onStopListening: () => void;
   onTextChange: (text: string) => void;
+  onUpdateReviewItem: (itemId: string, updates: Partial<FollowUpDraftItem>) => void;
   pendingCount: number;
   resultText: string;
+  reviewItems: FollowUpDraftItem[];
 }) {
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [name, setName] = React.useState('');
@@ -1807,7 +1867,12 @@ function FollowUpManagerPage({
 
   const organizeCapture = () => {
     const count = onOrganizeCapture();
-    setCaptureMessage(count ? `${count}件のフォローを保存しました。` : 'フォローとして整理できる内容が見つかりませんでした。');
+    setCaptureMessage(count ? `${count}件のフォロー候補を作成しました。確認してから保存してください。` : 'フォローとして整理できる内容が見つかりませんでした。');
+  };
+
+  const saveReviewItems = () => {
+    const count = onSaveReview();
+    setCaptureMessage(count ? `${count}件のフォローを保存しました。` : '保存できるフォロー候補がありません。');
   };
 
   return (
@@ -1936,6 +2001,19 @@ function FollowUpManagerPage({
           </div>
         )}
       </section>
+
+      {reviewItems.length > 0 && (
+        <FollowUpReviewPanel
+          items={reviewItems}
+          onCancel={() => {
+            onCancelReview();
+            setCaptureMessage('');
+          }}
+          onDelete={onDeleteReviewItem}
+          onSave={saveReviewItems}
+          onUpdate={onUpdateReviewItem}
+        />
+      )}
 
       {isFormOpen && (
         <section className="follow-up-form" aria-label="未返信・折り返し登録">
@@ -2488,6 +2566,97 @@ function VoiceInputGuide({ examples }: { examples: string[] }) {
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+function FollowUpReviewPanel({
+  items,
+  onCancel,
+  onDelete,
+  onSave,
+  onUpdate,
+}: {
+  items: FollowUpDraftItem[];
+  onCancel: () => void;
+  onDelete: (itemId: string) => void;
+  onSave: () => void;
+  onUpdate: (itemId: string, updates: Partial<FollowUpDraftItem>) => void;
+}) {
+  return (
+    <section className="follow-up-review-panel" aria-label="フォロー候補確認">
+      <div className="follow-up-review-header">
+        <div>
+          <span>FOLLOW UP REVIEW</span>
+          <strong>保存前に確認できます</strong>
+        </div>
+        <small>{items.length}件</small>
+      </div>
+
+      <div className="follow-up-review-list">
+        {items.map((item, index) => (
+          <article className="follow-up-review-item" key={item.id}>
+            <div className="follow-up-review-item-header">
+              <span>候補 {index + 1}</span>
+              <button className="shopping-icon-button shopping-delete-button" onClick={() => onDelete(item.id)} type="button" aria-label="候補を削除">
+                <Trash2 size={16} />
+              </button>
+            </div>
+
+            <label>
+              相手
+              <input value={item.name} onChange={(event) => onUpdate(item.id, { name: event.target.value })} />
+            </label>
+            <label>
+              内容
+              <textarea value={item.content} onChange={(event) => onUpdate(item.id, { content: event.target.value })} rows={2} />
+            </label>
+
+            <div className="follow-up-grid">
+              <label>
+                種別
+                <select value={item.kind} onChange={(event) => onUpdate(item.id, { kind: event.target.value as FollowUpKind })}>
+                  <option value="phone">電話</option>
+                  <option value="line">LINE</option>
+                  <option value="email">メール</option>
+                  <option value="sms">SMS</option>
+                  <option value="other">その他</option>
+                </select>
+              </label>
+              <label>
+                状態
+                <select value={item.status ?? 'pending'} onChange={(event) => onUpdate(item.id, { status: event.target.value as FollowUpStatus })}>
+                  <option value="pending">未対応</option>
+                  <option value="contacted">連絡済</option>
+                  <option value="waiting">返信待ち</option>
+                  <option value="done">完了</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="follow-up-grid">
+              <label>
+                期限
+                <input type="date" value={item.dueDate} onChange={(event) => onUpdate(item.id, { dueDate: event.target.value, duePreset: 'custom' })} />
+              </label>
+              <label>
+                時刻 任意
+                <input type="time" value={item.dueTime ?? ''} onChange={(event) => onUpdate(item.id, { dueTime: event.target.value || undefined })} />
+              </label>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="follow-up-review-actions">
+        <button className="secondary-button" onClick={onCancel} type="button">
+          キャンセル
+        </button>
+        <button className="organize-button" onClick={onSave} type="button">
+          <CheckCircle2 size={19} />
+          この内容で保存
+        </button>
+      </div>
     </section>
   );
 }

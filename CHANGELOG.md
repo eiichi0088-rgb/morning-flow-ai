@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 2.16.0 - 2026-06-04
+
+- Added a Follow Up Review screen between AI organization and saving.
+- Follow Up candidates can now be checked, edited, deleted, or cancelled before they are saved.
+- Review cards support editing contact, content, kind, status, due date, and optional time.
+- Follow Up transcript remains visible so users can compare the original text with review candidates.
+
 ## Version 2.15.7 - 2026-06-04
 
 - Fixed Follow Up Manager person-boundary splitting when multiple people appear in one line.

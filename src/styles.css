@@ -1451,6 +1451,98 @@ h1 {
   word-break: break-word;
 }
 
+.follow-up-review-panel {
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(141, 229, 255, 0.2);
+  border-radius: 20px;
+  background:
+    linear-gradient(145deg, rgba(141, 229, 255, 0.12), rgba(255, 255, 255, 0.045)),
+    rgba(4, 15, 30, 0.64);
+  padding: 15px;
+  box-shadow:
+    0 20px 58px rgba(0, 207, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(18px);
+}
+
+.follow-up-review-header,
+.follow-up-review-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.follow-up-review-header div {
+  display: grid;
+  gap: 4px;
+}
+
+.follow-up-review-header span,
+.follow-up-review-item-header span {
+  color: rgba(141, 229, 255, 0.86);
+  font-size: 0.76rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.follow-up-review-header strong {
+  color: rgba(248, 252, 255, 0.94);
+  font-size: 1rem;
+}
+
+.follow-up-review-header small {
+  color: rgba(226, 235, 245, 0.78);
+  font-size: 0.84rem;
+}
+
+.follow-up-review-list {
+  display: grid;
+  gap: 12px;
+}
+
+.follow-up-review-item {
+  display: grid;
+  gap: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 17px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 12px;
+}
+
+.follow-up-review-item label {
+  display: grid;
+  gap: 7px;
+  color: rgba(226, 235, 245, 0.78);
+  font-size: 0.82rem;
+  font-weight: 820;
+}
+
+.follow-up-review-item input,
+.follow-up-review-item textarea,
+.follow-up-review-item select {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(6, 11, 20, 0.5);
+  color: #fff;
+  font: inherit;
+  padding: 11px 12px;
+}
+
+.follow-up-review-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  gap: 9px;
+}
+
+.follow-up-review-actions .secondary-button,
+.follow-up-review-actions .organize-button {
+  min-height: 50px;
+}
+
 .meal-candidate-list {
   display: grid;
   gap: 8px;
