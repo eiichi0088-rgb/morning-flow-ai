@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.0.0 is based on v2.17.0 plus Supabase Sync Phase 1 for Follow Up Manager only. Do not sync other features yet.
+6. v3.0.1 is based on v3.0.0 plus always-visible Supabase Debug fields for Follow Up Manager.
 
+
+## Version 3.0.1 Supabase Debug Visibility Fix - 2026-06-04
+
+- Screen display: v3.0.1
+- ZIP: morning-flow-ai-v3.0.1.zip
+- Next planned version: Version 3.0.2
+- Follow Up Supabase Debug now always shows `Last Operation`, `Response`, `Rows`, `Body`, and `Error`.
+- Empty Debug values display `not checked`, `not received`, or `none` instead of hiding the row.
+- Follow Up sync behavior is unchanged.
 
 ## Version 3.0.0 Supabase Sync Phase 1 - 2026-06-04
 

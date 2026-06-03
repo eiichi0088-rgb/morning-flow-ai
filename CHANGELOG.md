@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.0.1 - 2026-06-04
+
+- Made Follow Up Supabase Debug fields always visible on the production screen.
+- `Last Operation`, `Response`, `Rows`, `Body`, and `Error` now show fallback values instead of disappearing when empty.
+- Added a `Supabase Debug` label inside the Follow Up sync status card.
+
 ## Version 3.0.0 - 2026-06-04
 
 - Started Supabase Sync Phase 1 for Follow Up Manager only.

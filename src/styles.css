@@ -1020,6 +1020,12 @@ h1 {
   font-weight: 850;
 }
 
+.follow-up-sync-status strong {
+  color: rgba(248, 252, 255, 0.92);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
 .follow-up-sync-status small {
   color: rgba(226, 235, 245, 0.74);
   font-size: 0.78rem;

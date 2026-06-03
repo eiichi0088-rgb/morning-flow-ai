@@ -2098,13 +2098,14 @@ function FollowUpManagerPage({
       <div className={`follow-up-sync-status ${followUpSyncStatus}`}>
         <span>{getFollowUpSyncStatusLabel(followUpSyncStatus)}</span>
         {followUpSyncError && <small>{followUpSyncError}</small>}
+        <strong>Supabase Debug</strong>
         <small>Supabase URL: {followUpSupabaseDebug.hasUrl ? followUpSupabaseDebug.urlHost : 'not configured'}</small>
         <small>Anon Key: {followUpSupabaseDebug.hasAnonKey ? 'configured' : 'not configured'}</small>
-        <small>Last operation: {followUpSupabaseDebug.lastOperation}</small>
-        {followUpSupabaseDebug.responseStatus && <small>Response: {followUpSupabaseDebug.responseStatus}</small>}
-        {typeof followUpSupabaseDebug.rowCount === 'number' && <small>Rows: {followUpSupabaseDebug.rowCount}</small>}
-        {followUpSupabaseDebug.bodyPreview && <small>Body: {followUpSupabaseDebug.bodyPreview}</small>}
-        {followUpSupabaseDebug.error && <small>Error: {followUpSupabaseDebug.error}</small>}
+        <small>Last Operation: {followUpSupabaseDebug.lastOperation || 'not checked'}</small>
+        <small>Response: {followUpSupabaseDebug.responseStatus || 'not received'}</small>
+        <small>Rows: {typeof followUpSupabaseDebug.rowCount === 'number' ? followUpSupabaseDebug.rowCount : 'not checked'}</small>
+        <small>Body: {followUpSupabaseDebug.bodyPreview || 'not received'}</small>
+        <small>Error: {followUpSupabaseDebug.error || 'none'}</small>
       </div>
 
       <div className="focus-area follow-up-capture">
