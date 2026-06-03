@@ -232,7 +232,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.14.3';
+const appVersion = 'v2.14.4';
 const isMealDatabaseExperimentalEnabled = false;
 type AppleCalendarDisposition = 'inline' | 'attachment';
 
@@ -588,6 +588,7 @@ function App() {
   const [isShoppingOrganizing, setIsShoppingOrganizing] = React.useState(false);
   const [isShoppingResetDialogOpen, setIsShoppingResetDialogOpen] = React.useState(false);
   const [highlightedShoppingIds, setHighlightedShoppingIds] = React.useState<string[]>([]);
+  const [selectedShoppingShareIds, setSelectedShoppingShareIds] = React.useState<string[]>([]);
   const [feedbackText, setFeedbackText] = React.useState('');
   const [followUps, setFollowUps] = React.useState<FollowUpItem[]>([]);
   const [previousSnapshot, setPreviousSnapshot] = React.useState<MorningSnapshot | null>(null);
@@ -987,6 +988,7 @@ function App() {
         setShoppingUpdatedAt(shoppingPlan.updatedAt);
         setOriginalShoppingText(shoppingText.trim());
         setHighlightedShoppingIds(shoppingPlan.items.filter((item) => !previousIds.has(item.id)).map((item) => item.id));
+        setSelectedShoppingShareIds([]);
       })
       .catch((reason: unknown) => {
         console.error(reason);
@@ -1072,6 +1074,7 @@ function App() {
     setShoppingItems(nextItems);
     setShoppingUpdatedAt(new Date().toISOString());
     setHighlightedShoppingIds(nextItems.filter((item) => !previousIds.has(item.id)).map((item) => item.id));
+    setSelectedShoppingShareIds([]);
     setMealCandidates([]);
     setMealPlanDebug(null);
     setShoppingCaptureMode('shopping');
@@ -1094,6 +1097,51 @@ function App() {
     setIsListening(false);
     setIsShoppingResetDialogOpen(false);
     setHighlightedShoppingIds([]);
+    setSelectedShoppingShareIds([]);
+  };
+
+  const clearShoppingInput = () => {
+    recognition?.abort();
+    setShoppingText('');
+    setOriginalShoppingText('');
+    setMealPlanText('');
+    setOriginalMealPlanText('');
+    setInterimTranscript('');
+    setShoppingError('');
+    setShoppingShareMessage('');
+    setIsListening(false);
+
+    if (shoppingItems.length && window.confirm('整理済みリストも削除しますか？')) {
+      setShoppingItems([]);
+      setShoppingUpdatedAt('');
+      setHighlightedShoppingIds([]);
+      setSelectedShoppingShareIds([]);
+    }
+  };
+
+  const createNewShoppingList = () => {
+    const shouldResetItems = !shoppingItems.length || window.confirm('現在の整理結果を削除して、新しく作り直しますか？');
+    recognition?.abort();
+    setShoppingText('');
+    setOriginalShoppingText('');
+    setMealPlanText('');
+    setOriginalMealPlanText('');
+    setMealCandidates([]);
+    setMealPlanDebug(null);
+    setMealServings(4);
+    setShoppingCaptureMode('shopping');
+    setShoppingError('');
+    setShoppingShareMessage('');
+    setInterimTranscript('');
+    setIsListening(false);
+    setIsShoppingResetDialogOpen(false);
+
+    if (shouldResetItems) {
+      setShoppingItems([]);
+      setShoppingUpdatedAt('');
+      setHighlightedShoppingIds([]);
+      setSelectedShoppingShareIds([]);
+    }
   };
 
   const toggleShoppingItem = (itemId: string) => {
@@ -1101,6 +1149,12 @@ function App() {
       current.map((item) => (item.id === itemId ? { ...item, completed: !item.completed } : item)),
     );
     setShoppingUpdatedAt(new Date().toISOString());
+  };
+
+  const toggleShoppingShareItem = (itemId: string) => {
+    setSelectedShoppingShareIds((current) =>
+      current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId],
+    );
   };
 
   const editShoppingItem = (itemId: string) => {
@@ -1128,6 +1182,7 @@ function App() {
 
   const deleteShoppingItem = (itemId: string) => {
     setShoppingItems((current) => current.filter((item) => item.id !== itemId));
+    setSelectedShoppingShareIds((current) => current.filter((id) => id !== itemId));
     setShoppingUpdatedAt(new Date().toISOString());
   };
 
@@ -1189,7 +1244,18 @@ function App() {
   };
 
   const shareShoppingList = async () => {
-    const shareText = formatShoppingShareText(shoppingItems);
+    const selectedItems = shoppingItems.filter((item) => selectedShoppingShareIds.includes(item.id));
+    const itemsToShare = selectedItems.length
+      ? selectedItems
+      : window.confirm('共有する項目が選択されていません。全件共有しますか？')
+        ? shoppingItems
+        : [];
+    if (!itemsToShare.length) {
+      setShoppingShareMessage('共有する項目を選択してください。');
+      return;
+    }
+
+    const shareText = formatShoppingShareText(itemsToShare);
     setShoppingShareMessage('');
 
     try {
@@ -1264,9 +1330,11 @@ function App() {
           }}
           onCancelReset={() => setIsShoppingResetDialogOpen(false)}
           onChangeMealServings={changeMealServings}
+          onClearInput={clearShoppingInput}
           onDeleteMealCandidate={deleteMealCandidate}
           onEditMealCandidate={editMealCandidate}
           onGenerateMealCandidates={generateMealCandidates}
+          onNewList={createNewShoppingList}
           onOpenMealMode={openMealPlanMode}
           onOpenShoppingMode={openShoppingInputMode}
           onOrganize={organizeShoppingList}
@@ -1285,9 +1353,11 @@ function App() {
           }}
           onDeleteItem={deleteShoppingItem}
           onShare={shareShoppingList}
+          onToggleShareItem={toggleShoppingShareItem}
           onToggleItem={toggleShoppingItem}
           resultText={shoppingResultText}
           savedText={activeSavedShoppingText}
+          selectedShareIds={selectedShoppingShareIds}
           text={activeShoppingText}
           updatedAt={shoppingUpdatedAt}
           shareMessage={shoppingShareMessage}
@@ -2152,9 +2222,11 @@ function ShoppingListPage({
   onBack,
   onCancelReset,
   onChangeMealServings,
+  onClearInput,
   onDeleteMealCandidate,
   onEditMealCandidate,
   onGenerateMealCandidates,
+  onNewList,
   onOpenMealMode,
   onOpenShoppingMode,
   onOrganize,
@@ -2165,10 +2237,12 @@ function ShoppingListPage({
   onDeleteItem,
   onEditItem,
   onShare,
+  onToggleShareItem,
   onTextChange,
   onToggleItem,
   resultText,
   savedText,
+  selectedShareIds,
   shareMessage,
   text,
   updatedAt,
@@ -2190,9 +2264,11 @@ function ShoppingListPage({
   onBack: () => void;
   onCancelReset: () => void;
   onChangeMealServings: (servings: number) => void;
+  onClearInput: () => void;
   onDeleteMealCandidate: (candidateId: string) => void;
   onEditMealCandidate: (candidateId: string) => void;
   onGenerateMealCandidates: () => void;
+  onNewList: () => void;
   onOpenMealMode: () => void;
   onOpenShoppingMode: () => void;
   onOrganize: () => void;
@@ -2203,10 +2279,12 @@ function ShoppingListPage({
   onDeleteItem: (itemId: string) => void;
   onEditItem: (itemId: string) => void;
   onShare: () => void;
+  onToggleShareItem: (itemId: string) => void;
   onTextChange: (value: string) => void;
   onToggleItem: (itemId: string) => void;
   resultText: string;
   savedText: string;
+  selectedShareIds: string[];
   shareMessage: string;
   text: string;
   updatedAt: string;
@@ -2318,6 +2396,14 @@ function ShoppingListPage({
           rows={5}
           value={resultText}
         />
+        <div className="shopping-editor-actions">
+          <button className="secondary-button" onClick={onClearInput} type="button">
+            全文削除
+          </button>
+          <button className="secondary-button" onClick={onNewList} type="button">
+            新しく作る
+          </button>
+        </div>
         {isMealMode && (
           <label className="meal-servings-control">
             人数
@@ -2404,7 +2490,7 @@ function ShoppingListPage({
             </div>
             <button className="shopping-share-button" type="button" onClick={onShare}>
               <Share2 size={18} />
-              家族に共有
+              {selectedShareIds.length ? `選択した${selectedShareIds.length}件を共有` : '家族に共有'}
             </button>
             {shareMessage && <p className="shopping-share-message">{shareMessage}</p>}
             <div className="shopping-category-list">
@@ -2419,6 +2505,15 @@ function ShoppingListPage({
                           className={`shopping-check-row ${highlightedIds.includes(item.id) ? 'is-new' : ''}`}
                           key={item.id}
                         >
+                          <label className="shopping-share-select" htmlFor={`share-${item.id}`}>
+                            <input
+                              checked={selectedShareIds.includes(item.id)}
+                              id={`share-${item.id}`}
+                              onChange={() => onToggleShareItem(item.id)}
+                              type="checkbox"
+                            />
+                            <span>共有</span>
+                          </label>
                           <label
                             className={`shopping-check-item ${item.completed ? 'is-completed' : ''}`}
                             htmlFor={checkboxId}
@@ -2472,29 +2567,18 @@ function ShoppingListPage({
       </div>
 
       {isResetDialogOpen && (
-        <div className="confirm-dialog-backdrop" role="presentation">
-          <section
-            aria-describedby="shopping-reset-dialog-description"
-            aria-labelledby="shopping-reset-dialog-title"
-            aria-modal="true"
-            className="confirm-dialog"
-            role="dialog"
-          >
-            <div className="confirm-dialog-icon" aria-hidden="true">
-              <AlertTriangle size={23} />
-            </div>
-            <h2 id="shopping-reset-dialog-title">本当に買い物リストを最初から作り直しますか？</h2>
-            <p id="shopping-reset-dialog-description">現在の買い物リストは削除されます。</p>
-            <div className="confirm-dialog-actions">
-              <button className="secondary-button" type="button" onClick={onCancelReset}>
-                キャンセル
-              </button>
-              <button className="danger-button" type="button" onClick={onReset}>
-                やり直す
-              </button>
-            </div>
-          </section>
-        </div>
+        <section className="inline-confirm-card" aria-label="買い物リストやり直し確認">
+          <strong>本当にやり直しますか？</strong>
+          <p>入力中の内容と現在の買い物リストを削除します。</p>
+          <div className="confirm-dialog-actions">
+            <button className="secondary-button" type="button" onClick={onCancelReset}>
+              キャンセル
+            </button>
+            <button className="danger-button" type="button" onClick={onReset}>
+              やり直す
+            </button>
+          </div>
+        </section>
       )}
     </section>
   );
@@ -3226,15 +3310,10 @@ function PlanSection({
 }
 
 function formatShoppingShareText(items: ShoppingItem[]) {
-  const groups = groupShoppingItems(items).filter((group) => group.items.length > 0);
-  const body = groups
-    .map((group) => {
-      const lines = group.items.map((item) => `・${formatShoppingItemLabel(item)}`);
-      return [`■ ${group.category}`, ...lines].join('\n');
-    })
-    .join('\n\n');
+  const lines = dedupeShoppingItemsForDisplay(groupShoppingItems(items).flatMap((group) => group.items))
+    .map((item) => `・${formatShoppingItemLabel(item)}`);
 
-  return ['【今日の買い物リスト】', '', body || '買い物リストはまだありません。', '', '買い物よろしくお願いします。'].join('\n');
+  return ['買い物お願いします。', '', lines.join('\n') || '買い物リストはまだありません。'].join('\n');
 }
 
 

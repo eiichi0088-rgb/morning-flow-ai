@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## Version 2.14.4 - 2026-06-03
+
+- Added shopping input cleanup actions: `全文削除` and `新しく作る`.
+- Added separate share-selection checkboxes for shopping result items.
+- Family share now sends only selected shopping items, and asks before sharing all items when nothing is selected.
+- Changed shopping share text to a simple readable request format.
+- Moved the shopping reset confirmation from the top modal to an inline confirmation near the reset button.
+- Apple Calendar, Google Calendar, Upstash Redis, Analytics, Follow Up Manager, and Future AI UI behavior are unchanged.
+
 ## Version 2.14.3 - 2026-06-03
 
 - Changed the morning plan shopping list section to render from the same cleaned shopping item source used by the shopping list page.

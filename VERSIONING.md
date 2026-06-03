@@ -5,9 +5,20 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.14.3 is based on v2.14.2 shopping transcript cleanup plus morning plan shopping display source cleanup. Do not mix v3.0 or v3.1 UI.
+6. v2.14.4 is based on v2.14.3 shopping display source cleanup plus shopping reset and selective share. Do not mix v3.0 or v3.1 UI.
 
 
+
+## Version 2.14.4 Shopping List Reset and Selective Share Fix - 2026-06-03
+
+- Screen display: v2.14.4
+- ZIP: morning-flow-ai-v2.14.4.zip
+- Next planned version: Version 2.14.5
+- Shopping page has input cleanup actions: `全文削除` and `新しく作る`.
+- Shopping result items have separate share-selection checkboxes.
+- Family share sends selected items only, with confirmation before all-item sharing when no item is selected.
+- Shopping reset confirmation is shown inline near the reset button.
+- Apple Calendar, Google Calendar, Upstash Redis storage, Analytics Lite, FOLLOW UP MANAGER behavior, feedback, Developer Mode, snapshots, session behavior, and Future AI UI design are preserved.
 
 ## Version 2.14.3 Shopping List Source Cleanup - 2026-06-03
 
