@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 2.15.7 - 2026-06-04
+
+- Fixed Follow Up Manager person-boundary splitting when multiple people appear in one line.
+- Prevented task words such as `返信`, `連絡`, `電話`, `折り返し`, `LINE`, and `見積もり` from being attached to the next person's name.
+- Improved duplicate removal for the same person and same content.
+- Added Follow Up Debug fields for original text, split text, detected people, generated count, duplicate exclusion count, and exclusion reasons.
+
 ## Version 2.15.6 - 2026-06-04
 
 - Fixed the visible MORNING FLOW AI version label so the top screen shows `v2.15.6`.

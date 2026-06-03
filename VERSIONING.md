@@ -5,8 +5,19 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.15.6 is based on v2.15.5 plus package-driven app version display. Do not mix v3.0 or v3.1 UI.
+6. v2.15.7 is based on v2.15.6 plus Follow Up person split and dedupe hardening. Do not mix v3.0 or v3.1 UI.
 
+
+## Version 2.15.7 Follow Up Person Split Dedupe Fix - 2026-06-04
+
+- Screen display: v2.15.7
+- ZIP: morning-flow-ai-v2.15.7.zip
+- Next planned version: Version 2.15.8
+- Follow Up Manager splits consecutive people in the same line, such as `高橋さんにLINEの返信高見さんに見積もりのお願い`.
+- Person names are cleaned when task words are attached before the name.
+- Duplicate tasks with the same person and same content are merged into one item.
+- Follow Up Debug shows original text, split text, detected people, generated count, duplicate exclusion count, and exclusion reasons.
+- Apple Calendar, Google Calendar, Upstash Redis storage, Analytics Lite, shopping list behavior, morning schedule logic, feedback, Developer Mode, snapshots, and session behavior are preserved.
 
 ## Version 2.15.6 Version Display Sync Fix - 2026-06-04
 

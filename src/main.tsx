@@ -136,11 +136,14 @@ type FollowUpItem = {
 };
 
 type FollowUpSplitDebug = {
+  duplicateExcludedCount: number;
   excludedReasons: string[];
   generatedItemCount: number;
+  originalText: string;
   personCount: number;
   persons: string[];
   reevaluated: boolean;
+  splitTexts: string[];
   strategy: 'separator' | 'person-boundary';
 };
 
@@ -1921,10 +1924,15 @@ function FollowUpManagerPage({
             <span>Follow Up Debug</span>
             <small>検出人物数: {followUpSplitDebug.personCount}</small>
             <small>生成案件数: {followUpSplitDebug.generatedItemCount}</small>
+            <small>重複除外件数: {followUpSplitDebug.duplicateExcludedCount}</small>
             <small>再評価: {followUpSplitDebug.reevaluated ? 'あり' : 'なし'}</small>
             <small>方式: {followUpSplitDebug.strategy}</small>
+            <small>元テキスト: {followUpSplitDebug.originalText}</small>
+            <small>分割後テキスト: {followUpSplitDebug.splitTexts.join(' / ') || '-'}</small>
             <small>人物: {followUpSplitDebug.persons.join(', ') || '-'}</small>
-            <small>除外理由: {followUpSplitDebug.excludedReasons.join(' / ') || '-'}</small>
+            <small>
+              除外理由: {followUpSplitDebug.excludedReasons.join(' / ') || (followUpSplitDebug.duplicateExcludedCount ? '重複を除外しました' : '重複除外なし')}
+            </small>
           </div>
         )}
       </section>
@@ -3691,27 +3699,31 @@ function extractFollowUpsFromText(text: string): FollowUpItem[] {
 
 function createFollowUpsFromSplitText(text: string) {
   const persons = extractFollowUpPersons(text);
-  const separatorResult = createFollowUpItemsFromSegments(splitInputItems(text));
-  const personBoundaryResult = createFollowUpItemsFromSegments(splitFollowUpTextByPerson(text));
+  const separatorSegments = splitInputItems(text);
+  const personBoundarySegments = splitFollowUpTextByPerson(text);
+  const separatorResult = createFollowUpItemsFromSegments(separatorSegments);
+  const personBoundaryResult = createFollowUpItemsFromSegments(personBoundarySegments);
   const shouldUsePersonBoundary = persons.length > 1 && personBoundaryResult.items.length >= persons.length;
   const shouldReevaluate = persons.length > 0 && separatorResult.items.length < persons.length;
   const strategy: FollowUpSplitDebug['strategy'] =
     shouldUsePersonBoundary || shouldReevaluate ? 'person-boundary' : 'separator';
   const selectedResult = shouldUsePersonBoundary || shouldReevaluate ? personBoundaryResult : separatorResult;
-  const items = dedupeFollowUpItems(
-    selectedResult.items,
-  );
+  const splitTexts = shouldUsePersonBoundary || shouldReevaluate ? personBoundarySegments : separatorSegments;
+  const dedupeResult = dedupeFollowUpItems(selectedResult.items);
 
   return {
     debug: {
+      duplicateExcludedCount: dedupeResult.duplicateExcludedCount,
       excludedReasons: selectedResult.excludedReasons,
-      generatedItemCount: items.length,
+      generatedItemCount: dedupeResult.items.length,
+      originalText: text,
       personCount: persons.length,
       persons,
       reevaluated: shouldReevaluate,
+      splitTexts,
       strategy,
     },
-    items,
+    items: dedupeResult.items,
   };
 }
 
@@ -3768,13 +3780,18 @@ function splitInputItems(text: string) {
 
 function splitFollowUpTextByPerson(text: string) {
   const normalized = text.replace(/\s+/g, ' ').trim();
-  const matches = Array.from(normalized.matchAll(new RegExp(`[^、。,.!?！？\\n\\s]+${followUpPersonSuffixPattern}(?:に|へ)`, 'g')));
-  if (matches.length <= 1) return splitInputItems(text);
+  const boundaries = getFollowUpPersonBoundaries(normalized);
+  if (boundaries.length <= 1) return splitInputItems(text);
 
-  return matches
-    .map((match, index) => {
-      const start = match.index ?? 0;
-      const end = matches[index + 1]?.index ?? normalized.length;
+  return boundaries
+    .map((boundary, index) => {
+      const start = boundary.start;
+      const nextBoundary = boundaries[index + 1];
+      const end = nextBoundary
+        ? nextBoundary.prefixIsTaskText
+          ? nextBoundary.start
+          : nextBoundary.matchStart
+        : normalized.length;
       return normalized.slice(start, end).replace(/^[、。,.!?！？\s]+|[、。,.!?！？\s]+$/g, '').trim();
     })
     .filter(Boolean);
@@ -3783,28 +3800,55 @@ function splitFollowUpTextByPerson(text: string) {
 function normalizeFollowUpSplitText(text: string) {
   return text
     .replace(/\s+/g, ' ')
-    .replace(new RegExp(`(?!^)([^、。,.!?！？\\n\\s]+${followUpPersonSuffixPattern}(?:に|へ))`, 'g'), '\n$1')
+    .replace(new RegExp(`(?!^)([^、。,.!?！？\\n\\sにへ]+${followUpPersonSuffixPattern}(?:に|へ))`, 'g'), '\n$1')
     .trim();
 }
 
 function extractFollowUpPersons(text: string) {
-  return Array.from(new Set(Array.from(text.matchAll(new RegExp(`([^、。,.!?！？\\n\\s]+${followUpPersonSuffixPattern})(?:に|へ)`, 'g')))
-    .map((match) => normalizeFollowUpPersonName(match[1].trim()))
-    .filter(Boolean)));
+  return Array.from(new Set(getFollowUpPersonBoundaries(text).map((boundary) => boundary.person).filter(Boolean)));
+}
+
+function getFollowUpPersonBoundaries(text: string) {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  return Array.from(normalized.matchAll(new RegExp(`[^、。,.!?！？\\n\\sにへ]+${followUpPersonSuffixPattern}(?:に|へ)`, 'g')))
+    .map((match) => {
+      const matchedText = match[0];
+      const rawName = matchedText.replace(/(?:に|へ)$/, '');
+      const person = normalizeFollowUpPersonName(rawName);
+      const personOffset = rawName.lastIndexOf(person);
+      const prefix = personOffset > 0 ? rawName.slice(0, personOffset) : '';
+      return {
+        matchStart: match.index ?? 0,
+        person,
+        prefixIsTaskText: /(返信|連絡|電話|折り返し|LINE|見積もり)/.test(prefix),
+        start: (match.index ?? 0) + Math.max(personOffset, 0),
+      };
+    })
+    .filter((boundary) => boundary.person);
 }
 
 function normalizeFollowUpPersonName(name: string) {
-  return name.split('の').pop()?.trim() || name.trim();
+  const withoutLead = name
+    .replace(/^(ねえ|ねぇ|あの|えっと|今日は|今日|明日|あした|あとで)+/, '')
+    .replace(/^(返信|連絡|電話|折り返し|LINE|見積もり)+/, '')
+    .trim();
+  const tail = withoutLead.split('の').pop()?.trim() || withoutLead;
+  return tail.replace(/^(返信|連絡|電話|折り返し|LINE|見積もり)+/, '').trim();
 }
 
 function dedupeFollowUpItems(items: FollowUpItem[]) {
   const seen = new Set<string>();
-  return items.filter((item) => {
+  let duplicateExcludedCount = 0;
+  const dedupedItems = items.filter((item) => {
     const key = createFollowUpDedupeKey(item);
-    if (seen.has(key)) return false;
+    if (seen.has(key)) {
+      duplicateExcludedCount += 1;
+      return false;
+    }
     seen.add(key);
     return true;
   });
+  return { duplicateExcludedCount, items: dedupedItems };
 }
 
 function detectFollowUpDuePreset(text: string): FollowUpDuePreset {
@@ -3897,6 +3941,8 @@ function formatFollowUpTitle(item: FollowUpItem) {
           ? '\u3078\u30e1\u30fc\u30eb\u8fd4\u4fe1'
           : item.kind === 'sms'
             ? '\u3078SMS\u8fd4\u4fe1'
+            : /見積/.test(item.content)
+              ? 'へ見積もり依頼'
             : '\u3078\u9023\u7d61';
   return item.name + action;
 }
