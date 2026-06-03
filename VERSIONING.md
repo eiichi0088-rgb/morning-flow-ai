@@ -5,8 +5,20 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.15.4 is based on v2.15.3 plus collapsible voice input guide UI. Do not mix v3.0 or v3.1 UI.
+6. v2.15.5 is based on v2.15.4 plus Follow Up person-boundary accuracy improvements. Do not mix v3.0 or v3.1 UI.
 
+
+## Version 2.15.5 Follow Up Accuracy Upgrade - 2026-06-03
+
+- Screen display: v2.15.5
+- ZIP: morning-flow-ai-v2.15.5.zip
+- Next planned version: Version 2.15.6
+- Follow Up Capture prioritizes person-boundary splitting when multiple people are detected.
+- If detected person count is greater than generated item count, the transcript is re-evaluated by person boundary.
+- Follow Up Debug shows detected person count, generated item count, split strategy, re-evaluation status, and detected names.
+- Transcript remains visible after `フォローを整理する`.
+- Future AI UI styling is preserved.
+- Apple Calendar, Google Calendar, Upstash Redis storage, Analytics Lite, shopping list behavior, morning schedule logic, feedback, Developer Mode, snapshots, and session behavior are preserved.
 
 ## Version 2.15.4 Voice Input Guide UI - 2026-06-03
 

@@ -134,6 +134,14 @@ type FollowUpItem = {
   completedAt?: string;
 };
 
+type FollowUpSplitDebug = {
+  generatedItemCount: number;
+  personCount: number;
+  persons: string[];
+  reevaluated: boolean;
+  strategy: 'separator' | 'person-boundary';
+};
+
 type FeedbackType = 'usability' | 'improvement' | 'bug' | 'feature' | 'other';
 type FeedbackUrgency = 'high' | 'medium' | 'low';
 
@@ -234,7 +242,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.15.4';
+const appVersion = 'v2.15.5';
 const isMealDatabaseExperimentalEnabled = false;
 type AppleCalendarDisposition = 'inline' | 'attachment';
 
@@ -595,6 +603,7 @@ function App() {
   const [feedbackText, setFeedbackText] = React.useState('');
   const [followUpCaptureText, setFollowUpCaptureText] = React.useState('');
   const [isFollowUpClearConfirmOpen, setIsFollowUpClearConfirmOpen] = React.useState(false);
+  const [followUpSplitDebug, setFollowUpSplitDebug] = React.useState<FollowUpSplitDebug | null>(null);
   const [followUps, setFollowUps] = React.useState<FollowUpItem[]>([]);
   const [previousSnapshot, setPreviousSnapshot] = React.useState<MorningSnapshot | null>(null);
   const [reviewStatuses, setReviewStatuses] = React.useState<Record<string, ReviewStatus>>({});
@@ -1236,11 +1245,12 @@ function App() {
     const splitItems = splitResult.items;
     const fallbackItem = createVoiceFollowUp(normalized);
     const nextItems = splitItems.length ? splitItems : fallbackItem ? [fallbackItem] : [];
-    console.info('[MORNING FLOW AI] Follow Up split debug', {
+    const debug = {
+      ...splitResult.debug,
       generatedItemCount: nextItems.length,
-      personCount: splitResult.debug.personCount,
-      persons: splitResult.debug.persons,
-    });
+    };
+    setFollowUpSplitDebug(debug);
+    console.info('[MORNING FLOW AI] Follow Up split debug', debug);
     nextItems.forEach((item) => {
       addFollowUp({
         company: item.company,
@@ -1265,6 +1275,7 @@ function App() {
     setInterimTranscript('');
     setIsListening(false);
     setIsFollowUpClearConfirmOpen(false);
+    setFollowUpSplitDebug(null);
   };
 
   const addVoiceFollowUpsFromText = (text: string) => {
@@ -1435,6 +1446,7 @@ function App() {
       ) : isFollowUpView ? (
         <FollowUpManagerPage
           dueTodayCount={dueTodayFollowUps.length}
+          followUpSplitDebug={followUpSplitDebug}
           isClearConfirmOpen={isFollowUpClearConfirmOpen}
           isListening={isListening}
           isSupported={isSupported}
@@ -1454,6 +1466,7 @@ function App() {
             setFollowUpCaptureText(value);
             setInterimTranscript('');
             setIsFollowUpClearConfirmOpen(false);
+            setFollowUpSplitDebug(null);
           }}
           pendingCount={pendingFollowUps.length}
           resultText={followUpResultText}
@@ -1690,6 +1703,7 @@ function App() {
 
 function FollowUpManagerPage({
   dueTodayCount,
+  followUpSplitDebug,
   isClearConfirmOpen,
   isListening,
   isSupported,
@@ -1710,6 +1724,7 @@ function FollowUpManagerPage({
   resultText,
 }: {
   dueTodayCount: number;
+  followUpSplitDebug: FollowUpSplitDebug | null;
   isClearConfirmOpen: boolean;
   isListening: boolean;
   isSupported: boolean;
@@ -1899,6 +1914,16 @@ function FollowUpManagerPage({
           </section>
         )}
         {captureMessage && <p className="follow-up-suggestion">{captureMessage}</p>}
+        {followUpSplitDebug && (
+          <div className="follow-up-debug-card">
+            <span>Follow Up Debug</span>
+            <small>検出人物数: {followUpSplitDebug.personCount}</small>
+            <small>生成案件数: {followUpSplitDebug.generatedItemCount}</small>
+            <small>再評価: {followUpSplitDebug.reevaluated ? 'あり' : 'なし'}</small>
+            <small>方式: {followUpSplitDebug.strategy}</small>
+            <small>人物: {followUpSplitDebug.persons.join(', ') || '-'}</small>
+          </div>
+        )}
       </section>
 
       {isFormOpen && (
@@ -3647,7 +3672,10 @@ function detectFollowUpIntent(text: string) {
     '\u8fd4\u3059',
     '\u8fd4\u4e8b',
     '\u78ba\u8a8d',
+    '\u898b\u7a4d',
     '\u898b\u7a4d\u3082\u308a',
+    '\u4f9d\u983c',
+    '\u304a\u9858\u3044',
     '\u3082\u3089\u3046',
     '\u672a\u8fd4\u4fe1',
     '\u78ba\u8a8d\u3057\u3066\u8fd4\u4e8b',
@@ -3660,16 +3688,29 @@ function extractFollowUpsFromText(text: string): FollowUpItem[] {
 
 function createFollowUpsFromSplitText(text: string) {
   const persons = extractFollowUpPersons(text);
-  const items = splitInputItems(text)
+  const separatorItems = splitInputItems(text)
     .filter(detectFollowUpIntent)
     .map((rawText) => createVoiceFollowUp(rawText.trim()))
     .filter((item): item is FollowUpItem => Boolean(item));
+  const personBoundaryItems = splitFollowUpTextByPerson(text)
+    .filter(detectFollowUpIntent)
+    .map((rawText) => createVoiceFollowUp(rawText.trim()))
+    .filter((item): item is FollowUpItem => Boolean(item));
+  const shouldUsePersonBoundary = persons.length > 1 && personBoundaryItems.length >= persons.length;
+  const shouldReevaluate = persons.length > 0 && separatorItems.length < persons.length;
+  const strategy: FollowUpSplitDebug['strategy'] =
+    shouldUsePersonBoundary || shouldReevaluate ? 'person-boundary' : 'separator';
+  const items = dedupeFollowUpItems(
+    shouldUsePersonBoundary || shouldReevaluate ? personBoundaryItems : separatorItems,
+  );
 
   return {
     debug: {
       generatedItemCount: items.length,
       personCount: persons.length,
       persons,
+      reevaluated: shouldReevaluate,
+      strategy,
     },
     items,
   };
@@ -3704,6 +3745,20 @@ function splitInputItems(text: string) {
     .filter(Boolean);
 }
 
+function splitFollowUpTextByPerson(text: string) {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  const matches = Array.from(normalized.matchAll(/[^、。,.!?！？\n\s]+(?:さん|君|様|氏)(?:に|へ)/g));
+  if (matches.length <= 1) return splitInputItems(text);
+
+  return matches
+    .map((match, index) => {
+      const start = match.index ?? 0;
+      const end = matches[index + 1]?.index ?? normalized.length;
+      return normalized.slice(start, end).replace(/^[、。,.!?！？\s]+|[、。,.!?！？\s]+$/g, '').trim();
+    })
+    .filter(Boolean);
+}
+
 function normalizeFollowUpSplitText(text: string) {
   return text
     .replace(/\s+/g, ' ')
@@ -3712,9 +3767,19 @@ function normalizeFollowUpSplitText(text: string) {
 }
 
 function extractFollowUpPersons(text: string) {
-  return Array.from(text.matchAll(/([^、。,.!?！？\n\s]+(?:さん|君|様|氏))(?:に|へ)/g))
+  return Array.from(new Set(Array.from(text.matchAll(/([^、。,.!?！？\n\s]+(?:さん|君|様|氏))(?:に|へ)/g))
     .map((match) => match[1].trim())
-    .filter(Boolean);
+    .filter(Boolean)));
+}
+
+function dedupeFollowUpItems(items: FollowUpItem[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = createFollowUpDedupeKey(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function detectFollowUpDuePreset(text: string): FollowUpDuePreset {
@@ -3756,7 +3821,7 @@ function normalizeFollowUpContent(text: string) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  if (/line/i.test(withoutLead) && /(返す|返信|返事)/.test(withoutLead)) return 'LINEを返す';
+  if (/line/i.test(withoutLead) && /(返す|返信|返事)/.test(withoutLead)) return 'LINE返信';
   if (/メール/.test(withoutLead) && /(返す|返信|返事)/.test(withoutLead)) return 'メール返信';
   return withoutLead || text.replace(/\s+/g, ' ').trim();
 }
@@ -3833,7 +3898,7 @@ function followUpKindLabel(kind: FollowUpKind) {
 function followUpStatusLabel(item: FollowUpItem) {
   const status = item.completed ? 'done' : item.status ?? 'pending';
   const labels: Record<FollowUpStatus, string> = {
-    contacted: '連絡済み',
+    contacted: '連絡済',
     done: '完了',
     pending: '未対応',
     waiting: '返信待ち',

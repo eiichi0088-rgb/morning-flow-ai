@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## Version 2.15.5 - 2026-06-03
+
+- Upgraded Follow Up Capture accuracy with person-boundary splitting for `さん`, `君`, `様`, and `氏`.
+- Re-evaluates Follow Up splitting when detected person count is greater than generated item count.
+- Added visible Follow Up Debug for detected person count, generated item count, split strategy, and re-evaluation status.
+- Expanded Follow Up intent detection for estimate/request phrases such as `見積`, `依頼`, and `お願い`.
+- Transcript remains visible after `フォローを整理する` so users can compare original speech with generated cards.
+- Apple Calendar, Google Calendar, Upstash Redis, Analytics, shopping list, and morning schedule logic are unchanged.
+
 ## Version 2.15.4 - 2026-06-03
 
 - Added collapsible voice input guide cards to the morning schedule, shopping list, and Follow Up Manager pages.
