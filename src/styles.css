@@ -1568,6 +1568,12 @@ h1 {
   font-weight: 820;
 }
 
+.follow-up-review-person-check {
+  color: rgba(125, 233, 255, 0.78);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
 .follow-up-review-item input,
 .follow-up-review-item textarea,
 .follow-up-review-item select {

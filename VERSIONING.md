@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.0.2 is based on v3.0.1 plus Supabase Follow Up INSERT id payload fix.
+6. v3.0.3 is based on v3.0.2 plus Follow Up person name extraction fix.
 
+
+## Version 3.0.3 Follow Up Person Name Extraction Fix - 2026-06-04
+
+- Screen display: v3.0.3
+- ZIP: morning-flow-ai-v3.0.3.zip
+- Next planned version: Version 3.0.4
+- Follow Up person extraction keeps suffix names such as `柴田君`, `高橋さん`, and `小田原さん` intact.
+- Follow Up Debug now shows `Original Person` and `Extracted Person`.
+- Follow Up review candidates show a person-name check before saving.
 
 ## Version 3.0.2 Supabase Follow Up Insert ID Fix - 2026-06-04
 

@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.0.3 - 2026-06-04
+
+- Fixed Follow Up person name extraction so names like `柴田君`, `高橋さん`, and `小田原さん` are kept intact.
+- Added Follow Up Debug fields for `Original Person` and `Extracted Person`.
+- Added a review-screen person check before saving Follow Up candidates.
+
 ## Version 3.0.2 - 2026-06-04
 
 - Fixed Supabase Follow Up INSERT payload for `follow_ups.id text primary key`.

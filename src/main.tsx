@@ -150,6 +150,7 @@ type FollowUpSplitDebug = {
   duplicateExcludedCount: number;
   excludedReasons: string[];
   generatedItemCount: number;
+  personExtractions: { extractedPerson: string; originalPerson: string }[];
   originalText: string;
   personCount: number;
   persons: string[];
@@ -160,6 +161,7 @@ type FollowUpSplitDebug = {
 
 type FollowUpDraftItem = Omit<FollowUpItem, 'completed' | 'completedAt' | 'createdAt' | 'id'> & {
   id: string;
+  originalPerson?: string;
 };
 
 type FollowUpSupabaseDebug = {
@@ -1368,6 +1370,7 @@ function App() {
       id: createLocalId('follow-up-review'),
       kind: item.kind,
       name: item.name,
+      originalPerson: findFollowUpPersonMatch(item.name + 'に' + item.content)?.originalPerson ?? item.name,
       priority: item.priority,
       source: 'voice',
       status: item.status ?? 'pending',
@@ -2203,6 +2206,12 @@ function FollowUpManagerPage({
             <small>分割後テキスト: {followUpSplitDebug.splitTexts.join(' / ') || '-'}</small>
             <small>人物: {followUpSplitDebug.persons.join(', ') || '-'}</small>
             <small>
+              Original Person: {followUpSplitDebug.personExtractions.map((item) => item.originalPerson).join(', ') || '-'}
+            </small>
+            <small>
+              Extracted Person: {followUpSplitDebug.personExtractions.map((item) => item.extractedPerson).join(', ') || '-'}
+            </small>
+            <small>
               除外理由: {followUpSplitDebug.excludedReasons.join(' / ') || (followUpSplitDebug.duplicateExcludedCount ? '重複を除外しました' : '重複除外なし')}
             </small>
           </div>
@@ -2826,6 +2835,12 @@ function FollowUpReviewPanel({
               相手
               <input value={item.name} onChange={(event) => onUpdate(item.id, { name: event.target.value })} />
             </label>
+            {item.originalPerson && (
+              <small className="follow-up-review-person-check">
+                Original Person: {item.originalPerson} / Extracted Person: {item.name}
+                {!item.originalPerson.includes(item.name) ? ' / 人物名を確認してください' : ''}
+              </small>
+            )}
             <label>
               内容
               <textarea value={item.content} onChange={(event) => onUpdate(item.id, { content: event.target.value })} rows={2} />
@@ -4197,6 +4212,7 @@ function createFollowUpsFromSplitText(text: string) {
       excludedReasons: selectedResult.excludedReasons,
       generatedItemCount: dedupeResult.items.length,
       originalText: text,
+      personExtractions: getFollowUpPersonExtractions(text),
       personCount: persons.length,
       persons,
       reevaluated: shouldReevaluate,
@@ -4288,17 +4304,25 @@ function extractFollowUpPersons(text: string) {
   return Array.from(new Set(getFollowUpPersonBoundaries(text).map((boundary) => boundary.person).filter(Boolean)));
 }
 
+function getFollowUpPersonExtractions(text: string) {
+  return getFollowUpPersonBoundaries(text).map((boundary) => ({
+    extractedPerson: boundary.person,
+    originalPerson: boundary.originalPerson,
+  }));
+}
+
 function getFollowUpPersonBoundaries(text: string) {
   const normalized = text.replace(/\s+/g, ' ').trim();
   return Array.from(normalized.matchAll(new RegExp(`[^、。,.!?！？\\n\\sにへ]+${followUpPersonSuffixPattern}(?:に|へ)`, 'g')))
     .map((match) => {
       const matchedText = match[0];
       const rawName = matchedText.replace(/(?:に|へ)$/, '');
-      const person = normalizeFollowUpPersonName(rawName);
+      const person = extractExactFollowUpPersonName(rawName);
       const personOffset = rawName.lastIndexOf(person);
       const prefix = personOffset > 0 ? rawName.slice(0, personOffset) : '';
       return {
         matchStart: match.index ?? 0,
+        originalPerson: rawName,
         person,
         prefixIsTaskText: /(返信|連絡|電話|折り返し|LINE|見積もり)/.test(prefix),
         start: (match.index ?? 0) + Math.max(personOffset, 0),
@@ -4307,13 +4331,21 @@ function getFollowUpPersonBoundaries(text: string) {
     .filter((boundary) => boundary.person);
 }
 
-function normalizeFollowUpPersonName(name: string) {
+function findFollowUpPersonMatch(text: string) {
+  return getFollowUpPersonBoundaries(text)[0] ?? null;
+}
+
+function extractExactFollowUpPersonName(name: string) {
   const withoutLead = name
     .replace(/^(ねえ|ねぇ|あの|えっと|今日は|今日|明日|あした|あとで)+/, '')
     .replace(/^(返信|連絡|電話|折り返し|LINE|見積もり)+/, '')
     .trim();
-  const tail = withoutLead.split('の').pop()?.trim() || withoutLead;
-  return tail.replace(/^(返信|連絡|電話|折り返し|LINE|見積もり)+/, '').trim();
+  const exactMatch = withoutLead.match(new RegExp(`([^の、。,.!?！？\\sにへ]+${followUpPersonSuffixPattern})$`));
+  return exactMatch?.[1]?.trim() || withoutLead;
+}
+
+function normalizeFollowUpPersonName(name: string) {
+  return extractExactFollowUpPersonName(name);
 }
 
 function dedupeFollowUpItems(items: FollowUpItem[]) {
@@ -4356,6 +4388,8 @@ function detectWeekdayDate(text: string) {
 }
 
 function extractFollowUpName(text: string) {
+  const exactMatch = findFollowUpPersonMatch(text);
+  if (exactMatch?.person) return exactMatch.person;
   const cleaned = text.replace(/^(今日は|今日|明日|あした|あとで)/, '').trim();
   const match = cleaned.match(new RegExp(`^(.+?${followUpPersonSuffixPattern}?)(?:に|へ)(?:.*)$`));
   const rawName = match?.[1] ?? cleaned.replace(/(へ|に)?(電話|折り返し|返信|連絡|返事|メール|LINE|SMS).*/, '').trim();
