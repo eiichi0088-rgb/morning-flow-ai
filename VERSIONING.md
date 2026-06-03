@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.0.1 is based on v3.0.0 plus always-visible Supabase Debug fields for Follow Up Manager.
+6. v3.0.2 is based on v3.0.1 plus Supabase Follow Up INSERT id payload fix.
 
+
+## Version 3.0.2 Supabase Follow Up Insert ID Fix - 2026-06-04
+
+- Screen display: v3.0.2
+- ZIP: morning-flow-ai-v3.0.2.zip
+- Next planned version: Version 3.0.3
+- Follow Up Supabase INSERT payload now includes required `id`.
+- INSERT payload includes `title`, `person_name`, `action_type`, `memo`, `status`, `created_at`, `updated_at`, and `completed_at`.
+- Uses the existing generated Follow Up item id for Supabase records.
 
 ## Version 3.0.1 Supabase Debug Visibility Fix - 2026-06-04
 

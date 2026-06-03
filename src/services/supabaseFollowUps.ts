@@ -15,10 +15,13 @@ export type SupabaseFollowUpRow = {
 export type SupabaseFollowUpInsert = {
   action_type: string;
   completed_at: string | null;
+  created_at: string;
+  id: string;
   memo: string;
   person_name: string;
   status: SupabaseFollowUpStatus;
   title: string;
+  updated_at: string;
 };
 
 export type SupabaseFollowUpUpdate = Partial<SupabaseFollowUpInsert> & {

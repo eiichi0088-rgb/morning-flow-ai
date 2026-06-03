@@ -4073,10 +4073,13 @@ function mapFollowUpItemToSupabaseInsert(item: FollowUpItem) {
   return {
     action_type: item.kind,
     completed_at: status === 'done' ? item.completedAt ?? new Date().toISOString() : null,
+    created_at: item.createdAt,
+    id: item.id,
     memo: item.content,
     person_name: item.name,
     status,
     title: formatFollowUpTitle(item),
+    updated_at: new Date().toISOString(),
   };
 }
 

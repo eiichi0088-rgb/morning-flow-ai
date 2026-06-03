@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.0.2 - 2026-06-04
+
+- Fixed Supabase Follow Up INSERT payload for `follow_ups.id text primary key`.
+- INSERT payload now includes `id`, `title`, `person_name`, `action_type`, `memo`, `status`, `created_at`, `updated_at`, and `completed_at`.
+- Uses the existing generated Follow Up item id for Supabase records.
+
 ## Version 3.0.1 - 2026-06-04
 
 - Made Follow Up Supabase Debug fields always visible on the production screen.
