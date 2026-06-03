@@ -130,6 +130,7 @@ type AiInboxItem = {
   id: string;
   text: string;
   category: AiInboxCategory;
+  confidence: number;
   status: AiInboxStatus;
   sourceView: AppView;
   createdAt: string;
@@ -756,7 +757,7 @@ function App() {
     if (savedInbox) {
       try {
         const parsed = JSON.parse(savedInbox) as AiInboxItem[];
-        setAiInboxItems(Array.isArray(parsed) ? parsed : []);
+        setAiInboxItems(Array.isArray(parsed) ? parsed.map(normalizeAiInboxItem) : []);
       } catch {
         localStorage.removeItem(privateSessionKeys.inbox);
       }
@@ -853,8 +854,10 @@ function App() {
   const saveVoiceTextToAiInbox = React.useCallback((text: string, sourceView: AppView) => {
     const normalized = text.trim();
     if (!normalized) return;
+    const classification = classifyAiInboxText(normalized);
     const nextItem: AiInboxItem = {
-      category: classifyAiInboxText(normalized),
+      category: classification.category,
+      confidence: classification.confidence,
       createdAt: new Date().toISOString(),
       id: createLocalId('ai-inbox'),
       sourceView,
@@ -1509,24 +1512,61 @@ function App() {
   };
 
   const updateAiInboxCategory = (itemId: string, category: AiInboxCategory) => {
-    setAiInboxItems((current) => current.map((item) => (item.id === itemId ? { ...item, category } : item)));
+    setAiInboxItems((current) => current.map((item) => (item.id === itemId ? { ...item, category, confidence: 100 } : item)));
     setAiInboxMessage('');
   };
 
   const organizeAiInboxItem = (itemId: string) => {
+    const targetItem = aiInboxItems.find((item) => item.id === itemId);
+    if (!targetItem) return;
+    const classification = classifyAiInboxText(targetItem.text, targetItem.category);
+    const nextItem = {
+      ...targetItem,
+      category: targetItem.confidence === 100 ? targetItem.category : classification.category,
+      confidence: targetItem.confidence === 100 ? targetItem.confidence : classification.confidence,
+      organizedAt: new Date().toISOString(),
+      status: 'organized' as const,
+    };
+    const routed = routeHighConfidenceInboxItem(nextItem);
     setAiInboxItems((current) =>
-      current.map((item) =>
-        item.id === itemId
-          ? {
-              ...item,
-              category: classifyAiInboxText(item.text, item.category),
-              organizedAt: new Date().toISOString(),
-              status: 'organized',
-            }
-          : item,
-      ),
+      current.map((item) => (item.id === itemId ? nextItem : item)),
     );
-    setAiInboxMessage('Inbox項目を整理済みにしました。');
+    setAiInboxMessage(routed ? `${aiInboxCategoryLabel(nextItem.category)}へ振り分けました。` : 'Inbox項目を整理済みにしました。');
+  };
+
+  const routeHighConfidenceInboxItem = (item: AiInboxItem) => {
+    if (item.confidence < 85) return false;
+    const appendText = (current: string) => `${current}${current ? '\n' : ''}${item.text}`.trim();
+
+    if (item.category === 'todo') {
+      setTranscript((current) => {
+        const nextText = appendText(current);
+        setOriginalTranscript(nextText);
+        return nextText;
+      });
+      setPlan(null);
+      setHighlightedScheduleKeys([]);
+      return true;
+    }
+
+    if (item.category === 'shopping') {
+      setShoppingText((current) => {
+        const nextText = appendText(current);
+        setOriginalShoppingText(nextText);
+        return nextText;
+      });
+      setShoppingCaptureMode('shopping');
+      return true;
+    }
+
+    if (item.category === 'followUp') {
+      setFollowUpCaptureText((current) => appendText(current));
+      setIsFollowUpClearConfirmOpen(false);
+      setFollowUpReviewItems([]);
+      return true;
+    }
+
+    return false;
   };
 
   const reopenAiInboxItem = (itemId: string) => {
@@ -2936,6 +2976,7 @@ function AiInboxSection({
             <article className={`ai-inbox-item ${item.status}`} key={item.id}>
               <div>
                 <span className="ai-inbox-category">{aiInboxCategoryLabel(item.category)}</span>
+                <span className="ai-inbox-confidence">{formatAiInboxConfidence(item.confidence)}</span>
                 <small>{formatAiInboxCreatedAt(item.createdAt)} / {item.status === 'organized' ? '整理済み' : '未整理'}</small>
               </div>
               <p>{item.text}</p>
@@ -4473,12 +4514,28 @@ function aiInboxCategoryLabel(category: AiInboxCategory) {
   return aiInboxCategoryOptions.find((option) => option.value === category)?.label ?? 'メモ';
 }
 
-function classifyAiInboxText(text: string, fallback: AiInboxCategory = 'memo'): AiInboxCategory {
-  if (detectFollowUpIntent(text)) return 'followUp';
-  if (hasShoppingItemIntent(text) || hasShoppingActionIntent(text) || isShoppingItemText(text)) return 'shopping';
-  if (/(アイデア|思いついた|企画|やってみたい|改善案|提案)/.test(text)) return 'idea';
-  if (isScheduleActionText(text) || hasScheduleTimeText(text)) return 'todo';
-  return fallback;
+function classifyAiInboxText(text: string, fallback: AiInboxCategory = 'memo'): { category: AiInboxCategory; confidence: number } {
+  if (detectFollowUpIntent(text)) return { category: 'followUp', confidence: extractFollowUpPersons(text).length ? 92 : 88 };
+  if (hasShoppingItemIntent(text) || hasShoppingActionIntent(text)) return { category: 'shopping', confidence: 95 };
+  if (isShoppingItemText(text)) return { category: 'shopping', confidence: 86 };
+  if (/(アイデア|思いついた|企画|やってみたい|改善案|提案)/.test(text)) return { category: 'idea', confidence: 90 };
+  if (hasScheduleTimeText(text)) return { category: 'todo', confidence: 91 };
+  if (isScheduleActionText(text)) return { category: 'todo', confidence: 84 };
+  return { category: fallback, confidence: fallback === 'memo' ? 72 : 80 };
+}
+
+function normalizeAiInboxItem(item: AiInboxItem): AiInboxItem {
+  if (typeof item.confidence === 'number') return item;
+  const classification = classifyAiInboxText(item.text, item.category);
+  return {
+    ...item,
+    category: item.category ?? classification.category,
+    confidence: classification.confidence,
+  };
+}
+
+function formatAiInboxConfidence(confidence: number) {
+  return `${Math.max(0, Math.min(100, Math.round(confidence || 0)))}%`;
 }
 
 function formatAiInboxCreatedAt(isoText: string) {

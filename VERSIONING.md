@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.2.0 is based on v3.1.0 plus AI Inbox Foundation.
+6. v3.3.0 is based on v3.2.0 plus AI Inbox Auto Classification.
 
+
+## Version 3.3.0 AI Inbox Auto Classification - 2026-06-04
+
+- Screen display: v3.3.0
+- ZIP: morning-flow-ai-v3.3.0.zip
+- Next planned version: Version 3.3.1
+- AI Inbox items now store and display classification confidence.
+- `AIで整理する` routes high-confidence Inbox items into the matching workflow input.
+- Manual category changes remain available.
 
 ## Version 3.2.0 AI Inbox Foundation - 2026-06-04
 

@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 3.3.0 - 2026-06-04
+
+- Added automatic AI Inbox classification confidence.
+- AI Inbox now shows category and confidence percentage for each item.
+- High-confidence Inbox items are routed into the matching workflow input when `AIで整理する` is pressed.
+- Manual category changes remain available and are treated as high confidence.
+
 ## Version 3.2.0 - 2026-06-04
 
 - Added the AI Inbox foundation page.

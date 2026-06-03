@@ -1010,6 +1010,17 @@ h1 {
   font-weight: 900;
 }
 
+.ai-inbox-confidence {
+  justify-self: start;
+  border: 1px solid rgba(141, 229, 255, 0.22);
+  border-radius: 999px;
+  color: rgba(248, 252, 255, 0.88);
+  background: rgba(141, 229, 255, 0.1);
+  font-size: 0.72rem;
+  font-weight: 900;
+  padding: 3px 8px;
+}
+
 .ai-inbox-item p {
   margin: 0;
   color: #f8fcff;
