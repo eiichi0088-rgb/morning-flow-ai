@@ -641,6 +641,7 @@ function App() {
   const [followUpReviewItems, setFollowUpReviewItems] = React.useState<FollowUpDraftItem[]>([]);
   const [followUps, setFollowUps] = React.useState<FollowUpItem[]>([]);
   const [followUpSyncError, setFollowUpSyncError] = React.useState('');
+  const [followUpLastSyncedAt, setFollowUpLastSyncedAt] = React.useState<string | null>(null);
   const [followUpSyncStatus, setFollowUpSyncStatus] = React.useState<'local' | 'syncing' | 'synced' | 'error'>(
     isSupabaseFollowUpConfigured() ? 'syncing' : 'local',
   );
@@ -783,9 +784,10 @@ function App() {
       const rows = await fetchSupabaseFollowUps();
       setFollowUps(rows.map(mapSupabaseRowToFollowUpItem));
       setFollowUpSyncError('');
+      setFollowUpLastSyncedAt(new Date().toISOString());
       setFollowUpSyncStatus('synced');
     } catch (error) {
-      setFollowUpSyncError(getSupabaseFollowUpErrorMessage(error));
+      setFollowUpSyncError('同期できませんでした。通信を確認してください。');
       setFollowUpSyncStatus('error');
     }
   }, []);
@@ -1675,6 +1677,7 @@ function App() {
           dueTodayCount={dueTodayFollowUps.length}
           completedCount={followUps.filter((item) => item.completed).length}
           followUpSplitDebug={followUpSplitDebug}
+          followUpLastSyncedAt={followUpLastSyncedAt}
           followUpSupabaseDebug={followUpSupabaseDebug}
           followUpSyncError={followUpSyncError}
           followUpSyncStatus={followUpSyncStatus}
@@ -1695,6 +1698,7 @@ function App() {
           onOrganizeCapture={organizeFollowUpCapture}
           onReopen={reopenFollowUp}
           onSaveReview={saveFollowUpReviewItems}
+          onSyncNow={syncFollowUpsFromSupabase}
           onStartListening={startListening}
           onStopListening={stopListening}
           onTextChange={(value) => {
@@ -1943,6 +1947,7 @@ function FollowUpManagerPage({
   completedCount,
   dueTodayCount,
   followUpSplitDebug,
+  followUpLastSyncedAt,
   followUpSupabaseDebug,
   followUpSyncError,
   followUpSyncStatus,
@@ -1963,6 +1968,7 @@ function FollowUpManagerPage({
   onOrganizeCapture,
   onReopen,
   onSaveReview,
+  onSyncNow,
   onStartListening,
   onStopListening,
   onTextChange,
@@ -1974,6 +1980,7 @@ function FollowUpManagerPage({
   completedCount: number;
   dueTodayCount: number;
   followUpSplitDebug: FollowUpSplitDebug | null;
+  followUpLastSyncedAt: string | null;
   followUpSupabaseDebug: FollowUpSupabaseDebug;
   followUpSyncError: string;
   followUpSyncStatus: 'local' | 'syncing' | 'synced' | 'error';
@@ -1994,6 +2001,7 @@ function FollowUpManagerPage({
   onOrganizeCapture: () => number;
   onReopen: (itemId: string) => void;
   onSaveReview: () => Promise<number>;
+  onSyncNow: () => Promise<void>;
   onStartListening: () => void;
   onStopListening: () => void;
   onTextChange: (text: string) => void;
@@ -2012,6 +2020,7 @@ function FollowUpManagerPage({
   const [dueTime, setDueTime] = React.useState('');
   const [kind, setKind] = React.useState<FollowUpKind>('phone');
   const [captureMessage, setCaptureMessage] = React.useState('');
+  const [isDebugOpen, setIsDebugOpen] = React.useState(false);
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   const suggestion = React.useMemo(() => suggestFollowUp(content), [content]);
@@ -2099,16 +2108,26 @@ function FollowUpManagerPage({
       </div>
 
       <div className={`follow-up-sync-status ${followUpSyncStatus}`}>
-        <span>{getFollowUpSyncStatusLabel(followUpSyncStatus)}</span>
-        {followUpSyncError && <small>{followUpSyncError}</small>}
-        <strong>Supabase Debug</strong>
-        <small>Supabase URL: {followUpSupabaseDebug.hasUrl ? followUpSupabaseDebug.urlHost : 'not configured'}</small>
-        <small>Anon Key: {followUpSupabaseDebug.hasAnonKey ? 'configured' : 'not configured'}</small>
-        <small>Last Operation: {followUpSupabaseDebug.lastOperation || 'not checked'}</small>
-        <small>Response: {followUpSupabaseDebug.responseStatus || 'not received'}</small>
-        <small>Rows: {typeof followUpSupabaseDebug.rowCount === 'number' ? followUpSupabaseDebug.rowCount : 'not checked'}</small>
-        <small>Body: {followUpSupabaseDebug.bodyPreview || 'not received'}</small>
-        <small>Error: {followUpSupabaseDebug.error || 'none'}</small>
+        <div className="follow-up-sync-main">
+          <div>
+            <span>{getFollowUpSyncStatusLabel(followUpSyncStatus)}</span>
+            <small>{followUpLastSyncedAt ? `最終同期 ${formatFollowUpSyncTime(followUpLastSyncedAt)}` : '最終同期 まだありません'}</small>
+          </div>
+          <button className="secondary-button" disabled={followUpSyncStatus === 'syncing'} onClick={() => void onSyncNow()} type="button">
+            今すぐ同期
+          </button>
+        </div>
+        {followUpSyncError && <small className="follow-up-sync-error">{followUpSyncError}</small>}
+        <details className="follow-up-debug-details" open={isDebugOpen} onToggle={(event) => setIsDebugOpen(event.currentTarget.open)}>
+          <summary>Supabase Debug</summary>
+          <small>Supabase URL: {followUpSupabaseDebug.hasUrl ? followUpSupabaseDebug.urlHost : 'not configured'}</small>
+          <small>Anon Key: {followUpSupabaseDebug.hasAnonKey ? 'configured' : 'not configured'}</small>
+          <small>Last Operation: {followUpSupabaseDebug.lastOperation || 'not checked'}</small>
+          <small>Response: {followUpSupabaseDebug.responseStatus || 'not received'}</small>
+          <small>Rows: {typeof followUpSupabaseDebug.rowCount === 'number' ? followUpSupabaseDebug.rowCount : 'not checked'}</small>
+          <small>Body: {followUpSupabaseDebug.bodyPreview || 'not received'}</small>
+          <small>Error: {followUpSupabaseDebug.error || 'none'}</small>
+        </details>
       </div>
 
       <div className="focus-area follow-up-capture">
@@ -4137,9 +4156,18 @@ function createFollowUpSupabaseDebug(lastOperation: string, error?: unknown): Fo
 
 function getFollowUpSyncStatusLabel(status: 'local' | 'syncing' | 'synced' | 'error') {
   if (status === 'synced') return 'Supabase同期済み';
-  if (status === 'syncing') return 'Supabase確認中';
+  if (status === 'syncing') return '同期中...';
   if (status === 'error') return 'Supabase同期エラー';
   return 'ローカル保存';
+}
+
+function formatFollowUpSyncTime(isoText: string) {
+  const date = new Date(isoText);
+  if (Number.isNaN(date.getTime())) return '--:--';
+  return date.toLocaleTimeString('ja-JP', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function suggestFollowUp(text: string): { priority: FollowUpPriority; kind: FollowUpKind } {

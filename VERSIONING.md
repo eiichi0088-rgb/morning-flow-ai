@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.0.3 is based on v3.0.2 plus Follow Up person name extraction fix.
+6. v3.1.0 is based on v3.0.3 plus Follow Up sync stability UI.
 
+
+## Version 3.1.0 Follow Up Sync Stability - 2026-06-04
+
+- Screen display: v3.1.0
+- ZIP: morning-flow-ai-v3.1.0.zip
+- Next planned version: Version 3.1.1
+- Follow Up Manager shows the latest Supabase sync time.
+- Follow Up Manager has a manual `今すぐ同期` button and `同期中...` status.
+- Supabase Debug is collapsed by default and can be opened when needed.
 
 ## Version 3.0.3 Follow Up Person Name Extraction Fix - 2026-06-04
 

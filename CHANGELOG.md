@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.1.0 - 2026-06-04
+
+- Added Follow Up Sync Stability UI with last sync time, manual sync, and syncing status.
+- Changed Follow Up sync failure text to a clearer user-facing message.
+- Collapsed Supabase Debug by default so it can be opened only when needed.
+
 ## Version 3.0.3 - 2026-06-04
 
 - Fixed Follow Up person name extraction so names like `柴田君`, `高橋さん`, and `小田原さん` are kept intact.
