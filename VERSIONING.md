@@ -5,9 +5,19 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.14.4 is based on v2.14.3 shopping display source cleanup plus shopping reset and selective share. Do not mix v3.0 or v3.1 UI.
+6. v2.14.5 is based on v2.14.4 plus morning transcript position and clear button fixes. Do not mix v3.0 or v3.1 UI.
 
 
+
+## Version 2.14.5 Transcript Position and Clear Button Fix - 2026-06-03
+
+- Screen display: v2.14.5
+- ZIP: morning-flow-ai-v2.14.5.zip
+- Next planned version: Version 2.14.6
+- Editable Transcript is shown directly below the microphone area on the morning plan page.
+- AI organize button remains near the transcript editor.
+- `全文削除` clears the transcript and temporary speech input after inline confirmation near the button.
+- Apple Calendar, Google Calendar, Upstash Redis storage, Analytics Lite, FOLLOW UP MANAGER behavior, shopping list logic, feedback, Developer Mode, snapshots, session behavior, and Future AI UI design are preserved.
 
 ## Version 2.14.4 Shopping List Reset and Selective Share Fix - 2026-06-03
 

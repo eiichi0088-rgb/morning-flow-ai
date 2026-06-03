@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## Version 2.14.5 - 2026-06-03
+
+- Moved the Editable Transcript card directly below the microphone area on the morning plan page.
+- Kept the AI organize button near the transcript editor so users can speak, review, edit, and organize without scrolling.
+- Added a `全文削除` action with inline confirmation near the transcript editor.
+- Clearing the transcript also clears temporary speech input so previous text does not remain.
+- Apple Calendar, Google Calendar, Upstash Redis, Analytics, Follow Up Manager, shopping list logic, and Future AI UI design are unchanged.
+
 ## Version 2.14.4 - 2026-06-03
 
 - Added shopping input cleanup actions: `全文削除` and `新しく作る`.

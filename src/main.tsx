@@ -232,7 +232,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.14.4';
+const appVersion = 'v2.14.5';
 const isMealDatabaseExperimentalEnabled = false;
 type AppleCalendarDisposition = 'inline' | 'attachment';
 
@@ -573,6 +573,7 @@ function App() {
   const [highlightedScheduleKeys, setHighlightedScheduleKeys] = React.useState<string[]>([]);
   const [isOrganizing, setIsOrganizing] = React.useState(false);
   const [isResetDialogOpen, setIsResetDialogOpen] = React.useState(false);
+  const [isTranscriptClearConfirmOpen, setIsTranscriptClearConfirmOpen] = React.useState(false);
   const [shoppingText, setShoppingText] = React.useState('');
   const [originalShoppingText, setOriginalShoppingText] = React.useState('');
   const [shoppingItems, setShoppingItems] = React.useState<ShoppingItem[]>([]);
@@ -614,7 +615,7 @@ function App() {
       ? 'スケジュールを更新中…'
       : 'AIが整理中…'
     : '次へ進む';
-  const hasEditableTranscript = Boolean(transcript.trim()) && !isListening && captureMode === 'create';
+  const hasEditableTranscript = Boolean(resultText.trim()) && captureMode === 'create';
   const pendingFollowUps = React.useMemo(() => followUps.filter((item) => !item.completed), [followUps]);
   const dueTodayFollowUps = React.useMemo(
     () => pendingFollowUps.filter((item) => isSameLocalDate(parseFollowUpDate(item.dueDate), new Date())),
@@ -950,15 +951,30 @@ function App() {
   };
 
   const saveEditedTranscript = () => {
-    const normalized = transcript.trim();
+    const normalized = resultText.trim();
     setTranscript(normalized);
     setOriginalTranscript(normalized);
+    setInterimTranscript('');
+    setIsTranscriptClearConfirmOpen(false);
     setPlan(null);
   };
 
   const restoreOriginalTranscript = () => {
     setTranscript(originalTranscript);
+    setInterimTranscript('');
+    setIsTranscriptClearConfirmOpen(false);
     setPlan(null);
+  };
+
+  const clearEditableTranscript = () => {
+    recognition?.abort();
+    setTranscript('');
+    setOriginalTranscript('');
+    setInterimTranscript('');
+    setPlan(null);
+    setError('');
+    setIsListening(false);
+    setIsTranscriptClearConfirmOpen(false);
   };
 
   const organizeShoppingList = () => {
@@ -1434,6 +1450,38 @@ function App() {
           </div>
         </div>
 
+        {hasEditableTranscript && (
+          <TranscriptEditor
+            isClearConfirmOpen={isTranscriptClearConfirmOpen}
+            onCancel={restoreOriginalTranscript}
+            onCancelClear={() => setIsTranscriptClearConfirmOpen(false)}
+            onClear={clearEditableTranscript}
+            onClearRequest={() => setIsTranscriptClearConfirmOpen(true)}
+            onSave={saveEditedTranscript}
+            onTextChange={(value) => {
+              setTranscript(value);
+              setInterimTranscript('');
+              setPlan(null);
+              setIsTranscriptClearConfirmOpen(false);
+            }}
+            savedText={originalTranscript}
+            text={resultText}
+          />
+        )}
+
+        {canOrganize && (
+          <button
+            className={`organize-button ${isOrganizing ? 'is-organizing' : ''}`}
+            type="button"
+            onClick={organizeMorning}
+            disabled={isOrganizing}
+          >
+            <Brain size={21} />
+            {isOrganizing ? 'AIが整理しています' : 'AI整理'}
+            <Sparkles size={18} />
+          </button>
+        )}
+
         {error && <p className="error-message">{error}</p>}
         {isOrganizing && (
           <p className="loading-message" role="status" aria-live="polite">
@@ -1496,32 +1544,6 @@ function App() {
             snapshot={previousSnapshot}
             statuses={reviewStatuses}
           />
-        )}
-
-        {hasEditableTranscript && (
-          <TranscriptEditor
-            onCancel={restoreOriginalTranscript}
-            onSave={saveEditedTranscript}
-            onTextChange={(value) => {
-              setTranscript(value);
-              setPlan(null);
-            }}
-            savedText={originalTranscript}
-            text={transcript}
-          />
-        )}
-
-        {canOrganize && (
-          <button
-            className={`organize-button ${isOrganizing ? 'is-organizing' : ''}`}
-            type="button"
-            onClick={organizeMorning}
-            disabled={isOrganizing}
-          >
-            <Brain size={21} />
-            {isOrganizing ? 'AIが整理しています' : 'AI整理'}
-            <Sparkles size={18} />
-          </button>
         )}
 
         <div ref={planAnchorRef} />
@@ -2615,13 +2637,21 @@ function CaptureModeSwitcher({
 }
 
 function TranscriptEditor({
+  isClearConfirmOpen,
   onCancel,
+  onCancelClear,
+  onClear,
+  onClearRequest,
   onSave,
   onTextChange,
   savedText,
   text,
 }: {
+  isClearConfirmOpen: boolean;
   onCancel: () => void;
+  onCancelClear: () => void;
+  onClear: () => void;
+  onClearRequest: () => void;
   onSave: () => void;
   onTextChange: (value: string) => void;
   savedText: string;
@@ -2654,6 +2684,9 @@ function TranscriptEditor({
         value={text}
       />
       <div className="editor-actions">
+        <button className="secondary-button" disabled={!text.trim()} onClick={onClearRequest} type="button">
+          全文削除
+        </button>
         <button className="secondary-button" onClick={onCancel} type="button">
           元に戻す
         </button>
@@ -2661,6 +2694,20 @@ function TranscriptEditor({
           修正を保存
         </button>
       </div>
+      {isClearConfirmOpen && (
+        <section className="inline-confirm-card transcript-clear-confirm" aria-label="入力削除確認">
+          <strong>入力をすべて削除しますか？</strong>
+          <p>Editable Transcript内の文字と音声入力中の一時テキストを削除します。</p>
+          <div className="confirm-dialog-actions">
+            <button className="secondary-button" type="button" onClick={onCancelClear}>
+              キャンセル
+            </button>
+            <button className="danger-button" type="button" onClick={onClear}>
+              削除する
+            </button>
+          </div>
+        </section>
+      )}
     </section>
   );
 }

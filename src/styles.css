@@ -751,8 +751,19 @@ h1 {
 
 .editor-actions {
   display: grid;
-  grid-template-columns: 0.9fr 1.1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+
+.editor-actions .secondary-button,
+.editor-actions .primary-button {
+  min-height: 48px;
+  padding-inline: 8px;
+  font-size: 0.88rem;
+}
+
+.transcript-clear-confirm {
+  margin-top: 2px;
 }
 
 .capture-mode-card {
