@@ -5,8 +5,18 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.15.3 is based on v2.15.2 plus Follow Up transcript persistence after organization. Do not mix v3.0 or v3.1 UI.
+6. v2.15.4 is based on v2.15.3 plus collapsible voice input guide UI. Do not mix v3.0 or v3.1 UI.
 
+
+## Version 2.15.4 Voice Input Guide UI - 2026-06-03
+
+- Screen display: v2.15.4
+- ZIP: morning-flow-ai-v2.15.4.zip
+- Next planned version: Version 2.15.5
+- Added collapsible `話し方の例を見る` guide cards to the morning schedule, shopping list, and Follow Up Manager pages.
+- Guide examples help first-time users understand what to speak before using AI organization.
+- Future AI UI styling is preserved with glass cards, cyan glow accents, and dark background.
+- Apple Calendar, Google Calendar, Upstash Redis storage, Analytics Lite, Follow Up logic, shopping list logic, feedback, Developer Mode, snapshots, and session behavior are preserved.
 
 ## Version 2.15.3 Follow Up Transcript Persistence Fix - 2026-06-03
 

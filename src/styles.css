@@ -252,6 +252,71 @@ h1 {
   animation: waveLift 980ms ease-in-out infinite;
 }
 
+.voice-guide-card {
+  display: grid;
+  gap: 0;
+  width: 100%;
+  border: 1px solid rgba(141, 229, 255, 0.18);
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(141, 229, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    rgba(4, 15, 30, 0.62);
+  box-shadow:
+    0 18px 42px rgba(0, 207, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.11);
+  backdrop-filter: blur(18px);
+}
+
+.voice-guide-toggle {
+  min-height: 50px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 15px;
+  border: 0;
+  color: rgba(238, 248, 255, 0.92);
+  background: transparent;
+  font-size: 0.94rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.voice-guide-toggle span {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.voice-guide-toggle svg {
+  color: #8de5ff;
+  filter: drop-shadow(0 0 10px rgba(141, 229, 255, 0.45));
+}
+
+.voice-guide-chevron {
+  flex: 0 0 auto;
+  transition: transform 180ms ease;
+}
+
+.voice-guide-card.is-open .voice-guide-chevron {
+  transform: rotate(90deg);
+}
+
+.voice-guide-list {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding: 0 15px 15px 42px;
+  color: rgba(226, 244, 252, 0.86);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.voice-guide-list li::marker {
+  color: #8de5ff;
+}
+
 .mic-button {
   position: relative;
   width: min(48vw, 188px);

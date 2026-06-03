@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 2.15.4 - 2026-06-03
+
+- Added collapsible voice input guide cards to the morning schedule, shopping list, and Follow Up Manager pages.
+- Each guide shows beginner-friendly spoken examples while keeping the initial UI compact.
+- Styled the guide cards with the Future AI glass look, cyan glow accents, and dark background.
+- Apple Calendar, Google Calendar, Upstash Redis, Analytics, Follow Up logic, and shopping list logic are unchanged.
+
 ## Version 2.15.3 - 2026-06-03
 
 - Fixed Follow Up Capture so the Editable Transcript remains visible after `フォローを整理する`.

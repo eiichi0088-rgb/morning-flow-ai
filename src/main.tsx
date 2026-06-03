@@ -234,7 +234,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.15.3';
+const appVersion = 'v2.15.4';
 const isMealDatabaseExperimentalEnabled = false;
 type AppleCalendarDisposition = 'inline' | 'attachment';
 
@@ -1519,6 +1519,14 @@ function App() {
           </div>
         </div>
 
+        <VoiceInputGuide
+          examples={[
+            '16時半からラーメンを食べる',
+            '19時にジムへ行く',
+            '妻に電話する',
+          ]}
+        />
+
         {hasEditableTranscript && (
           <TranscriptEditor
             isClearConfirmOpen={isTranscriptClearConfirmOpen}
@@ -1835,6 +1843,14 @@ function FollowUpManagerPage({
           {isListening ? '音声認識中' : 'フォロー内容を話して整理できます'}
         </div>
       </div>
+
+      <VoiceInputGuide
+        examples={[
+          '高橋さんに電話を返す',
+          '小田原さんに見積もり依頼',
+          '柴田君にLINE返信',
+        ]}
+      />
 
       <section className="editor-card follow-up-capture-card" aria-label="フォローアップ音声入力">
         <div className="editor-header">
@@ -2412,6 +2428,34 @@ function FollowUpList({
   );
 }
 
+function VoiceInputGuide({ examples }: { examples: string[] }) {
+  const [isOpen, setIsOpen] = React.useState(false);
+
+  return (
+    <section className={`voice-guide-card ${isOpen ? 'is-open' : ''}`} aria-label="話し方の例">
+      <button
+        aria-expanded={isOpen}
+        className="voice-guide-toggle"
+        onClick={() => setIsOpen((current) => !current)}
+        type="button"
+      >
+        <span>
+          <Lightbulb size={17} />
+          話し方の例を見る
+        </span>
+        <ChevronRight className="voice-guide-chevron" size={18} />
+      </button>
+      {isOpen && (
+        <ul className="voice-guide-list">
+          {examples.map((example) => (
+            <li key={example}>{example}</li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function ShoppingListPage({
   canOrganize,
   error,
@@ -2579,6 +2623,15 @@ function ShoppingListPage({
           {isListening ? '音声認識中' : items.length ? '買い物リストを保存中' : '話すだけでカテゴリ分けします'}
         </div>
       </div>
+
+      <VoiceInputGuide
+        examples={[
+          '卵を2パック',
+          '牛乳を1本',
+          '豚肉500g',
+          '今日買うものはトマトと玉ねぎ',
+        ]}
+      />
 
       {error && <p className="error-message">{error}</p>}
       {isOrganizing && (
