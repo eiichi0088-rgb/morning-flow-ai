@@ -122,7 +122,19 @@ type CalendarEvent = {
 };
 
 type CaptureMode = 'create' | 'update';
-type AppView = 'morning' | 'shopping' | 'followUp' | 'feedback' | 'analytics';
+type AppView = 'morning' | 'shopping' | 'followUp' | 'inbox' | 'feedback' | 'analytics';
+type AiInboxCategory = 'todo' | 'shopping' | 'followUp' | 'memo' | 'idea';
+type AiInboxStatus = 'unprocessed' | 'organized';
+
+type AiInboxItem = {
+  id: string;
+  text: string;
+  category: AiInboxCategory;
+  status: AiInboxStatus;
+  sourceView: AppView;
+  createdAt: string;
+  organizedAt?: string;
+};
 
 type FollowUpPriority = 'high' | 'medium' | 'low';
 type FollowUpKind = 'phone' | 'line' | 'email' | 'sms' | 'other';
@@ -266,6 +278,7 @@ type AppleCalendarDebugInfo = {
 type PrivateSessionKeys = {
   draft: string;
   followUps: string;
+  inbox: string;
   shopping: string;
   snapshots: string;
 };
@@ -581,6 +594,7 @@ function createPrivateSessionKeys(sessionId: string): PrivateSessionKeys {
   return {
     draft: `morning-flow-ai:session:${sessionId}:transcript-draft`,
     followUps: `morning-flow-ai:session:${sessionId}:follow-ups`,
+    inbox: `morning-flow-ai:session:${sessionId}:ai-inbox`,
     shopping: `morning-flow-ai:session:${sessionId}:shopping-list`,
     snapshots: `session:${sessionId}:snapshots`,
   };
@@ -618,6 +632,8 @@ function App() {
   const [isOrganizing, setIsOrganizing] = React.useState(false);
   const [isResetDialogOpen, setIsResetDialogOpen] = React.useState(false);
   const [isTranscriptClearConfirmOpen, setIsTranscriptClearConfirmOpen] = React.useState(false);
+  const [aiInboxItems, setAiInboxItems] = React.useState<AiInboxItem[]>([]);
+  const [aiInboxMessage, setAiInboxMessage] = React.useState('');
   const [shoppingText, setShoppingText] = React.useState('');
   const [originalShoppingText, setOriginalShoppingText] = React.useState('');
   const [shoppingItems, setShoppingItems] = React.useState<ShoppingItem[]>([]);
@@ -658,6 +674,7 @@ function App() {
   const isSupported = Boolean(SpeechRecognition);
   const isShoppingView = activeView === 'shopping';
   const isFollowUpView = activeView === 'followUp';
+  const isInboxView = activeView === 'inbox';
   const isFeedbackView = activeView === 'feedback';
   const resultText = [transcript, interimTranscript].filter(Boolean).join('\n');
   const activeShoppingText = shoppingCaptureMode === 'meal' ? mealPlanText : shoppingText;
@@ -679,6 +696,10 @@ function App() {
   const dueTodayFollowUps = React.useMemo(
     () => pendingFollowUps.filter((item) => isSameLocalDate(parseFollowUpDate(item.dueDate), new Date())),
     [pendingFollowUps],
+  );
+  const unprocessedInboxCount = React.useMemo(
+    () => aiInboxItems.filter((item) => item.status === 'unprocessed').length,
+    [aiInboxItems],
   );
 
   React.useEffect(() => {
@@ -731,6 +752,15 @@ function App() {
         localStorage.removeItem(privateSessionKeys.followUps);
       }
     }
+    const savedInbox = localStorage.getItem(privateSessionKeys.inbox);
+    if (savedInbox) {
+      try {
+        const parsed = JSON.parse(savedInbox) as AiInboxItem[];
+        setAiInboxItems(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        localStorage.removeItem(privateSessionKeys.inbox);
+      }
+    }
   }, [privateSessionId, privateSessionKeys]);
 
   React.useEffect(() => {
@@ -740,6 +770,15 @@ function App() {
       localStorage.removeItem(privateSessionKeys.draft);
     }
   }, [privateSessionKeys.draft, transcript]);
+
+  React.useEffect(() => {
+    if (!aiInboxItems.length) {
+      localStorage.removeItem(privateSessionKeys.inbox);
+      return;
+    }
+
+    localStorage.setItem(privateSessionKeys.inbox, JSON.stringify(aiInboxItems));
+  }, [aiInboxItems, privateSessionKeys.inbox]);
 
   React.useEffect(() => {
     if (!highlightedScheduleKeys.length) return;
@@ -811,6 +850,23 @@ function App() {
     return () => window.clearTimeout(timeoutId);
   }, [highlightedShoppingIds]);
 
+  const saveVoiceTextToAiInbox = React.useCallback((text: string, sourceView: AppView) => {
+    const normalized = text.trim();
+    if (!normalized) return;
+    const nextItem: AiInboxItem = {
+      category: classifyAiInboxText(normalized),
+      createdAt: new Date().toISOString(),
+      id: createLocalId('ai-inbox'),
+      sourceView,
+      status: 'unprocessed',
+      text: normalized,
+    };
+    setAiInboxItems((current) => [nextItem, ...current]);
+    setAiInboxMessage('AI Inboxに保存しました。分類候補を確認して整理できます。');
+    setInterimTranscript('');
+    setActiveView('inbox');
+  }, []);
+
   React.useEffect(() => {
     if (!SpeechRecognition) return;
 
@@ -859,42 +915,7 @@ function App() {
       }
 
       if (finalText) {
-        const appendText = (current: string) => `${current}${current ? '\n' : ''}${finalText.trim()}`;
-        if (activeView === 'shopping') {
-          if (shoppingCaptureMode === 'meal') {
-            setMealPlanText((current) => {
-              const nextText = appendText(current);
-              setOriginalMealPlanText(nextText);
-              return nextText;
-            });
-          } else {
-            setShoppingText((current) => {
-              const nextText = appendText(current);
-              setOriginalShoppingText(nextText);
-              return nextText;
-            });
-          }
-        } else if (activeView === 'feedback') {
-          setFeedbackText((current) => appendText(current));
-        } else if (activeView === 'followUp') {
-          setFollowUpCaptureText((current) => appendText(current));
-          setIsFollowUpClearConfirmOpen(false);
-        } else if (captureMode === 'update') {
-          setUpdateInstruction((current) => {
-            const nextInstruction = appendText(current);
-            setOriginalUpdateInstruction(nextInstruction);
-            return nextInstruction;
-          });
-        } else {
-          addVoiceFollowUpsFromText(finalText);
-          setTranscript((current) => {
-            const nextTranscript = appendText(current);
-            setOriginalTranscript(nextTranscript);
-            return nextTranscript;
-          });
-          setPlan(null);
-          setHighlightedScheduleKeys([]);
-        }
+        saveVoiceTextToAiInbox(finalText, activeView);
       }
       setInterimTranscript(interimText.trim());
     };
@@ -904,7 +925,7 @@ function App() {
     return () => {
       instance.abort();
     };
-  }, [activeView, captureMode, shoppingCaptureMode]);
+  }, [activeView, saveVoiceTextToAiInbox]);
 
   const startListening = () => {
     if (!recognition || isListening) return;
@@ -1487,6 +1508,39 @@ function App() {
     setMorningFollowUpMessage('未返信・折り返しへの追加を見送りました。');
   };
 
+  const updateAiInboxCategory = (itemId: string, category: AiInboxCategory) => {
+    setAiInboxItems((current) => current.map((item) => (item.id === itemId ? { ...item, category } : item)));
+    setAiInboxMessage('');
+  };
+
+  const organizeAiInboxItem = (itemId: string) => {
+    setAiInboxItems((current) =>
+      current.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              category: classifyAiInboxText(item.text, item.category),
+              organizedAt: new Date().toISOString(),
+              status: 'organized',
+            }
+          : item,
+      ),
+    );
+    setAiInboxMessage('Inbox項目を整理済みにしました。');
+  };
+
+  const reopenAiInboxItem = (itemId: string) => {
+    setAiInboxItems((current) =>
+      current.map((item) => (item.id === itemId ? { ...item, organizedAt: undefined, status: 'unprocessed' } : item)),
+    );
+    setAiInboxMessage('Inbox項目を未整理に戻しました。');
+  };
+
+  const deleteAiInboxItem = (itemId: string) => {
+    setAiInboxItems((current) => current.filter((item) => item.id !== itemId));
+    setAiInboxMessage('');
+  };
+
   const completeFollowUp = (itemId: string) => {
     const completedAt = new Date().toISOString();
     setFollowUps((current) =>
@@ -1756,6 +1810,16 @@ function App() {
           resultText={followUpResultText}
           reviewItems={followUpReviewItems}
         />
+      ) : isInboxView ? (
+        <AiInboxPage
+          items={aiInboxItems}
+          message={aiInboxMessage}
+          onBack={() => setActiveView('morning')}
+          onCategoryChange={updateAiInboxCategory}
+          onDelete={deleteAiInboxItem}
+          onOrganize={organizeAiInboxItem}
+          onReopen={reopenAiInboxItem}
+        />
       ) : isFeedbackView ? (
         <FeedbackBoxPage
           analyticsUserId={analyticsUserId}
@@ -1889,6 +1953,11 @@ function App() {
             {'\u672a\u8fd4\u4fe1\u30fb\u6298\u308a\u8fd4\u3057'}
             <span className="follow-up-badge">{'\u672a\u8fd4\u4fe1'} {pendingFollowUps.length}{'\u4ef6'} / {'\u4eca\u65e5'} {dueTodayFollowUps.length}{'\u4ef6'}</span>
           </button>
+          <button type="button" onClick={() => setActiveView('inbox')}>
+            <ListChecks size={18} />
+            AI Inbox
+            <span className="follow-up-badge">未整理 {unprocessedInboxCount}件</span>
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -1951,7 +2020,7 @@ function App() {
         </div>
       </section>
       )}
-      {!isShoppingView && (
+      {!isShoppingView && !isInboxView && (
       <div className="floating-next-bar" aria-label="次の操作">
         <button
           className={`primary-button floating-next-button ${isOrganizing ? 'is-loading' : ''}`}
@@ -2763,6 +2832,145 @@ function AnalyticsMetric({ label, value }: { label: string; value: number | stri
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
+  );
+}
+
+function AiInboxPage({
+  items,
+  message,
+  onBack,
+  onCategoryChange,
+  onDelete,
+  onOrganize,
+  onReopen,
+}: {
+  items: AiInboxItem[];
+  message: string;
+  onBack: () => void;
+  onCategoryChange: (itemId: string, category: AiInboxCategory) => void;
+  onDelete: (itemId: string) => void;
+  onOrganize: (itemId: string) => void;
+  onReopen: (itemId: string) => void;
+}) {
+  const unprocessedItems = items.filter((item) => item.status === 'unprocessed');
+  const organizedItems = items.filter((item) => item.status === 'organized');
+
+  return (
+    <section className="hero-panel ai-inbox-page" aria-label="AI Inbox">
+      <div className="top-bar">
+        <button className="icon-ghost-button" onClick={onBack} type="button" aria-label="戻る">
+          <Home size={20} />
+        </button>
+        <div>
+          <p className="eyebrow">MORNING FLOW AI <span>{appVersion}</span></p>
+          <h1>AI Inbox</h1>
+          <p className="hero-subtitle">Capture first. Organize next.</p>
+        </div>
+        <div className="brand-mark" aria-hidden="true">
+          <ListChecks size={21} />
+        </div>
+      </div>
+
+      <div className="follow-up-summary ai-inbox-summary">
+        <div>
+          <span>未整理</span>
+          <strong>{unprocessedItems.length}件</strong>
+        </div>
+        <div>
+          <span>整理済み</span>
+          <strong>{organizedItems.length}件</strong>
+        </div>
+      </div>
+
+      <p className="ai-inbox-lead">音声入力はまずここに保存されます。分類候補を確認してから整理してください。</p>
+      {message && <p className="follow-up-suggestion">{message}</p>}
+
+      <AiInboxSection
+        emptyText="未整理のInboxはありません。"
+        items={unprocessedItems}
+        onCategoryChange={onCategoryChange}
+        onDelete={onDelete}
+        onOrganize={onOrganize}
+        onReopen={onReopen}
+        title="未整理"
+      />
+      <AiInboxSection
+        emptyText="整理済みのInboxはありません。"
+        items={organizedItems}
+        onCategoryChange={onCategoryChange}
+        onDelete={onDelete}
+        onOrganize={onOrganize}
+        onReopen={onReopen}
+        title="整理済み"
+      />
+    </section>
+  );
+}
+
+function AiInboxSection({
+  emptyText,
+  items,
+  onCategoryChange,
+  onDelete,
+  onOrganize,
+  onReopen,
+  title,
+}: {
+  emptyText: string;
+  items: AiInboxItem[];
+  onCategoryChange: (itemId: string, category: AiInboxCategory) => void;
+  onDelete: (itemId: string) => void;
+  onOrganize: (itemId: string) => void;
+  onReopen: (itemId: string) => void;
+  title: string;
+}) {
+  return (
+    <section className="ai-inbox-section">
+      <div className="follow-up-list-header">
+        <span>{title}</span>
+        <small>{items.length}件</small>
+      </div>
+      {items.length ? (
+        <div className="ai-inbox-list">
+          {items.map((item) => (
+            <article className={`ai-inbox-item ${item.status}`} key={item.id}>
+              <div>
+                <span className="ai-inbox-category">{aiInboxCategoryLabel(item.category)}</span>
+                <small>{formatAiInboxCreatedAt(item.createdAt)} / {item.status === 'organized' ? '整理済み' : '未整理'}</small>
+              </div>
+              <p>{item.text}</p>
+              <label>
+                分類候補
+                <select value={item.category} onChange={(event) => onCategoryChange(item.id, event.target.value as AiInboxCategory)}>
+                  {aiInboxCategoryOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="ai-inbox-actions">
+                {item.status === 'organized' ? (
+                  <button className="secondary-button" onClick={() => onReopen(item.id)} type="button">
+                    未整理へ戻す
+                  </button>
+                ) : (
+                  <button className="organize-button" onClick={() => onOrganize(item.id)} type="button">
+                    <Brain size={18} />
+                    AIで整理する
+                  </button>
+                )}
+                <button className="danger-button" onClick={() => onDelete(item.id)} type="button">
+                  削除
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="purpose-text">{emptyText}</p>
+      )}
+    </section>
   );
 }
 
@@ -4251,6 +4459,37 @@ function getFollowUpSyncStatusLabel(status: 'local' | 'syncing' | 'synced' | 'er
   if (status === 'syncing') return '同期中...';
   if (status === 'error') return 'Supabase同期エラー';
   return 'ローカル保存';
+}
+
+const aiInboxCategoryOptions: { label: string; value: AiInboxCategory }[] = [
+  { label: '今日のやること', value: 'todo' },
+  { label: '買い物', value: 'shopping' },
+  { label: 'Follow Up', value: 'followUp' },
+  { label: 'メモ', value: 'memo' },
+  { label: 'アイデア', value: 'idea' },
+];
+
+function aiInboxCategoryLabel(category: AiInboxCategory) {
+  return aiInboxCategoryOptions.find((option) => option.value === category)?.label ?? 'メモ';
+}
+
+function classifyAiInboxText(text: string, fallback: AiInboxCategory = 'memo'): AiInboxCategory {
+  if (detectFollowUpIntent(text)) return 'followUp';
+  if (hasShoppingItemIntent(text) || hasShoppingActionIntent(text) || isShoppingItemText(text)) return 'shopping';
+  if (/(アイデア|思いついた|企画|やってみたい|改善案|提案)/.test(text)) return 'idea';
+  if (isScheduleActionText(text) || hasScheduleTimeText(text)) return 'todo';
+  return fallback;
+}
+
+function formatAiInboxCreatedAt(isoText: string) {
+  const date = new Date(isoText);
+  if (Number.isNaN(date.getTime())) return '日時不明';
+  return date.toLocaleString('ja-JP', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function formatFollowUpSyncTime(isoText: string) {

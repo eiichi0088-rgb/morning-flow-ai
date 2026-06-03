@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.1.0 is based on v3.0.3 plus Follow Up sync stability UI.
+6. v3.2.0 is based on v3.1.0 plus AI Inbox Foundation.
 
+
+## Version 3.2.0 AI Inbox Foundation - 2026-06-04
+
+- Screen display: v3.2.0
+- ZIP: morning-flow-ai-v3.2.0.zip
+- Next planned version: Version 3.2.1
+- Added AI Inbox page for voice-first capture.
+- Voice input is saved to AI Inbox before being organized into specific workflows.
+- AI Inbox supports category candidates, unprocessed/organized state, and `AIで整理する`.
 
 ## Version 3.1.0 Follow Up Sync Stability - 2026-06-04
 

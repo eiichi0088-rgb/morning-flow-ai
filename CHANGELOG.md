@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.2.0 - 2026-06-04
+
+- Added the AI Inbox foundation page.
+- Voice input is now saved to AI Inbox first instead of being sent directly to Morning Flow, Shopping, Follow Up, or Feedback inputs.
+- AI Inbox items show category candidates, unprocessed/organized state, and an `AIで整理する` action.
+
 ## Version 3.1.0 - 2026-06-04
 
 - Added Follow Up Sync Stability UI with last sync time, manual sync, and syncing status.
