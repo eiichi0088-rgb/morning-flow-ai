@@ -25,11 +25,52 @@ export type SupabaseFollowUpUpdate = Partial<SupabaseFollowUpInsert> & {
   updated_at?: string;
 };
 
+export type SupabaseFollowUpConfigStatus = {
+  configured: boolean;
+  hasAnonKey: boolean;
+  hasUrl: boolean;
+  urlHost: string;
+};
+
+export class SupabaseFollowUpError extends Error {
+  body: string;
+  status: number;
+  statusText: string;
+  url: string;
+
+  constructor(response: Response, body: string) {
+    super(body || `Supabase request failed: ${response.status} ${response.statusText}`.trim());
+    this.body = body;
+    this.name = 'SupabaseFollowUpError';
+    this.status = response.status;
+    this.statusText = response.statusText;
+    this.url = response.url;
+  }
+}
+
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 export function isSupabaseFollowUpConfigured() {
   return Boolean(supabaseUrl?.trim() && supabaseAnonKey?.trim());
+}
+
+export function getSupabaseFollowUpConfigStatus(): SupabaseFollowUpConfigStatus {
+  return {
+    configured: isSupabaseFollowUpConfigured(),
+    hasAnonKey: Boolean(supabaseAnonKey?.trim()),
+    hasUrl: Boolean(supabaseUrl?.trim()),
+    urlHost: getSupabaseHostLabel(),
+  };
+}
+
+function getSupabaseHostLabel() {
+  if (!supabaseUrl) return 'not configured';
+  try {
+    return new URL(supabaseUrl).host;
+  } catch {
+    return 'invalid URL';
+  }
 }
 
 function createSupabaseHeaders(extraHeaders: Record<string, string> = {}) {
@@ -52,7 +93,7 @@ function createFollowUpsUrl(query = '') {
 async function readSupabaseResponse<T>(response: Response): Promise<T> {
   const text = await response.text();
   if (!response.ok) {
-    throw new Error(text || `Supabase request failed: ${response.status}`);
+    throw new SupabaseFollowUpError(response, text);
   }
   return text ? (JSON.parse(text) as T) : ([] as T);
 }
@@ -67,6 +108,7 @@ export async function fetchSupabaseFollowUps() {
 }
 
 export async function insertSupabaseFollowUp(item: SupabaseFollowUpInsert) {
+  const url = createFollowUpsUrl();
   const response = await fetch(createFollowUpsUrl(), {
     body: JSON.stringify(item),
     headers: createSupabaseHeaders({ Prefer: 'return=representation' }),
@@ -74,6 +116,12 @@ export async function insertSupabaseFollowUp(item: SupabaseFollowUpInsert) {
   });
 
   const rows = await readSupabaseResponse<SupabaseFollowUpRow[]>(response);
+  console.info('[MORNING FLOW AI] Supabase follow-up insert response', {
+    rowCount: rows.length,
+    status: response.status,
+    statusText: response.statusText,
+    url,
+  });
   return rows[0];
 }
 

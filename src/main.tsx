@@ -55,8 +55,10 @@ import { findRecipeMatch } from './services/recipeDatabase';
 import {
   deleteSupabaseFollowUp,
   fetchSupabaseFollowUps,
+  getSupabaseFollowUpConfigStatus,
   insertSupabaseFollowUp,
   isSupabaseFollowUpConfigured,
+  SupabaseFollowUpError,
   updateSupabaseFollowUp,
   type SupabaseFollowUpRow,
   type SupabaseFollowUpStatus,
@@ -158,6 +160,18 @@ type FollowUpSplitDebug = {
 
 type FollowUpDraftItem = Omit<FollowUpItem, 'completed' | 'completedAt' | 'createdAt' | 'id'> & {
   id: string;
+};
+
+type FollowUpSupabaseDebug = {
+  bodyPreview: string;
+  configured: boolean;
+  error: string;
+  hasAnonKey: boolean;
+  hasUrl: boolean;
+  lastOperation: string;
+  responseStatus: string;
+  rowCount: number | null;
+  urlHost: string;
 };
 
 type FeedbackType = 'usability' | 'improvement' | 'bug' | 'feature' | 'other';
@@ -627,6 +641,9 @@ function App() {
   const [followUpSyncError, setFollowUpSyncError] = React.useState('');
   const [followUpSyncStatus, setFollowUpSyncStatus] = React.useState<'local' | 'syncing' | 'synced' | 'error'>(
     isSupabaseFollowUpConfigured() ? 'syncing' : 'local',
+  );
+  const [followUpSupabaseDebug, setFollowUpSupabaseDebug] = React.useState<FollowUpSupabaseDebug>(() =>
+    createFollowUpSupabaseDebug('init'),
   );
   const [previousSnapshot, setPreviousSnapshot] = React.useState<MorningSnapshot | null>(null);
   const [reviewStatuses, setReviewStatuses] = React.useState<Record<string, ReviewStatus>>({});
@@ -1275,7 +1292,7 @@ function App() {
     setShoppingUpdatedAt(new Date().toISOString());
   };
 
-  const addFollowUp = async (item: Omit<FollowUpItem, 'completed' | 'completedAt' | 'createdAt' | 'id'>) => {
+  const addFollowUp = async (item: Omit<FollowUpItem, 'completed' | 'completedAt' | 'createdAt' | 'id'>): Promise<boolean> => {
     const isDone = item.status === 'done';
     const nextItem: FollowUpItem = {
       ...item,
@@ -1291,21 +1308,41 @@ function App() {
     if (isSupabaseFollowUpConfigured()) {
       try {
         setFollowUpSyncStatus('syncing');
-        const savedRow = await insertSupabaseFollowUp(mapFollowUpItemToSupabaseInsert(nextItem));
+        const insertPayload = mapFollowUpItemToSupabaseInsert(nextItem);
+        console.info('[MORNING FLOW AI] Supabase follow-up insert start', {
+          config: getSupabaseFollowUpConfigStatus(),
+          payload: insertPayload,
+        });
+        setFollowUpSupabaseDebug(createFollowUpSupabaseDebug('insert:start'));
+        const savedRow = await insertSupabaseFollowUp(insertPayload);
+        if (!savedRow) {
+          throw new Error('Supabase insert returned no row. Check table permissions and Prefer return=representation support.');
+        }
         const savedItem = mapSupabaseRowToFollowUpItem(savedRow);
         setFollowUps((current) => [...current.filter((currentItem) => currentItem.id !== savedItem.id), savedItem]);
         notifyFollowUpDueToday(savedItem);
         setFollowUpSyncError('');
         setFollowUpSyncStatus('synced');
-        return;
+        setFollowUpSupabaseDebug({
+          ...createFollowUpSupabaseDebug('insert:success'),
+          responseStatus: '201 Created',
+          rowCount: 1,
+        });
+        return true;
       } catch (error) {
-        setFollowUpSyncError(getSupabaseFollowUpErrorMessage(error));
+        console.error('[MORNING FLOW AI] Supabase follow-up insert failed', error);
+        const message = getSupabaseFollowUpErrorMessage(error);
+        setFollowUpSyncError(message);
         setFollowUpSyncStatus('error');
+        setFollowUpSupabaseDebug(createFollowUpSupabaseDebug('insert:error', error));
+        return false;
       }
     }
 
     setFollowUps((current) => [...current, nextItem]);
     notifyFollowUpDueToday(nextItem);
+    setFollowUpSupabaseDebug(createFollowUpSupabaseDebug('local:add'));
+    return true;
   };
 
   const organizeFollowUpCapture = () => {
@@ -1358,8 +1395,9 @@ function App() {
     const itemsToSave = followUpReviewItems.filter((item) => item.name.trim() && item.content.trim());
     if (!itemsToSave.length) return 0;
 
+    let savedCount = 0;
     for (const item of itemsToSave) {
-      await addFollowUp({
+      const saved = await addFollowUp({
         company: item.company,
         content: item.content.trim(),
         dueDate: item.dueDate,
@@ -1371,9 +1409,12 @@ function App() {
         source: 'voice',
         status: item.status ?? 'pending',
       });
+      if (saved) savedCount += 1;
     }
-    setFollowUpReviewItems([]);
-    return itemsToSave.length;
+    if (savedCount > 0) {
+      setFollowUpReviewItems((current) => current.slice(savedCount));
+    }
+    return savedCount;
   };
 
   const clearFollowUpCapture = () => {
@@ -1631,6 +1672,7 @@ function App() {
           dueTodayCount={dueTodayFollowUps.length}
           completedCount={followUps.filter((item) => item.completed).length}
           followUpSplitDebug={followUpSplitDebug}
+          followUpSupabaseDebug={followUpSupabaseDebug}
           followUpSyncError={followUpSyncError}
           followUpSyncStatus={followUpSyncStatus}
           isClearConfirmOpen={isFollowUpClearConfirmOpen}
@@ -1898,6 +1940,7 @@ function FollowUpManagerPage({
   completedCount,
   dueTodayCount,
   followUpSplitDebug,
+  followUpSupabaseDebug,
   followUpSyncError,
   followUpSyncStatus,
   isClearConfirmOpen,
@@ -1928,13 +1971,14 @@ function FollowUpManagerPage({
   completedCount: number;
   dueTodayCount: number;
   followUpSplitDebug: FollowUpSplitDebug | null;
+  followUpSupabaseDebug: FollowUpSupabaseDebug;
   followUpSyncError: string;
   followUpSyncStatus: 'local' | 'syncing' | 'synced' | 'error';
   isClearConfirmOpen: boolean;
   isListening: boolean;
   isSupported: boolean;
   items: FollowUpItem[];
-  onAdd: (item: Omit<FollowUpItem, 'completed' | 'completedAt' | 'createdAt' | 'id'>) => Promise<void>;
+  onAdd: (item: Omit<FollowUpItem, 'completed' | 'completedAt' | 'createdAt' | 'id'>) => Promise<boolean>;
   onBack: () => void;
   onCancelClear: () => void;
   onClear: () => void;
@@ -2054,6 +2098,13 @@ function FollowUpManagerPage({
       <div className={`follow-up-sync-status ${followUpSyncStatus}`}>
         <span>{getFollowUpSyncStatusLabel(followUpSyncStatus)}</span>
         {followUpSyncError && <small>{followUpSyncError}</small>}
+        <small>Supabase URL: {followUpSupabaseDebug.hasUrl ? followUpSupabaseDebug.urlHost : 'not configured'}</small>
+        <small>Anon Key: {followUpSupabaseDebug.hasAnonKey ? 'configured' : 'not configured'}</small>
+        <small>Last operation: {followUpSupabaseDebug.lastOperation}</small>
+        {followUpSupabaseDebug.responseStatus && <small>Response: {followUpSupabaseDebug.responseStatus}</small>}
+        {typeof followUpSupabaseDebug.rowCount === 'number' && <small>Rows: {followUpSupabaseDebug.rowCount}</small>}
+        {followUpSupabaseDebug.bodyPreview && <small>Body: {followUpSupabaseDebug.bodyPreview}</small>}
+        {followUpSupabaseDebug.error && <small>Error: {followUpSupabaseDebug.error}</small>}
       </div>
 
       <div className="focus-area follow-up-capture">
@@ -4045,6 +4096,24 @@ function normalizeSupabaseFollowUpKind(actionType: string | null | undefined): F
 function getSupabaseFollowUpErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return `Supabase同期に失敗しました。${message}`;
+}
+
+function createFollowUpSupabaseDebug(lastOperation: string, error?: unknown): FollowUpSupabaseDebug {
+  const config = getSupabaseFollowUpConfigStatus();
+  const supabaseError = error instanceof SupabaseFollowUpError ? error : null;
+  const fallbackError = error && !supabaseError ? (error instanceof Error ? error.message : String(error)) : '';
+
+  return {
+    bodyPreview: supabaseError?.body ? supabaseError.body.slice(0, 220) : '',
+    configured: config.configured,
+    error: supabaseError ? supabaseError.message : fallbackError,
+    hasAnonKey: config.hasAnonKey,
+    hasUrl: config.hasUrl,
+    lastOperation,
+    responseStatus: supabaseError ? `${supabaseError.status} ${supabaseError.statusText}`.trim() : '',
+    rowCount: null,
+    urlHost: config.urlHost,
+  };
 }
 
 function getFollowUpSyncStatusLabel(status: 'local' | 'syncing' | 'synced' | 'error') {
