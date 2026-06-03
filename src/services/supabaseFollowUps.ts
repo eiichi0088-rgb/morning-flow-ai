@@ -10,6 +10,7 @@ export type SupabaseFollowUpRow = {
   status: SupabaseFollowUpStatus;
   title: string;
   updated_at: string;
+  user_id: string;
 };
 
 export type SupabaseFollowUpInsert = {
@@ -22,6 +23,7 @@ export type SupabaseFollowUpInsert = {
   status: SupabaseFollowUpStatus;
   title: string;
   updated_at: string;
+  user_id: string;
 };
 
 export type SupabaseFollowUpUpdate = Partial<SupabaseFollowUpInsert> & {
@@ -101,8 +103,8 @@ async function readSupabaseResponse<T>(response: Response): Promise<T> {
   return text ? (JSON.parse(text) as T) : ([] as T);
 }
 
-export async function fetchSupabaseFollowUps() {
-  const response = await fetch(createFollowUpsUrl('select=*&order=updated_at.desc'), {
+export async function fetchSupabaseFollowUps(userId: string) {
+  const response = await fetch(createFollowUpsUrl(`select=*&user_id=eq.${encodeURIComponent(userId)}&order=updated_at.desc`), {
     headers: createSupabaseHeaders(),
     method: 'GET',
   });
@@ -128,8 +130,8 @@ export async function insertSupabaseFollowUp(item: SupabaseFollowUpInsert) {
   return rows[0];
 }
 
-export async function updateSupabaseFollowUp(itemId: string, updates: SupabaseFollowUpUpdate) {
-  const response = await fetch(createFollowUpsUrl(`id=eq.${encodeURIComponent(itemId)}`), {
+export async function updateSupabaseFollowUp(itemId: string, userId: string, updates: SupabaseFollowUpUpdate) {
+  const response = await fetch(createFollowUpsUrl(`id=eq.${encodeURIComponent(itemId)}&user_id=eq.${encodeURIComponent(userId)}`), {
     body: JSON.stringify({
       ...updates,
       updated_at: updates.updated_at ?? new Date().toISOString(),
@@ -142,8 +144,8 @@ export async function updateSupabaseFollowUp(itemId: string, updates: SupabaseFo
   return rows[0];
 }
 
-export async function deleteSupabaseFollowUp(itemId: string) {
-  const response = await fetch(createFollowUpsUrl(`id=eq.${encodeURIComponent(itemId)}`), {
+export async function deleteSupabaseFollowUp(itemId: string, userId: string) {
+  const response = await fetch(createFollowUpsUrl(`id=eq.${encodeURIComponent(itemId)}&user_id=eq.${encodeURIComponent(userId)}`), {
     headers: createSupabaseHeaders(),
     method: 'DELETE',
   });

@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 3.5.0 - 2026-06-04
+
+- Added Follow Up user data isolation using `follow_ups.user_id`.
+- Follow Up insert payload now stores the logged-in Supabase Auth user id.
+- Follow Up fetch, update, complete, reopen, and delete requests are scoped by `user_id`.
+- Added Supabase SQL/RLS guidance in version notes.
+
 ## Version 3.4.0 - 2026-06-04
 
 - Added Supabase Auth foundation with email/password login and signup screen.

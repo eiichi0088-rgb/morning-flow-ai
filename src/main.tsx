@@ -833,10 +833,16 @@ function App() {
       setFollowUpSyncStatus('local');
       return;
     }
+    const userId = authSession?.user.id;
+    if (!userId) {
+      setFollowUpSyncStatus('error');
+      setFollowUpSyncError('ログインユーザーを確認できませんでした。');
+      return;
+    }
 
     setFollowUpSyncStatus('syncing');
     try {
-      const rows = await fetchSupabaseFollowUps();
+      const rows = await fetchSupabaseFollowUps(userId);
       setFollowUps(rows.map(mapSupabaseRowToFollowUpItem));
       setFollowUpSyncError('');
       setFollowUpLastSyncedAt(new Date().toISOString());
@@ -845,7 +851,7 @@ function App() {
       setFollowUpSyncError('同期できませんでした。通信を確認してください。');
       setFollowUpSyncStatus('error');
     }
-  }, []);
+  }, [authSession?.user.id]);
 
   React.useEffect(() => {
     void syncFollowUpsFromSupabase();
@@ -1364,8 +1370,10 @@ function App() {
 
     if (isSupabaseFollowUpConfigured()) {
       try {
+        const userId = authSession?.user.id;
+        if (!userId) throw new Error('ログインユーザーを確認できませんでした。');
         setFollowUpSyncStatus('syncing');
-        const insertPayload = mapFollowUpItemToSupabaseInsert(nextItem);
+        const insertPayload = mapFollowUpItemToSupabaseInsert(nextItem, userId);
         console.info('[MORNING FLOW AI] Supabase follow-up insert start', {
           config: getSupabaseFollowUpConfigStatus(),
           payload: insertPayload,
@@ -1609,7 +1617,13 @@ function App() {
       ),
     );
     if (isSupabaseFollowUpConfigured()) {
-      void updateSupabaseFollowUp(itemId, {
+      const userId = authSession?.user.id;
+      if (!userId) {
+        setFollowUpSyncError('ログインユーザーを確認できませんでした。');
+        setFollowUpSyncStatus('error');
+        return;
+      }
+      void updateSupabaseFollowUp(itemId, userId, {
         completed_at: completedAt,
         status: 'done',
       })
@@ -1639,7 +1653,13 @@ function App() {
       ),
     );
     if (isSupabaseFollowUpConfigured()) {
-      void updateSupabaseFollowUp(itemId, {
+      const userId = authSession?.user.id;
+      if (!userId) {
+        setFollowUpSyncError('ログインユーザーを確認できませんでした。');
+        setFollowUpSyncStatus('error');
+        return;
+      }
+      void updateSupabaseFollowUp(itemId, userId, {
         completed_at: null,
         status: 'pending',
       })
@@ -1671,7 +1691,13 @@ function App() {
 
     setFollowUps((current) => current.map((currentItem) => (currentItem.id === itemId ? nextItem : currentItem)));
     if (isSupabaseFollowUpConfigured()) {
-      void updateSupabaseFollowUp(itemId, {
+      const userId = authSession?.user.id;
+      if (!userId) {
+        setFollowUpSyncError('ログインユーザーを確認できませんでした。');
+        setFollowUpSyncStatus('error');
+        return;
+      }
+      void updateSupabaseFollowUp(itemId, userId, {
         memo: nextContent,
         person_name: nextName,
         title: formatFollowUpTitle(nextItem),
@@ -1691,7 +1717,13 @@ function App() {
   const deleteFollowUp = (itemId: string) => {
     setFollowUps((current) => current.filter((item) => item.id !== itemId));
     if (isSupabaseFollowUpConfigured()) {
-      void deleteSupabaseFollowUp(itemId)
+      const userId = authSession?.user.id;
+      if (!userId) {
+        setFollowUpSyncError('ログインユーザーを確認できませんでした。');
+        setFollowUpSyncStatus('error');
+        return;
+      }
+      void deleteSupabaseFollowUp(itemId, userId)
         .then(() => {
           setFollowUpSyncError('');
           setFollowUpSyncStatus('synced');
@@ -4610,7 +4642,7 @@ function mapSupabaseRowToFollowUpItem(row: SupabaseFollowUpRow): FollowUpItem {
   };
 }
 
-function mapFollowUpItemToSupabaseInsert(item: FollowUpItem) {
+function mapFollowUpItemToSupabaseInsert(item: FollowUpItem, userId: string) {
   const status = mapFollowUpStatusToSupabase(item.completed ? 'done' : item.status ?? 'pending');
   return {
     action_type: item.kind,
@@ -4622,6 +4654,7 @@ function mapFollowUpItemToSupabaseInsert(item: FollowUpItem) {
     status,
     title: formatFollowUpTitle(item),
     updated_at: new Date().toISOString(),
+    user_id: userId,
   };
 }
 
