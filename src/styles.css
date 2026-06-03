@@ -1074,6 +1074,17 @@ h1 {
   border-color: rgba(247, 231, 190, 0.25);
 }
 
+.follow-up-list[aria-label="完了一覧"] .follow-up-item {
+  border-color: rgba(134, 239, 172, 0.16);
+  background:
+    linear-gradient(145deg, rgba(134, 239, 172, 0.07), rgba(255, 255, 255, 0.035)),
+    rgba(7, 20, 18, 0.45);
+}
+
+.follow-up-completed-meta {
+  color: rgba(187, 247, 208, 0.84);
+}
+
 .follow-up-priority,
 .follow-up-kind {
   color: #03101c;

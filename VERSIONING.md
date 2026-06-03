@@ -5,8 +5,19 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.16.0 is based on v2.15.7 plus the Follow Up Review screen before saving. Do not mix v3.0 or v3.1 UI.
+6. v2.17.0 is based on v2.16.0 plus Follow Up completion history improvements. Do not mix v3.0 or v3.1 UI.
 
+
+## Version 2.17.0 Follow Up Completion History - 2026-06-04
+
+- Screen display: v2.17.0
+- ZIP: morning-flow-ai-v2.17.0.zip
+- Next planned version: Version 2.17.1
+- Completed Follow Up tasks remain stored and move to `完了履歴`.
+- Completion timestamp is shown on completed history cards.
+- Completed history sorts by latest completion time first.
+- Completed tasks can be restored to `未対応`.
+- Apple Calendar, Google Calendar, Upstash Redis storage, Analytics Lite, shopping list behavior, morning schedule logic, feedback, Developer Mode, snapshots, and session behavior are preserved.
 
 ## Version 2.16.0 Follow Up Review Screen - 2026-06-04
 

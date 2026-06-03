@@ -1495,6 +1495,7 @@ function App() {
       ) : isFollowUpView ? (
         <FollowUpManagerPage
           dueTodayCount={dueTodayFollowUps.length}
+          completedCount={followUps.filter((item) => item.completed).length}
           followUpSplitDebug={followUpSplitDebug}
           isClearConfirmOpen={isFollowUpClearConfirmOpen}
           isListening={isListening}
@@ -1757,6 +1758,7 @@ function App() {
 }
 
 function FollowUpManagerPage({
+  completedCount,
   dueTodayCount,
   followUpSplitDebug,
   isClearConfirmOpen,
@@ -1783,6 +1785,7 @@ function FollowUpManagerPage({
   resultText,
   reviewItems,
 }: {
+  completedCount: number;
   dueTodayCount: number;
   followUpSplitDebug: FollowUpSplitDebug | null;
   isClearConfirmOpen: boolean;
@@ -1823,7 +1826,7 @@ function FollowUpManagerPage({
 
   const suggestion = React.useMemo(() => suggestFollowUp(content), [content]);
   const pendingItems = React.useMemo(() => sortFollowUps(items.filter((item) => !item.completed)), [items]);
-  const completedItems = React.useMemo(() => sortFollowUps(items.filter((item) => item.completed)), [items]);
+  const completedItems = React.useMemo(() => sortCompletedFollowUps(items.filter((item) => item.completed)), [items]);
 
   React.useEffect(() => {
     if (!content.trim()) return;
@@ -1898,6 +1901,10 @@ function FollowUpManagerPage({
         <div>
           <span>今日期限</span>
           <strong>{dueTodayCount}件</strong>
+        </div>
+        <div>
+          <span>完了履歴</span>
+          <strong>{completedCount}件</strong>
         </div>
       </div>
 
@@ -2517,6 +2524,12 @@ function FollowUpList({
               <CheckCircle2 size={15} />
               <span>状態 {followUpStatusLabel(item)}</span>
             </div>
+            {mode === 'completed' && (
+              <div className="follow-up-meta follow-up-completed-meta">
+                <CheckCircle2 size={15} />
+                <span>完了 {formatFollowUpCompletedAt(item)}</span>
+              </div>
+            )}
             <div className="follow-up-actions">
               {mode === 'pending' ? (
                 <button onClick={() => onComplete(item.id)} type="button">
@@ -3816,6 +3829,18 @@ function sortFollowUps(items: FollowUpItem[]) {
   });
 }
 
+function sortCompletedFollowUps(items: FollowUpItem[]) {
+  return [...items].sort((a, b) => {
+    const completedDiff = getFollowUpCompletedTime(b) - getFollowUpCompletedTime(a);
+    if (completedDiff !== 0) return completedDiff;
+    return parseFollowUpDate(b.dueDate).getTime() - parseFollowUpDate(a.dueDate).getTime();
+  });
+}
+
+function getFollowUpCompletedTime(item: FollowUpItem) {
+  return item.completedAt ? new Date(item.completedAt).getTime() : 0;
+}
+
 function suggestFollowUp(text: string): { priority: FollowUpPriority; kind: FollowUpKind } {
   const normalized = text.toLowerCase();
   const kind: FollowUpKind = includesAny(normalized, ['line'])
@@ -4098,6 +4123,17 @@ function formatFollowUpDue(item: FollowUpItem) {
     weekday: 'short',
   });
   return item.dueTime ? dateLabel + ' ' + item.dueTime : dateLabel;
+}
+
+function formatFollowUpCompletedAt(item: FollowUpItem) {
+  if (!item.completedAt) return '日時未記録';
+  return new Date(item.completedAt).toLocaleString('ja-JP', {
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'long',
+    weekday: 'short',
+  });
 }
 
 function formatFollowUpTitle(item: FollowUpItem) {

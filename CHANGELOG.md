@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 2.17.0 - 2026-06-04
+
+- Improved Follow Up Manager completion history.
+- Completed tasks remain stored and move to `完了履歴` with completion timestamp.
+- Completed history now sorts by latest completion time first.
+- Completed tasks can be returned to `未対応` while preserving the original follow-up item.
+
 ## Version 2.16.0 - 2026-06-04
 
 - Added a Follow Up Review screen between AI organization and saving.
