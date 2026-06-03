@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 2.14.1 - 2026-06-03
+
+- Isolated shopping list items from morning todos and schedule generation.
+- Shopping list output is limited to purchase items, while morning todos and schedule keep only explicit shopping actions such as `買い物へ行く`.
+- Added guards against AI-generated shopping support chores such as `買い物リストを確認する`, `食材を冷蔵保存する`, `食材を冷凍保存する`, and `買った食材を整理する`.
+- Apple Calendar, Google Calendar, Upstash Redis, Analytics, and Follow Up Manager behavior are unchanged.
+
 ## Version 2.14.0 - 2026-06-03
 
 - Started the Future AI UI design refresh while keeping existing MORNING FLOW AI features intact.

@@ -5,9 +5,19 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v2.14.0 is based on v2.13.12 normal UI plus a Future AI design refresh. Do not mix v3.0 or v3.1 UI.
+6. v2.14.1 is based on v2.14.0 Future AI UI plus shopping list isolation. Do not mix v3.0 or v3.1 UI.
 
 
+
+## Version 2.14.1 Shopping List Isolation Fix - 2026-06-03
+
+- Screen display: v2.14.1
+- ZIP: morning-flow-ai-v2.14.1.zip
+- Next planned version: Version 2.14.2
+- Shopping list storage is limited to purchase items only.
+- Morning todos and schedule keep explicit shopping actions only, such as `買い物へ行く` or `スーパーへ行く`.
+- AI-generated shopping support chores are filtered out, including `買い物リストを確認する`, `食材を冷蔵保存する`, `食材を冷凍保存する`, and `買った食材を整理する`.
+- Apple Calendar, Google Calendar, Upstash Redis storage, Analytics Lite, FOLLOW UP MANAGER behavior, feedback, Developer Mode, snapshots, and session behavior are preserved.
 
 ## Version 2.14.0 Future AI UI Design Start - 2026-06-03
 

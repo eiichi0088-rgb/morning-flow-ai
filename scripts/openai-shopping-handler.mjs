@@ -68,6 +68,8 @@ export async function createShoppingPlanFromTranscript(text, currentItems = []) 
     'Classify Japanese shopping items into simple categories anyone can use.',
     'Return only JSON that matches the schema.',
     'Return the complete merged shopping list: include relevant existing items plus the new items.',
+    'Shopping list output must contain purchase items only, such as 卵, 牛乳, 玉ねぎ, 豚肉.',
+    'Do not return actions or tasks such as 買い物へ行く, スーパーへ行く, 買い物リストを確認する, 食材を保存する, or 冷蔵する.',
     'Merge duplicates into one item.',
     'Very important: preserve quantities and units. Never delete quantities such as 3キロ, 1.5キロ, 1本, 3パック, 1袋, 1つ, 2個, 500ml, 2L.',
     'Separate item name and quantity. Do not mix quantity into name.',

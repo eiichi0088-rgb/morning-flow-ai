@@ -232,7 +232,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.14.0';
+const appVersion = 'v2.14.1';
 const isMealDatabaseExperimentalEnabled = false;
 type AppleCalendarDisposition = 'inline' | 'attachment';
 
@@ -3549,9 +3549,15 @@ function prepareUnifiedMorningPlan(plan: MorningPlan, sourceText: string, shoppi
   const extractedActions = extractScheduleActionsFromUnifiedInput(sourceText);
   const extractedSchedule = extractDatedScheduleItems(sourceText);
   const futureTaskNames = new Set(extractedSchedule.map((item) => normalizeTaskText(item.task)));
-  const shoppingAction = shoppingItems.length ? ['買い物へ行く'] : [];
+  const hasShoppingAction = hasShoppingActionIntent(sourceText);
+  const hasShoppingItems = extractShoppingItemsFromUnifiedInput(sourceText).length > 0;
+  const shouldAddShoppingAction = hasShoppingAction || hasShoppingItems;
+  const shoppingAction = shouldAddShoppingAction ? ['買い物へ行く'] : [];
+  const shoppingSchedule = shouldAddShoppingAction ? [{ time: '時間調整', task: '買い物へ行く' }] : [];
   const isShoppingText = (value: string) =>
-    isShoppingItemText(value) || shoppingItems.some((item) => normalizeTaskText(value).includes(normalizeTaskText(item.name)));
+    isGeneratedShoppingSupportTask(value) ||
+    isShoppingItemText(value) ||
+    shoppingItems.some((item) => normalizeTaskText(value).includes(normalizeTaskText(item.name)));
   const isFutureTaskText = (value: string) =>
     Array.from(futureTaskNames).some((task) => task && normalizeTaskText(value).includes(task));
 
@@ -3564,7 +3570,7 @@ function prepareUnifiedMorningPlan(plan: MorningPlan, sourceText: string, shoppi
     schedule: sortScheduleByTime(
       mergeSchedule(
         plan.schedule.filter((item) => !isShoppingText(item.task) && !isFutureTaskText(item.task)),
-        extractedSchedule,
+        mergeSchedule(extractedSchedule, shoppingSchedule),
       ),
     ),
     priorities: {
@@ -3573,10 +3579,15 @@ function prepareUnifiedMorningPlan(plan: MorningPlan, sourceText: string, shoppi
       optional: plan.priorities.optional.filter((item) => !isShoppingText(item) && !isFutureTaskText(item)),
     },
     categories: {
-      work: plan.categories.work.filter((item) => !shoppingNames.has(normalizeTaskText(item))),
-      health: plan.categories.health.filter((item) => !shoppingNames.has(normalizeTaskText(item))),
-      family: plan.categories.family.filter((item) => !shoppingNames.has(normalizeTaskText(item))),
-      learning: plan.categories.learning.filter((item) => !shoppingNames.has(normalizeTaskText(item))),
+      work: plan.categories.work.filter((item) => !isShoppingText(item) && !shoppingNames.has(normalizeTaskText(item))),
+      health: plan.categories.health.filter((item) => !isShoppingText(item) && !shoppingNames.has(normalizeTaskText(item))),
+      family: plan.categories.family.filter((item) => !isShoppingText(item) && !shoppingNames.has(normalizeTaskText(item))),
+      learning: plan.categories.learning.filter((item) => !isShoppingText(item) && !shoppingNames.has(normalizeTaskText(item))),
+    },
+    advice: plan.advice.filter((item) => !isGeneratedShoppingSupportTask(item)),
+    coach: {
+      ...plan.coach,
+      successConditions: plan.coach.successConditions.filter((item) => !isGeneratedShoppingSupportTask(item)),
     },
   };
 }
@@ -3640,6 +3651,22 @@ function extractScheduleActionsFromUnifiedInput(text: string) {
   }
 
   return Array.from(new Set(actions));
+}
+
+function hasShoppingActionIntent(text: string) {
+  return /(買い物|スーパー|店|ドラッグストア|コンビニ|市場).*(行く|寄る|行って|寄って)|(?:行く|寄る).*(買い物|スーパー|店|ドラッグストア|コンビニ|市場)/.test(text);
+}
+
+function isGeneratedShoppingSupportTask(text: string) {
+  const normalized = normalizeTaskText(text);
+  if (!normalized) return false;
+
+  return (
+    /買い物リスト.*(確認|チェック|整理|見直|作成|準備)/.test(normalized) ||
+    /食材.*(冷蔵|冷凍|保存|整理|仕分|下処理|片付)/.test(normalized) ||
+    /買った.*(食材|もの|物).*(整理|保存|片付|冷蔵|冷凍)/.test(normalized) ||
+    /購入品.*(整理|保存|片付|確認)/.test(normalized)
+  );
 }
 
 function extractDatedScheduleItems(text: string): MorningPlan['schedule'] {

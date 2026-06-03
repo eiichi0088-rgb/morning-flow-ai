@@ -204,6 +204,7 @@ function mergeAiItems(
     const quantity = normalizeQuantity(parsed.quantity || aiItem.quantity || '');
     const normalized = normalizeName(name);
     if (!normalized) return;
+    if (isShoppingMetaOrActionText(name)) return;
 
     const category = normalizeCategory(aiItem.category);
     const existing = existingByName.get(normalized);
@@ -244,7 +245,7 @@ function extractShoppingItems(text: string): ParsedShoppingInput[] {
     .split(/[、，,]+/)
     .map(parseShoppingItemInput)
     .filter((item) => item.name.length >= 1)
-    .filter((item) => !/買い物|リスト|予定|修正|削除|消して|外して/.test(item.name));
+    .filter((item) => !isShoppingMetaOrActionText(item.name));
 }
 
 function cleanShoppingItemName(item: string) {
@@ -298,6 +299,16 @@ function normalizeForMatching(value: string) {
 
 function normalizeName(name: string) {
   return normalizeForMatching(name).replace(/[。、，,]/g, '');
+}
+
+function isShoppingMetaOrActionText(text: string) {
+  const normalized = normalizeForMatching(text);
+  return (
+    /買い物|リスト|予定|修正|削除|消して|外して/.test(normalized) ||
+    /(スーパー|店|ドラッグストア|コンビニ).*(行く|寄る)/.test(normalized) ||
+    /食材.*(冷蔵|冷凍|保存|整理|仕分|下処理|片付)/.test(normalized) ||
+    /買った.*(食材|もの|物).*(整理|保存|片付|冷蔵|冷凍)/.test(normalized)
+  );
 }
 
 function createShoppingItemId() {
