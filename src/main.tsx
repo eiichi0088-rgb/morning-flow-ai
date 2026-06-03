@@ -90,6 +90,7 @@ const SpeechRecognition =
 
 const sampleTranscript =
   '\u4eca\u65e5\u306f\u4f11\u307f\u306a\u306e\u3067\u3001\u5348\u524d\u4e2d\u306b\u6383\u9664\u3068\u6d17\u6fef\u3092\u6e08\u307e\u305b\u308b\u3002\u5348\u5f8c\u306f\u53cb\u4eba\u3068\u30e9\u30f3\u30c1\u3078\u884c\u304d\u3001\u5915\u65b9\u306b\u8cb7\u3044\u7269\u3092\u3057\u3066\u3001\u591c\u306f\u6620\u753b\u3092\u898b\u306a\u304c\u3089\u3086\u3063\u304f\u308a\u904e\u3054\u3057\u305f\u3044\u3002';
+const followUpPersonSuffixPattern = '(?:さん|くん|君|ちゃん|先生|社長|様|氏)';
 
 const legacySharedStorageKeys = [
   'morning-flow-ai:transcript-draft:v1',
@@ -135,6 +136,7 @@ type FollowUpItem = {
 };
 
 type FollowUpSplitDebug = {
+  excludedReasons: string[];
   generatedItemCount: number;
   personCount: number;
   persons: string[];
@@ -1922,6 +1924,7 @@ function FollowUpManagerPage({
             <small>再評価: {followUpSplitDebug.reevaluated ? 'あり' : 'なし'}</small>
             <small>方式: {followUpSplitDebug.strategy}</small>
             <small>人物: {followUpSplitDebug.persons.join(', ') || '-'}</small>
+            <small>除外理由: {followUpSplitDebug.excludedReasons.join(' / ') || '-'}</small>
           </div>
         )}
       </section>
@@ -3688,24 +3691,20 @@ function extractFollowUpsFromText(text: string): FollowUpItem[] {
 
 function createFollowUpsFromSplitText(text: string) {
   const persons = extractFollowUpPersons(text);
-  const separatorItems = splitInputItems(text)
-    .filter(detectFollowUpIntent)
-    .map((rawText) => createVoiceFollowUp(rawText.trim()))
-    .filter((item): item is FollowUpItem => Boolean(item));
-  const personBoundaryItems = splitFollowUpTextByPerson(text)
-    .filter(detectFollowUpIntent)
-    .map((rawText) => createVoiceFollowUp(rawText.trim()))
-    .filter((item): item is FollowUpItem => Boolean(item));
-  const shouldUsePersonBoundary = persons.length > 1 && personBoundaryItems.length >= persons.length;
-  const shouldReevaluate = persons.length > 0 && separatorItems.length < persons.length;
+  const separatorResult = createFollowUpItemsFromSegments(splitInputItems(text));
+  const personBoundaryResult = createFollowUpItemsFromSegments(splitFollowUpTextByPerson(text));
+  const shouldUsePersonBoundary = persons.length > 1 && personBoundaryResult.items.length >= persons.length;
+  const shouldReevaluate = persons.length > 0 && separatorResult.items.length < persons.length;
   const strategy: FollowUpSplitDebug['strategy'] =
     shouldUsePersonBoundary || shouldReevaluate ? 'person-boundary' : 'separator';
+  const selectedResult = shouldUsePersonBoundary || shouldReevaluate ? personBoundaryResult : separatorResult;
   const items = dedupeFollowUpItems(
-    shouldUsePersonBoundary || shouldReevaluate ? personBoundaryItems : separatorItems,
+    selectedResult.items,
   );
 
   return {
     debug: {
+      excludedReasons: selectedResult.excludedReasons,
       generatedItemCount: items.length,
       personCount: persons.length,
       persons,
@@ -3714,6 +3713,28 @@ function createFollowUpsFromSplitText(text: string) {
     },
     items,
   };
+}
+
+function createFollowUpItemsFromSegments(segments: string[]) {
+  const excludedReasons: string[] = [];
+  const items = segments
+    .map((rawText) => {
+      const segment = rawText.trim();
+      if (!segment) return null;
+      if (!detectFollowUpIntent(segment)) {
+        excludedReasons.push(`${extractFollowUpName(segment)}: フォロー意図を検出できませんでした (${segment})`);
+        return null;
+      }
+      const item = createVoiceFollowUp(segment);
+      if (!item) {
+        excludedReasons.push(`${segment}: フォロー項目を作成できませんでした`);
+        return null;
+      }
+      return item;
+    })
+    .filter((item): item is FollowUpItem => Boolean(item));
+
+  return { excludedReasons, items };
 }
 
 function createVoiceFollowUp(text: string): FollowUpItem | null {
@@ -3747,7 +3768,7 @@ function splitInputItems(text: string) {
 
 function splitFollowUpTextByPerson(text: string) {
   const normalized = text.replace(/\s+/g, ' ').trim();
-  const matches = Array.from(normalized.matchAll(/[^、。,.!?！？\n\s]+(?:さん|君|様|氏)(?:に|へ)/g));
+  const matches = Array.from(normalized.matchAll(new RegExp(`[^、。,.!?！？\\n\\s]+${followUpPersonSuffixPattern}(?:に|へ)`, 'g')));
   if (matches.length <= 1) return splitInputItems(text);
 
   return matches
@@ -3762,14 +3783,18 @@ function splitFollowUpTextByPerson(text: string) {
 function normalizeFollowUpSplitText(text: string) {
   return text
     .replace(/\s+/g, ' ')
-    .replace(/(?!^)([^、。,.!?！？\n\s]+(?:さん|君|様|氏)(?:に|へ))/g, '\n$1')
+    .replace(new RegExp(`(?!^)([^、。,.!?！？\\n\\s]+${followUpPersonSuffixPattern}(?:に|へ))`, 'g'), '\n$1')
     .trim();
 }
 
 function extractFollowUpPersons(text: string) {
-  return Array.from(new Set(Array.from(text.matchAll(/([^、。,.!?！？\n\s]+(?:さん|君|様|氏))(?:に|へ)/g))
-    .map((match) => match[1].trim())
+  return Array.from(new Set(Array.from(text.matchAll(new RegExp(`([^、。,.!?！？\\n\\s]+${followUpPersonSuffixPattern})(?:に|へ)`, 'g')))
+    .map((match) => normalizeFollowUpPersonName(match[1].trim()))
     .filter(Boolean)));
+}
+
+function normalizeFollowUpPersonName(name: string) {
+  return name.split('の').pop()?.trim() || name.trim();
 }
 
 function dedupeFollowUpItems(items: FollowUpItem[]) {
@@ -3808,15 +3833,15 @@ function detectWeekdayDate(text: string) {
 
 function extractFollowUpName(text: string) {
   const cleaned = text.replace(/^(今日は|今日|明日|あした|あとで)/, '').trim();
-  const match = cleaned.match(/^(.+?(?:さん|君|様|氏)?)(?:に|へ)(?:.*)$/);
+  const match = cleaned.match(new RegExp(`^(.+?${followUpPersonSuffixPattern}?)(?:に|へ)(?:.*)$`));
   const rawName = match?.[1] ?? cleaned.replace(/(へ|に)?(電話|折り返し|返信|連絡|返事|メール|LINE|SMS).*/, '').trim();
-  return rawName || '\u9023\u7d61\u5148\u672a\u8a2d\u5b9a';
+  return normalizeFollowUpPersonName(rawName) || '\u9023\u7d61\u5148\u672a\u8a2d\u5b9a';
 }
 
 function normalizeFollowUpContent(text: string) {
   const withoutLead = text
     .replace(/^(今日は|今日|明日|あした|あとで)/, '')
-    .replace(/^(.+?(?:さん|君|様|氏)?)(?:に|へ)/, '')
+    .replace(new RegExp(`^(.+?${followUpPersonSuffixPattern}?)(?:に|へ)`), '')
     .replace(/(今日中|明日中|今週中|来週中|日曜日|月曜日|火曜日|水曜日|木曜日|金曜日|土曜日)(まで|に)?/g, '')
     .replace(/\s+/g, ' ')
     .trim();
