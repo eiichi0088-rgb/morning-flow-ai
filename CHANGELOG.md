@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 2.15.3 - 2026-06-03
+
+- Fixed Follow Up Capture so the Editable Transcript remains visible after `フォローを整理する`.
+- Transcript text stays editable after AI organization, allowing users to compare the original spoken text with generated follow-up cards.
+- Transcript clearing now remains limited to explicit user actions such as `全文削除`.
+- Apple Calendar, Google Calendar, Upstash Redis, Analytics, and shopping list behavior are unchanged.
+
 ## Version 2.15.2 - 2026-06-03
 
 - Fixed Follow Up Capture person-based splitting so changed contacts create separate follow-up cards.

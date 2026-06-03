@@ -234,7 +234,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
-const appVersion = 'v2.15.2';
+const appVersion = 'v2.15.3';
 const isMealDatabaseExperimentalEnabled = false;
 type AppleCalendarDisposition = 'inline' | 'attachment';
 
@@ -1254,7 +1254,6 @@ function App() {
         source: 'voice',
       });
     });
-    setFollowUpCaptureText('');
     setInterimTranscript('');
     setIsFollowUpClearConfirmOpen(false);
     return nextItems.length;
