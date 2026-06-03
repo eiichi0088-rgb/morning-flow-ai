@@ -639,6 +639,8 @@ function App() {
   const [isFollowUpClearConfirmOpen, setIsFollowUpClearConfirmOpen] = React.useState(false);
   const [followUpSplitDebug, setFollowUpSplitDebug] = React.useState<FollowUpSplitDebug | null>(null);
   const [followUpReviewItems, setFollowUpReviewItems] = React.useState<FollowUpDraftItem[]>([]);
+  const [morningFollowUpCandidates, setMorningFollowUpCandidates] = React.useState<FollowUpDraftItem[]>([]);
+  const [morningFollowUpMessage, setMorningFollowUpMessage] = React.useState('');
   const [followUps, setFollowUps] = React.useState<FollowUpItem[]>([]);
   const [followUpSyncError, setFollowUpSyncError] = React.useState('');
   const [followUpLastSyncedAt, setFollowUpLastSyncedAt] = React.useState<string | null>(null);
@@ -942,6 +944,8 @@ function App() {
     setCarriedTodos([]);
     setCaptureMode('create');
     setHighlightedScheduleKeys([]);
+    setMorningFollowUpCandidates([]);
+    setMorningFollowUpMessage('');
   };
 
   const useSample = () => {
@@ -956,6 +960,8 @@ function App() {
     setPlan(null);
     setCaptureMode('create');
     setHighlightedScheduleKeys([]);
+    setMorningFollowUpCandidates([]);
+    setMorningFollowUpMessage('');
   };
 
   const organizeMorning = () => {
@@ -964,7 +970,8 @@ function App() {
     trackAnalyticsFeature(analyticsUserId, 'morning_flow');
     setIsOrganizing(true);
     setError('');
-    addVoiceFollowUpsFromText(transcript);
+    setMorningFollowUpCandidates([]);
+    setMorningFollowUpMessage('');
 
     Promise.all([createAiMorningPlan(transcript), createShoppingPlan(transcript, shoppingItems)])
       .then(([nextPlan, shoppingPlan]) => {
@@ -976,6 +983,7 @@ function App() {
           carriedTodos,
         );
         setPlan(planWithCarryover);
+        setMorningFollowUpCandidates(createMorningFollowUpCandidates(planWithCarryover, followUps));
         setShoppingText(transcript.trim());
         setOriginalShoppingText(transcript.trim());
         setShoppingItems(classifiedShoppingItems);
@@ -1009,6 +1017,8 @@ function App() {
       .then((nextPlan) => {
         const mergedPlan = preserveExistingPlan(previousPlan, nextPlan);
         setPlan(mergedPlan);
+        setMorningFollowUpCandidates(createMorningFollowUpCandidates(mergedPlan, followUps));
+        setMorningFollowUpMessage('');
         setHighlightedScheduleKeys(findNewScheduleKeys(previousPlan, mergedPlan));
         setTranscript((current) => `${current.trim()}\n\n追加・修正指示:\n${updateInstruction.trim()}`.trim());
         setUpdateInstruction('');
@@ -1051,6 +1061,8 @@ function App() {
     setInterimTranscript('');
     setIsTranscriptClearConfirmOpen(false);
     setPlan(null);
+    setMorningFollowUpCandidates([]);
+    setMorningFollowUpMessage('');
   };
 
   const restoreOriginalTranscript = () => {
@@ -1058,6 +1070,8 @@ function App() {
     setInterimTranscript('');
     setIsTranscriptClearConfirmOpen(false);
     setPlan(null);
+    setMorningFollowUpCandidates([]);
+    setMorningFollowUpMessage('');
   };
 
   const clearEditableTranscript = () => {
@@ -1067,6 +1081,8 @@ function App() {
     setInterimTranscript('');
     setPlan(null);
     setError('');
+    setMorningFollowUpCandidates([]);
+    setMorningFollowUpMessage('');
     setIsListening(false);
     setIsTranscriptClearConfirmOpen(false);
   };
@@ -1442,6 +1458,33 @@ function App() {
       nextItems.forEach(notifyFollowUpDueToday);
       return nextItems.length ? [...current, ...nextItems] : current;
     });
+  };
+
+  const saveMorningFollowUpCandidates = async () => {
+    if (!morningFollowUpCandidates.length) return;
+    let savedCount = 0;
+    for (const item of morningFollowUpCandidates) {
+      const saved = await addFollowUp({
+        company: item.company,
+        content: item.content,
+        dueDate: item.dueDate,
+        duePreset: item.duePreset,
+        dueTime: item.dueTime,
+        kind: item.kind,
+        name: item.name,
+        priority: item.priority,
+        source: 'voice',
+        status: item.status ?? 'pending',
+      });
+      if (saved) savedCount += 1;
+    }
+    setMorningFollowUpCandidates([]);
+    setMorningFollowUpMessage(savedCount ? `${savedCount}件を未返信・折り返しに追加しました。` : '追加できる候補がありませんでした。');
+  };
+
+  const dismissMorningFollowUpCandidates = () => {
+    setMorningFollowUpCandidates([]);
+    setMorningFollowUpMessage('未返信・折り返しへの追加を見送りました。');
   };
 
   const completeFollowUp = (itemId: string) => {
@@ -1887,6 +1930,15 @@ function App() {
             shoppingItems={shoppingItems}
           />
         )}
+
+        {morningFollowUpCandidates.length > 0 && (
+          <MorningFollowUpCandidatePanel
+            items={morningFollowUpCandidates}
+            onCancel={dismissMorningFollowUpCandidates}
+            onSave={() => void saveMorningFollowUpCandidates()}
+          />
+        )}
+        {morningFollowUpMessage && <p className="follow-up-suggestion">{morningFollowUpMessage}</p>}
 
         <div className="action-row">
           <button className="secondary-button" type="button" onClick={() => setIsResetDialogOpen(true)}>
@@ -2813,6 +2865,46 @@ function VoiceInputGuide({ examples }: { examples: string[] }) {
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+function MorningFollowUpCandidatePanel({
+  items,
+  onCancel,
+  onSave,
+}: {
+  items: FollowUpDraftItem[];
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <section className="morning-follow-up-candidates" aria-label="未返信・折り返し追加確認">
+      <div className="follow-up-review-header">
+        <div>
+          <span>FOLLOW UP CANDIDATES</span>
+          <strong>未返信・折り返しにも追加しますか？</strong>
+        </div>
+        <small>{items.length}件</small>
+      </div>
+      <div className="morning-follow-up-candidate-list">
+        {items.map((item) => (
+          <article className="morning-follow-up-candidate" key={item.id}>
+            <strong>{item.name}</strong>
+            <span>{item.content}</span>
+            <small>{followUpKindLabel(item.kind)} / {followUpPriorityLabel(item.priority)}</small>
+          </article>
+        ))}
+      </div>
+      <div className="follow-up-review-actions">
+        <button className="secondary-button" onClick={onCancel} type="button">
+          追加しない
+        </button>
+        <button className="organize-button" onClick={onSave} type="button">
+          <CheckCircle2 size={19} />
+          追加する
+        </button>
+      </div>
     </section>
   );
 }
@@ -4706,9 +4798,12 @@ function prepareUnifiedMorningPlan(plan: MorningPlan, sourceText: string, shoppi
       [],
     ),
     schedule: sortScheduleByTime(
-      mergeSchedule(
+      filterUnconfirmedDefaultScheduleTimes(
+        mergeSchedule(
         plan.schedule.filter((item) => !isShoppingText(item.task) && !isFutureTaskText(item.task)),
         mergeSchedule(extractedSchedule, shoppingSchedule),
+        ),
+        sourceText,
       ),
     ),
     priorities: {
@@ -4728,6 +4823,52 @@ function prepareUnifiedMorningPlan(plan: MorningPlan, sourceText: string, shoppi
       successConditions: plan.coach.successConditions.filter((item) => !isGeneratedShoppingSupportTask(item)),
     },
   };
+}
+
+function filterUnconfirmedDefaultScheduleTimes(schedule: MorningPlan['schedule'], sourceText: string) {
+  const normalizedSource = normalizeJapaneseDateText(sourceText);
+  return schedule.filter((item) => {
+    const normalizedTime = item.time.trim();
+    const isDefaultNine = normalizedTime === '09:00' || normalizedTime === '9:00' || normalizedTime === '9時' || normalizedTime === '09時';
+    if (!isDefaultNine) return true;
+    return /\b0?9(?::00)?\b|0?9時/.test(normalizedSource);
+  });
+}
+
+function createMorningFollowUpCandidates(plan: MorningPlan, existingFollowUps: FollowUpItem[]): FollowUpDraftItem[] {
+  const sourceTexts = [
+    ...plan.todos,
+    ...plan.schedule.map((item) => item.task),
+  ]
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .filter(detectFollowUpIntent);
+  const existingKeys = new Set(existingFollowUps.map(createFollowUpDedupeKey));
+  const seenKeys = new Set<string>();
+
+  return sourceTexts
+    .map((text) => createVoiceFollowUp(text))
+    .filter((item): item is FollowUpItem => Boolean(item))
+    .filter((item) => {
+      const key = createFollowUpDedupeKey(item);
+      if (existingKeys.has(key) || seenKeys.has(key)) return false;
+      seenKeys.add(key);
+      return true;
+    })
+    .map((item) => ({
+      company: item.company,
+      content: item.content,
+      dueDate: item.dueDate,
+      duePreset: item.duePreset,
+      dueTime: item.dueTime,
+      id: createLocalId('morning-follow-up-candidate'),
+      kind: item.kind,
+      name: item.name,
+      originalPerson: findFollowUpPersonMatch(item.name + 'に' + item.content)?.originalPerson ?? item.name,
+      priority: item.priority,
+      source: 'voice',
+      status: item.status ?? 'pending',
+    }));
 }
 
 function mergeShoppingPlans(aiItems: ShoppingItem[], localItems: ShoppingItem[]) {
