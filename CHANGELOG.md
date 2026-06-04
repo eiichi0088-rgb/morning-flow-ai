@@ -1,6 +1,10 @@
 # CHANGELOG
 
 
+## Version 3.5.2 - 2026-06-04
+
+- Updated the visible MORNING FLOW AI version display to `v3.5.2`.
+
 ## Version 3.5.1 - 2026-06-04
 
 - Added Follow Up save debug details for AI Inbox save failures.

@@ -5,8 +5,15 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.5.1 is based on v3.5.0 plus Follow Up save debug visibility.
+6. v3.5.2 is based on v3.5.1 plus version display sync.
 
+
+## Version 3.5.2 Version Display Sync - 2026-06-04
+
+- Screen display: v3.5.2
+- ZIP: morning-flow-ai-v3.5.2.zip
+- Next planned version: Version 3.5.3
+- Visible MORNING FLOW AI version display is synced from `package.json`.
 
 ## Version 3.5.1 Follow Up Save Fix Debug - 2026-06-04
 
