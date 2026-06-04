@@ -72,13 +72,40 @@ export async function signInWithEmail(email: string, password: string) {
 }
 
 export async function signUpWithEmail(email: string, password: string) {
-  const response = await fetch(createAuthUrl('/signup'), {
+  const redirectTo = window.location.origin + window.location.pathname;
+  const response = await fetch(createAuthUrl(`/signup?redirect_to=${encodeURIComponent(redirectTo)}`), {
     body: JSON.stringify({ email, password }),
     headers: createAuthHeaders(),
     method: 'POST',
   });
 
   return readAuthResponse(response);
+}
+
+export async function restoreSupabaseAuthSessionFromUrl() {
+  const params = readAuthParamsFromUrl();
+  const accessToken = params.get('access_token');
+  const refreshToken = params.get('refresh_token') ?? undefined;
+  if (!accessToken) return null;
+
+  const expiresAtText = params.get('expires_at');
+  const expiresInText = params.get('expires_in');
+  const expiresAt = expiresAtText
+    ? Number(expiresAtText)
+    : expiresInText
+      ? Math.floor(Date.now() / 1000) + Number(expiresInText)
+      : undefined;
+  const user = await fetchSupabaseAuthUser(accessToken);
+  const session: SupabaseAuthSession = {
+    access_token: accessToken,
+    expires_at: Number.isFinite(expiresAt) ? expiresAt : undefined,
+    refresh_token: refreshToken,
+    token_type: params.get('token_type') ?? 'bearer',
+    user,
+  };
+
+  clearAuthParamsFromUrl();
+  return session;
 }
 
 export function isSupabaseAuthTokenExpired(session: SupabaseAuthSession | null, bufferSeconds = 60) {
@@ -106,6 +133,37 @@ export async function signOutSupabaseAuth(accessToken: string) {
     headers: createAuthHeaders({ Authorization: `Bearer ${accessToken}` }),
     method: 'POST',
   });
+}
+
+async function fetchSupabaseAuthUser(accessToken: string) {
+  const response = await fetch(createAuthUrl('/user'), {
+    headers: createAuthHeaders({ Authorization: `Bearer ${accessToken}` }),
+    method: 'GET',
+  });
+  const text = await response.text();
+  const body = text ? (JSON.parse(text) as SupabaseAuthUser & { error?: string; msg?: string }) : null;
+  if (!response.ok || body?.error || !body?.id) {
+    throw new Error(body?.msg || body?.error || 'ログイン情報を復元できませんでした。');
+  }
+  return {
+    email: body.email,
+    id: body.id,
+  };
+}
+
+function readAuthParamsFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const hash = window.location.hash.replace(/^#/, '');
+  if (hash) {
+    const hashParams = new URLSearchParams(hash);
+    hashParams.forEach((value, key) => params.set(key, value));
+  }
+  return params;
+}
+
+function clearAuthParamsFromUrl() {
+  if (!window.location.hash && !/(^|[?&])(access_token|refresh_token|expires_in|expires_at|token_type|type)=/.test(window.location.search)) return;
+  window.history.replaceState(null, document.title, window.location.pathname);
 }
 
 function getSupabaseHostLabel() {

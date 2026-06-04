@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.6.4 is based on v3.6.3 plus Page-Specific Voice Input Isolation.
+6. v3.6.5 is based on v3.6.4 plus Multi-User Real Device Verification safeguards.
 
+
+## Version 3.6.5 Multi-User Real Device Verification - 2026-06-04
+
+- Screen display: v3.6.5
+- ZIP: morning-flow-ai-v3.6.5.zip
+- Next planned version: Version 3.6.6
+- Auth email confirmation redirects can restore the Supabase session from the return URL.
+- Local temporary data is scoped by logged-in user id and cleared on logout.
+- Follow Up and Shopping Supabase operations continue to use `user_id` plus authenticated access tokens.
 
 ## Version 3.6.4 Page-Specific Voice Input Isolation - 2026-06-04
 

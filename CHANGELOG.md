@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 3.6.5 - 2026-06-04
+
+- Added multi-user real-device safeguards for Auth redirect session restore and local state isolation.
+- Local drafts, AI Inbox, Shopping backup, Follow Up backup, and review snapshots now use the logged-in user id as the private session key.
+- Logout clears page inputs, temporary voice text, review state, and local UI state before another user can log in.
+- Supabase Follow Up and Shopping reads/writes remain scoped by `user_id` and authenticated access tokens.
+
 ## Version 3.6.4 - 2026-06-04
 
 - Isolated page-specific voice input so Morning Flow speech no longer fills the Shopping List input.

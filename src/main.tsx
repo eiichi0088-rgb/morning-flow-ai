@@ -70,6 +70,7 @@ import {
   getSupabaseAuthConfigStatus,
   isSupabaseAuthTokenExpired,
   refreshSupabaseAuthSession,
+  restoreSupabaseAuthSessionFromUrl,
   signInWithEmail,
   signOutSupabaseAuth,
   signUpWithEmail,
@@ -646,22 +647,17 @@ function createPrivateSessionKeys(sessionId: string): PrivateSessionKeys {
 function removeLegacySharedStorage(currentSessionId: string) {
   legacySharedStorageKeys.forEach((key) => localStorage.removeItem(key));
   Object.keys(localStorage)
-    .filter((key) => key.startsWith('morning-flow-ai:session:') && !key.includes(`:${currentSessionId}:`))
-    .forEach((key) => localStorage.removeItem(key));
-  Object.keys(localStorage)
     .filter((key) => key.startsWith('morning-flow-ai:v2.8:session:') && !key.includes(`:${currentSessionId}:`))
-    .forEach((key) => localStorage.removeItem(key));
-  Object.keys(localStorage)
-    .filter((key) => key.startsWith('session:') && key.endsWith(':snapshots') && !key.includes(`:${currentSessionId}:`))
     .forEach((key) => localStorage.removeItem(key));
 }
 
 function App() {
-  const privateSessionId = React.useMemo(createPrivateSessionId, []);
+  const devicePrivateSessionId = React.useMemo(createPrivateSessionId, []);
+  const [authSession, setAuthSession] = React.useState<SupabaseAuthSession | null>(() => getStoredSupabaseAuthSession());
+  const privateSessionId = authSession?.user.id ? `user-${authSession.user.id}` : devicePrivateSessionId;
   const privateSessionKeys = React.useMemo(() => createPrivateSessionKeys(privateSessionId), [privateSessionId]);
   const analyticsUserId = React.useMemo(createAnalyticsUserId, []);
   const [activeView, setActiveView] = React.useState<AppView>('morning');
-  const [authSession, setAuthSession] = React.useState<SupabaseAuthSession | null>(() => getStoredSupabaseAuthSession());
   const [authError, setAuthError] = React.useState('');
   const [isAuthLoading, setIsAuthLoading] = React.useState(false);
   const [recognition, setRecognition] = React.useState<SpeechRecognitionLike | null>(null);
@@ -774,6 +770,71 @@ function App() {
     return { session: refreshedSession, tokenStatus: 'token expired / token refreshed' };
   }, [authSession]);
 
+  const resetLocalWorkspaceState = React.useCallback(() => {
+    setActiveView('morning');
+    setTranscript('');
+    setOriginalTranscript('');
+    setUpdateInstruction('');
+    setOriginalUpdateInstruction('');
+    setInterimTranscript('');
+    setError('');
+    setPlan(null);
+    setCaptureMode('create');
+    setHighlightedScheduleKeys([]);
+    setIsResetDialogOpen(false);
+    setIsTranscriptClearConfirmOpen(false);
+    setAiInboxItems([]);
+    setAiInboxMessage('');
+    setShoppingText('');
+    setOriginalShoppingText('');
+    setShoppingItems([]);
+    setShoppingUpdatedAt('');
+    setShoppingError('');
+    setShoppingShareMessage('');
+    setShoppingCaptureMode('shopping');
+    setMealPlanText('');
+    setOriginalMealPlanText('');
+    setMealServings(4);
+    setMealCandidates([]);
+    setMealPlanDebug(null);
+    setIsShoppingResetDialogOpen(false);
+    setHighlightedShoppingIds([]);
+    setSelectedShoppingShareIds([]);
+    setFeedbackText('');
+    setFollowUpCaptureText('');
+    setIsFollowUpClearConfirmOpen(false);
+    setFollowUpSplitDebug(null);
+    setFollowUpReviewItems([]);
+    setMorningFollowUpCandidates([]);
+    setMorningFollowUpMessage('');
+    setFollowUps([]);
+    setFollowUpLastSyncedAt(null);
+    setPreviousSnapshot(null);
+    setReviewStatuses({});
+    setCarriedTodos([]);
+    setIsListening(false);
+  }, []);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const restoreSession = async () => {
+      if (authSession?.user) return;
+      try {
+        const session = await restoreSupabaseAuthSessionFromUrl();
+        if (!isMounted || !session?.access_token || !session.user) return;
+        storeSupabaseAuthSession(session);
+        setAuthSession(session);
+        setAuthError('');
+      } catch (error) {
+        if (isMounted) setAuthError(getAuthErrorMessage(error));
+      }
+    };
+    void restoreSession();
+    return () => {
+      isMounted = false;
+    };
+  }, [authSession?.user]);
+
   React.useEffect(() => {
     if (!localStorage.getItem(analyticsInstallTrackedKey)) {
       trackAnalyticsEvent(analyticsUserId, 'app_install');
@@ -783,6 +844,7 @@ function App() {
   }, [analyticsUserId]);
 
   React.useEffect(() => {
+    resetLocalWorkspaceState();
     removeLegacySharedStorage(privateSessionId);
     const snapshot = loadLatestSnapshot(privateSessionKeys.snapshots);
     setPreviousSnapshot(snapshot);
@@ -833,7 +895,7 @@ function App() {
         localStorage.removeItem(privateSessionKeys.inbox);
       }
     }
-  }, [privateSessionId, privateSessionKeys]);
+  }, [privateSessionId, privateSessionKeys, resetLocalWorkspaceState]);
 
   React.useEffect(() => {
     if (transcript.trim()) {
@@ -2028,6 +2090,8 @@ function App() {
 
   const logout = async () => {
     const accessToken = authSession?.access_token;
+    recognition?.abort();
+    resetLocalWorkspaceState();
     clearStoredSupabaseAuthSession();
     setAuthSession(null);
     setActiveView('morning');
