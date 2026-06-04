@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.7.0 - 2026-06-04
+
+- Added Morning Dashboard to the home screen with Today, Shopping, Follow Up, and AI Inbox summary cards.
+- Dashboard cards show counts, compact item previews, completion state, and navigation buttons.
+- Added total action count, achievement rate, and first-task summary without changing existing storage or Supabase schemas.
+
 ## Version 3.6.7 - 2026-06-04
 
 - Added user-selectable onboarding guide preferences: `always_show`, `first_time_only`, and `disabled`.

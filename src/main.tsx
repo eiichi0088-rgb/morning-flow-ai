@@ -159,6 +159,34 @@ type OnboardingSettings = {
   seenGuideIds: string[];
 };
 
+type MorningDashboardItem = {
+  id: string;
+  label: string;
+  completed?: boolean;
+};
+
+type MorningDashboardData = {
+  achievementRate: number;
+  aiInbox: {
+    count: number;
+    items: MorningDashboardItem[];
+  };
+  firstTask: string;
+  followUp: {
+    count: number;
+    items: MorningDashboardItem[];
+  };
+  shopping: {
+    count: number;
+    items: MorningDashboardItem[];
+  };
+  today: {
+    count: number;
+    items: MorningDashboardItem[];
+  };
+  totalCount: number;
+};
+
 type AiInboxItem = {
   id: string;
   text: string;
@@ -653,6 +681,71 @@ function createPrivateSessionKeys(sessionId: string): PrivateSessionKeys {
   };
 }
 
+function createMorningDashboardData(
+  plan: MorningPlan | null,
+  shoppingItems: ShoppingItem[],
+  followUps: FollowUpItem[],
+  aiInboxItems: AiInboxItem[],
+): MorningDashboardData {
+  const todayScheduleItems = (plan?.schedule ?? []).map((item, index) => ({
+    id: `schedule-${index}-${item.time}-${item.task}`,
+    label: `${item.time} ${item.task}`,
+  }));
+  const todayTodoItems = (plan?.todos ?? []).map((todo, index) => ({
+    id: `todo-${index}-${todo}`,
+    label: todo,
+  }));
+  const todayItems = [...todayScheduleItems, ...todayTodoItems];
+  const openShoppingItems = shoppingItems.filter((item) => !item.completed);
+  const pendingFollowUpItems = sortFollowUps(followUps.filter((item) => !item.completed));
+  const unprocessedInboxItems = aiInboxItems.filter((item) => item.status === 'unprocessed');
+  const completedShoppingCount = shoppingItems.filter((item) => item.completed).length;
+  const completedFollowUpCount = followUps.filter((item) => item.completed).length;
+  const measurableTotal = shoppingItems.length + followUps.length;
+  const achievementRate = measurableTotal ? Math.round(((completedShoppingCount + completedFollowUpCount) / measurableTotal) * 100) : 0;
+  const firstTask =
+    plan?.priorities.highest[0] ??
+    todayScheduleItems[0]?.label ??
+    todayTodoItems[0]?.label ??
+    (pendingFollowUpItems[0] ? formatDashboardFollowUpLabel(pendingFollowUpItems[0]) : '');
+
+  return {
+    achievementRate,
+    aiInbox: {
+      count: unprocessedInboxItems.length,
+      items: unprocessedInboxItems.slice(0, 3).map((item) => ({
+        id: item.id,
+        label: `${aiInboxCategoryLabel(item.category)}: ${item.text}`,
+      })),
+    },
+    firstTask,
+    followUp: {
+      count: pendingFollowUpItems.length,
+      items: pendingFollowUpItems.slice(0, 3).map((item) => ({
+        id: item.id,
+        label: formatDashboardFollowUpLabel(item),
+      })),
+    },
+    shopping: {
+      count: openShoppingItems.length,
+      items: shoppingItems.slice(0, 3).map((item) => ({
+        completed: item.completed,
+        id: item.id,
+        label: formatShoppingItemLabel(item),
+      })),
+    },
+    today: {
+      count: todayItems.length,
+      items: todayItems.slice(0, 3),
+    },
+    totalCount: todayItems.length + openShoppingItems.length + pendingFollowUpItems.length + unprocessedInboxItems.length,
+  };
+}
+
+function formatDashboardFollowUpLabel(item: FollowUpItem) {
+  return `${item.name} ${item.content}`.trim();
+}
+
 function createDefaultOnboardingSettings(): OnboardingSettings {
   return {
     preference: 'first_time_only',
@@ -802,6 +895,10 @@ function App() {
   const unprocessedInboxCount = React.useMemo(
     () => aiInboxItems.filter((item) => item.status === 'unprocessed').length,
     [aiInboxItems],
+  );
+  const morningDashboard = React.useMemo(
+    () => createMorningDashboardData(plan, shoppingItems, followUps, aiInboxItems),
+    [aiInboxItems, followUps, plan, shoppingItems],
   );
 
   const getFreshAuthSession = React.useCallback(async (): Promise<{ session: SupabaseAuthSession; tokenStatus: string }> => {
@@ -2426,6 +2523,23 @@ function App() {
           </div>
         </div>
 
+        <MorningDashboard
+          data={morningDashboard}
+          onOpenFollowUp={() => {
+            trackAnalyticsFeature(analyticsUserId, 'follow_up');
+            setActiveView('followUp');
+          }}
+          onOpenInbox={() => setActiveView('inbox')}
+          onOpenShopping={() => {
+            trackAnalyticsFeature(analyticsUserId, 'shopping_list');
+            setActiveView('shopping');
+          }}
+          onOpenToday={() => {
+            const target = planAnchorRef.current ?? document.querySelector('.focus-area');
+            target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }}
+        />
+
         <div className="focus-area">
           <div className={`voice-stage ${isListening ? 'is-listening' : ''}`}>
             <div className="waveform" aria-hidden="true">
@@ -2593,7 +2707,7 @@ function App() {
         </div>
       </section>
       )}
-      {!isShoppingView && !isInboxView && (
+      {activeView === 'morning' && (
       <div className="floating-next-bar" aria-label="次の操作">
         <button
           className={`primary-button floating-next-button ${isOrganizing ? 'is-loading' : ''}`}
@@ -2740,6 +2854,85 @@ function AuthGate({
         </section>
       </section>
     </main>
+  );
+}
+
+function MorningDashboard({
+  data,
+  onOpenFollowUp,
+  onOpenInbox,
+  onOpenShopping,
+  onOpenToday,
+}: {
+  data: MorningDashboardData;
+  onOpenFollowUp: () => void;
+  onOpenInbox: () => void;
+  onOpenShopping: () => void;
+  onOpenToday: () => void;
+}) {
+  return (
+    <section className="morning-dashboard" aria-label="朝のまとめ">
+      <div className="morning-dashboard-header">
+        <div>
+          <p>おはようございます</p>
+          <h2>今日のまとめ</h2>
+        </div>
+        <div className="morning-dashboard-score">
+          <span>今日の達成率</span>
+          <strong>{data.achievementRate}%</strong>
+        </div>
+      </div>
+
+      <div className="morning-dashboard-summary">
+        <span>今日やること合計 {data.totalCount}件</span>
+        <strong>まずやること：{data.firstTask || 'まだありません'}</strong>
+      </div>
+
+      <div className="morning-dashboard-grid">
+        <MorningDashboardCard title="今日の予定" count={data.today.count} items={data.today.items} onOpen={onOpenToday} />
+        <MorningDashboardCard title="買い物" count={data.shopping.count} items={data.shopping.items} onOpen={onOpenShopping} />
+        <MorningDashboardCard title="Follow Up" count={data.followUp.count} items={data.followUp.items} onOpen={onOpenFollowUp} />
+        <MorningDashboardCard title="AI Inbox" count={data.aiInbox.count} items={data.aiInbox.items} onOpen={onOpenInbox} />
+      </div>
+    </section>
+  );
+}
+
+function MorningDashboardCard({
+  count,
+  items,
+  onOpen,
+  title,
+}: {
+  count: number;
+  items: MorningDashboardItem[];
+  onOpen: () => void;
+  title: string;
+}) {
+  return (
+    <article className="morning-dashboard-card">
+      <div className="morning-dashboard-card-top">
+        <div>
+          <span>{title}</span>
+          <strong>{count}件</strong>
+        </div>
+        <button className="secondary-button" onClick={onOpen} type="button">
+          開く
+        </button>
+      </div>
+      {items.length ? (
+        <ul>
+          {items.map((item) => (
+            <li className={item.completed ? 'is-completed' : ''} key={item.id}>
+              {typeof item.completed === 'boolean' && <span className="dashboard-check">{item.completed ? '✓' : '□'}</span>}
+              <span>{item.label}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p>まだありません</p>
+      )}
+    </article>
   );
 }
 

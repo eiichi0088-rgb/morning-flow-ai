@@ -5,8 +5,16 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.6.7 is based on v3.6.6 plus user-selectable onboarding guide preferences.
+6. v3.7.0 is based on v3.6.7 plus Morning Dashboard.
 
+
+## Version 3.7.0 Morning Dashboard - 2026-06-04
+
+- Screen display: v3.7.0
+- ZIP: morning-flow-ai-v3.7.0.zip
+- Next planned version: Version 3.7.1
+- Home screen shows Today, Shopping, Follow Up, and AI Inbox summary cards.
+- Dashboard uses already isolated logged-in user state and does not change Supabase or localStorage schemas.
 
 ## Version 3.6.7 Onboarding Guide Preference Control - 2026-06-04
 
