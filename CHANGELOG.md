@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.6.2 - 2026-06-04
+
+- Added Supabase Auth session refresh before Follow Up and Shopping Supabase requests.
+- Shopping Save Debug and Follow Up Save Debug now show token status, including `token expired / token refreshed`.
+- Follow Up complete, reopen, edit, and delete now use the latest access token.
+
 ## Version 3.6.1 - 2026-06-04
 
 - Added Shopping Save Debug for Supabase shopping item save failures.

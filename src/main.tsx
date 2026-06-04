@@ -68,6 +68,8 @@ import {
   clearStoredSupabaseAuthSession,
   getStoredSupabaseAuthSession,
   getSupabaseAuthConfigStatus,
+  isSupabaseAuthTokenExpired,
+  refreshSupabaseAuthSession,
   signInWithEmail,
   signOutSupabaseAuth,
   signUpWithEmail,
@@ -211,6 +213,7 @@ type FollowUpSupabaseDebug = {
   payloadUserId: string;
   responseStatus: string;
   rowCount: number | null;
+  tokenStatus: string;
   urlHost: string;
   userId: string;
 };
@@ -224,6 +227,7 @@ type ShoppingSupabaseDebug = {
   payloadUserId: string;
   responseStatus: string;
   rowCount: number | null;
+  tokenStatus: string;
   userId: string;
 };
 
@@ -751,6 +755,25 @@ function App() {
     [aiInboxItems],
   );
 
+  const getFreshAuthSession = React.useCallback(async (): Promise<{ session: SupabaseAuthSession; tokenStatus: string }> => {
+    const currentSession = authSession ?? getStoredSupabaseAuthSession();
+    if (!currentSession?.access_token || !currentSession.user) {
+      throw new Error('ログインユーザーを確認できませんでした。');
+    }
+
+    if (!isSupabaseAuthTokenExpired(currentSession)) {
+      return { session: currentSession, tokenStatus: 'token valid' };
+    }
+
+    const refreshedSession = await refreshSupabaseAuthSession(currentSession);
+    if (!refreshedSession?.access_token || !refreshedSession.user) {
+      throw new Error('ログインセッションを更新できませんでした。もう一度ログインしてください。');
+    }
+    storeSupabaseAuthSession(refreshedSession);
+    setAuthSession(refreshedSession);
+    return { session: refreshedSession, tokenStatus: 'token expired / token refreshed' };
+  }, [authSession]);
+
   React.useEffect(() => {
     if (!localStorage.getItem(analyticsInstallTrackedKey)) {
       trackAnalyticsEvent(analyticsUserId, 'app_install');
@@ -868,17 +891,10 @@ function App() {
       setFollowUpSyncStatus('local');
       return;
     }
-    const userId = authSession?.user.id;
-    const accessToken = authSession?.access_token ?? '';
-    if (!userId || !accessToken) {
-      setFollowUpSyncStatus('error');
-      setFollowUpSyncError('ログインユーザーを確認できませんでした。');
-      return;
-    }
-
     setFollowUpSyncStatus('syncing');
     try {
-      const rows = await fetchSupabaseFollowUps(userId, accessToken);
+      const { session } = await getFreshAuthSession();
+      const rows = await fetchSupabaseFollowUps(session.user.id, session.access_token);
       setFollowUps(rows.map(mapSupabaseRowToFollowUpItem));
       setFollowUpSyncError('');
       setFollowUpLastSyncedAt(new Date().toISOString());
@@ -887,18 +903,16 @@ function App() {
       setFollowUpSyncError('同期できませんでした。通信を確認してください。');
       setFollowUpSyncStatus('error');
     }
-  }, [authSession?.access_token, authSession?.user.id]);
+  }, [getFreshAuthSession]);
 
-  const getShoppingSupabaseAuth = React.useCallback(() => {
+  const getShoppingSupabaseAuth = React.useCallback(async () => {
     if (!isSupabaseShoppingConfigured()) return null;
-    const userId = authSession?.user.id;
-    const accessToken = authSession?.access_token ?? '';
-    if (!userId || !accessToken) return null;
-    return { accessToken, userId };
-  }, [authSession?.access_token, authSession?.user.id]);
+    const { session, tokenStatus } = await getFreshAuthSession();
+    return { accessToken: session.access_token, tokenStatus, userId: session.user.id };
+  }, [getFreshAuthSession]);
 
   const syncShoppingItemsFromSupabase = React.useCallback(async () => {
-    const auth = getShoppingSupabaseAuth();
+    const auth = await getShoppingSupabaseAuth();
     if (!auth) {
       setShoppingSyncStatus('local');
       return;
@@ -920,7 +934,7 @@ function App() {
 
   const syncShoppingItemsToSupabase = React.useCallback(
     async (items: ShoppingItem[]) => {
-      const auth = getShoppingSupabaseAuth();
+      const auth = await getShoppingSupabaseAuth();
       if (!auth) {
         setShoppingSyncStatus('local');
         setShoppingSupabaseDebug(createShoppingSupabaseDebug('local:save'));
@@ -929,12 +943,12 @@ function App() {
       const payload = items.map((item) => mapShoppingItemToSupabase(item, auth.userId));
       try {
         setShoppingSyncStatus('syncing');
-        setShoppingSupabaseDebug(createShoppingSupabaseDebug('upsert:start', undefined, payload, auth.userId, auth.accessToken));
+        setShoppingSupabaseDebug(createShoppingSupabaseDebug('upsert:start', undefined, payload, auth.userId, auth.accessToken, auth.tokenStatus));
         const rows = await upsertSupabaseShoppingItems(payload, auth.accessToken);
         setShoppingSyncError('');
         setShoppingSyncStatus('synced');
         setShoppingSupabaseDebug({
-          ...createShoppingSupabaseDebug('upsert:success', undefined, payload, auth.userId, auth.accessToken),
+          ...createShoppingSupabaseDebug('upsert:success', undefined, payload, auth.userId, auth.accessToken, auth.tokenStatus),
           responseStatus: '201 Created',
           rowCount: rows.length,
         });
@@ -942,7 +956,7 @@ function App() {
         console.error('[MORNING FLOW AI] Shopping upsert failed', error);
         setShoppingSyncError('買い物リストを保存できませんでした。通信を確認してください。');
         setShoppingSyncStatus('error');
-        setShoppingSupabaseDebug(createShoppingSupabaseDebug('upsert:error', error, payload, auth.userId, auth.accessToken));
+        setShoppingSupabaseDebug(createShoppingSupabaseDebug('upsert:error', error, payload, auth.userId, auth.accessToken, auth.tokenStatus));
       }
     },
     [getShoppingSupabaseAuth],
@@ -962,7 +976,7 @@ function App() {
   React.useEffect(() => {
     void syncShoppingItemsFromSupabase();
 
-    if (!getShoppingSupabaseAuth()) return;
+    if (!isSupabaseShoppingConfigured()) return;
     const intervalId = window.setInterval(() => {
       void syncShoppingItemsFromSupabase();
     }, 15000);
@@ -1369,8 +1383,9 @@ function App() {
     setMealServings(4);
     setShoppingCaptureMode('shopping');
     setShoppingItems([]);
-    const auth = getShoppingSupabaseAuth();
-    if (auth) void deleteAllSupabaseShoppingItems(auth.userId, auth.accessToken);
+    void getShoppingSupabaseAuth().then((auth) => {
+      if (auth) void deleteAllSupabaseShoppingItems(auth.userId, auth.accessToken);
+    });
     setShoppingUpdatedAt('');
     setShoppingError('');
     setInterimTranscript('');
@@ -1393,8 +1408,9 @@ function App() {
 
     if (shoppingItems.length && window.confirm('整理済みリストも削除しますか？')) {
       setShoppingItems([]);
-      const auth = getShoppingSupabaseAuth();
-      if (auth) void deleteAllSupabaseShoppingItems(auth.userId, auth.accessToken);
+      void getShoppingSupabaseAuth().then((auth) => {
+        if (auth) void deleteAllSupabaseShoppingItems(auth.userId, auth.accessToken);
+      });
       setShoppingUpdatedAt('');
       setHighlightedShoppingIds([]);
       setSelectedShoppingShareIds([]);
@@ -1420,8 +1436,9 @@ function App() {
 
     if (shouldResetItems) {
       setShoppingItems([]);
-      const auth = getShoppingSupabaseAuth();
-      if (auth) void deleteAllSupabaseShoppingItems(auth.userId, auth.accessToken);
+      void getShoppingSupabaseAuth().then((auth) => {
+        if (auth) void deleteAllSupabaseShoppingItems(auth.userId, auth.accessToken);
+      });
       setShoppingUpdatedAt('');
       setHighlightedShoppingIds([]);
       setSelectedShoppingShareIds([]);
@@ -1435,9 +1452,10 @@ function App() {
       current.map((item) => (item.id === itemId ? { ...item, completed: !item.completed } : item)),
     );
     setShoppingUpdatedAt(new Date().toISOString());
-    const auth = getShoppingSupabaseAuth();
-    if (auth && item) {
-      void updateSupabaseShoppingItem(itemId, auth.userId, auth.accessToken, { checked: nextCompleted });
+    if (item) {
+      void getShoppingSupabaseAuth().then((auth) => {
+        if (auth) void updateSupabaseShoppingItem(itemId, auth.userId, auth.accessToken, { checked: nextCompleted });
+      });
     }
   };
 
@@ -1464,22 +1482,23 @@ function App() {
     };
     setShoppingItems((current) => current.map((currentItem) => (currentItem.id === itemId ? nextItem : currentItem)));
     setShoppingUpdatedAt(new Date().toISOString());
-    const auth = getShoppingSupabaseAuth();
-    if (auth) {
+    void getShoppingSupabaseAuth().then((auth) => {
+      if (!auth) return;
       void updateSupabaseShoppingItem(itemId, auth.userId, auth.accessToken, {
-        category: nextItem.category,
-        name: nextItem.name,
-        quantity: nextItem.quantity,
-      });
-    }
+          category: nextItem.category,
+          name: nextItem.name,
+          quantity: nextItem.quantity,
+        });
+    });
   };
 
   const deleteShoppingItem = (itemId: string) => {
     setShoppingItems((current) => current.filter((item) => item.id !== itemId));
     setSelectedShoppingShareIds((current) => current.filter((id) => id !== itemId));
     setShoppingUpdatedAt(new Date().toISOString());
-    const auth = getShoppingSupabaseAuth();
-    if (auth) void deleteSupabaseShoppingItem(itemId, auth.userId, auth.accessToken);
+    void getShoppingSupabaseAuth().then((auth) => {
+      if (auth) void deleteSupabaseShoppingItem(itemId, auth.userId, auth.accessToken);
+    });
   };
 
   const addFollowUp = async (item: Omit<FollowUpItem, 'completed' | 'completedAt' | 'createdAt' | 'id'>): Promise<boolean> => {
@@ -1496,18 +1515,22 @@ function App() {
     trackAnalyticsFeature(analyticsUserId, 'follow_up');
 
     if (isSupabaseFollowUpConfigured()) {
-      let userId = authSession?.user.id ?? '';
-      const accessToken = authSession?.access_token ?? '';
+      let userId = '';
+      let accessToken = '';
+      let tokenStatus = '';
       let insertPayload: ReturnType<typeof mapFollowUpItemToSupabaseInsert> | undefined;
       try {
-        if (!userId || !accessToken) throw new Error('ログインユーザーを確認できませんでした。');
+        const freshAuth = await getFreshAuthSession();
+        userId = freshAuth.session.user.id;
+        accessToken = freshAuth.session.access_token;
+        tokenStatus = freshAuth.tokenStatus;
         setFollowUpSyncStatus('syncing');
         insertPayload = mapFollowUpItemToSupabaseInsert(nextItem, userId);
         console.info('[MORNING FLOW AI] Supabase follow-up insert start', {
           config: getSupabaseFollowUpConfigStatus(),
           payload: insertPayload,
         });
-        setFollowUpSupabaseDebug(createFollowUpSupabaseDebug('insert:start', undefined, insertPayload, userId, accessToken));
+        setFollowUpSupabaseDebug(createFollowUpSupabaseDebug('insert:start', undefined, insertPayload, userId, accessToken, tokenStatus));
         const savedRow = await insertSupabaseFollowUp(insertPayload, accessToken);
         if (!savedRow) {
           throw new Error('Supabase insert returned no row. Check table permissions and Prefer return=representation support.');
@@ -1518,7 +1541,7 @@ function App() {
         setFollowUpSyncError('');
         setFollowUpSyncStatus('synced');
         setFollowUpSupabaseDebug({
-          ...createFollowUpSupabaseDebug('insert:success', undefined, insertPayload, userId, accessToken),
+          ...createFollowUpSupabaseDebug('insert:success', undefined, insertPayload, userId, accessToken, tokenStatus),
           responseStatus: '201 Created',
           rowCount: 1,
         });
@@ -1528,7 +1551,7 @@ function App() {
         const message = getSupabaseFollowUpErrorMessage(error);
         setFollowUpSyncError(message);
         setFollowUpSyncStatus('error');
-        setFollowUpSupabaseDebug(createFollowUpSupabaseDebug('insert:error', error, insertPayload, userId, accessToken));
+        setFollowUpSupabaseDebug(createFollowUpSupabaseDebug('insert:error', error, insertPayload, userId, accessToken, tokenStatus));
         return false;
       }
     }
@@ -1765,17 +1788,13 @@ function App() {
       ),
     );
     if (isSupabaseFollowUpConfigured()) {
-      const userId = authSession?.user.id;
-      const accessToken = authSession?.access_token ?? '';
-      if (!userId || !accessToken) {
-        setFollowUpSyncError('ログインユーザーを確認できませんでした。');
-        setFollowUpSyncStatus('error');
-        return;
-      }
-      void updateSupabaseFollowUp(itemId, userId, accessToken, {
-        completed_at: completedAt,
-        status: 'done',
-      })
+      void getFreshAuthSession()
+        .then(({ session }) =>
+          updateSupabaseFollowUp(itemId, session.user.id, session.access_token, {
+            completed_at: completedAt,
+            status: 'done',
+          }),
+        )
         .then((row) => {
           if (row) setFollowUps((current) => current.map((item) => (item.id === itemId ? mapSupabaseRowToFollowUpItem(row) : item)));
           setFollowUpSyncError('');
@@ -1802,17 +1821,13 @@ function App() {
       ),
     );
     if (isSupabaseFollowUpConfigured()) {
-      const userId = authSession?.user.id;
-      const accessToken = authSession?.access_token ?? '';
-      if (!userId || !accessToken) {
-        setFollowUpSyncError('ログインユーザーを確認できませんでした。');
-        setFollowUpSyncStatus('error');
-        return;
-      }
-      void updateSupabaseFollowUp(itemId, userId, accessToken, {
-        completed_at: null,
-        status: 'pending',
-      })
+      void getFreshAuthSession()
+        .then(({ session }) =>
+          updateSupabaseFollowUp(itemId, session.user.id, session.access_token, {
+            completed_at: null,
+            status: 'pending',
+          }),
+        )
         .then((row) => {
           if (row) setFollowUps((current) => current.map((item) => (item.id === itemId ? mapSupabaseRowToFollowUpItem(row) : item)));
           setFollowUpSyncError('');
@@ -1841,18 +1856,14 @@ function App() {
 
     setFollowUps((current) => current.map((currentItem) => (currentItem.id === itemId ? nextItem : currentItem)));
     if (isSupabaseFollowUpConfigured()) {
-      const userId = authSession?.user.id;
-      const accessToken = authSession?.access_token ?? '';
-      if (!userId || !accessToken) {
-        setFollowUpSyncError('ログインユーザーを確認できませんでした。');
-        setFollowUpSyncStatus('error');
-        return;
-      }
-      void updateSupabaseFollowUp(itemId, userId, accessToken, {
-        memo: nextContent,
-        person_name: nextName,
-        title: formatFollowUpTitle(nextItem),
-      })
+      void getFreshAuthSession()
+        .then(({ session }) =>
+          updateSupabaseFollowUp(itemId, session.user.id, session.access_token, {
+            memo: nextContent,
+            person_name: nextName,
+            title: formatFollowUpTitle(nextItem),
+          }),
+        )
         .then((row) => {
           if (row) setFollowUps((current) => current.map((currentItem) => (currentItem.id === itemId ? mapSupabaseRowToFollowUpItem(row) : currentItem)));
           setFollowUpSyncError('');
@@ -1868,14 +1879,8 @@ function App() {
   const deleteFollowUp = (itemId: string) => {
     setFollowUps((current) => current.filter((item) => item.id !== itemId));
     if (isSupabaseFollowUpConfigured()) {
-      const userId = authSession?.user.id;
-      const accessToken = authSession?.access_token ?? '';
-      if (!userId || !accessToken) {
-        setFollowUpSyncError('ログインユーザーを確認できませんでした。');
-        setFollowUpSyncStatus('error');
-        return;
-      }
-      void deleteSupabaseFollowUp(itemId, userId, accessToken)
+      void getFreshAuthSession()
+        .then(({ session }) => deleteSupabaseFollowUp(itemId, session.user.id, session.access_token))
         .then(() => {
           setFollowUpSyncError('');
           setFollowUpSyncStatus('synced');
@@ -2641,6 +2646,7 @@ function FollowUpManagerPage({
           <small>Anon Key: {followUpSupabaseDebug.hasAnonKey ? 'configured' : 'not configured'}</small>
           <small>Last Operation: {followUpSupabaseDebug.lastOperation || 'not checked'}</small>
           <small>Auth Mode: {followUpSupabaseDebug.authMode || 'not checked'}</small>
+          <small>Token Status: {followUpSupabaseDebug.tokenStatus || 'not checked'}</small>
           <small>Current User ID: {followUpSupabaseDebug.userId || 'not checked'}</small>
           <small>Payload User ID: {followUpSupabaseDebug.payloadUserId || 'not checked'}</small>
           <small>Response: {followUpSupabaseDebug.responseStatus || 'not received'}</small>
@@ -3293,6 +3299,7 @@ function AiInboxPage({
           <span>Follow Up Save Debug</span>
           {followUpSyncError && <small className="follow-up-sync-error">{followUpSyncError}</small>}
           <small>Auth Mode: {followUpSupabaseDebug.authMode || 'not checked'}</small>
+          <small>Token Status: {followUpSupabaseDebug.tokenStatus || 'not checked'}</small>
           <small>Current User ID: {followUpSupabaseDebug.userId || 'not checked'}</small>
           <small>Payload User ID: {followUpSupabaseDebug.payloadUserId || 'not checked'}</small>
           <small>Response: {followUpSupabaseDebug.responseStatus || 'not received'}</small>
@@ -3764,6 +3771,7 @@ function ShoppingListPage({
             <small>Current User ID: {shoppingSupabaseDebug.userId || 'not checked'}</small>
             <small>Payload User ID: {shoppingSupabaseDebug.payloadUserId || 'not checked'}</small>
             <small>Auth Mode: {shoppingSupabaseDebug.authMode || 'not checked'}</small>
+            <small>Token Status: {shoppingSupabaseDebug.tokenStatus || 'not checked'}</small>
             <small>Response: {shoppingSupabaseDebug.responseStatus || 'not received'}</small>
             <small>Rows: {typeof shoppingSupabaseDebug.rowCount === 'number' ? shoppingSupabaseDebug.rowCount : 'not checked'}</small>
             <small>Body: {shoppingSupabaseDebug.bodyPreview || 'not received'}</small>
@@ -4893,6 +4901,7 @@ function createFollowUpSupabaseDebug(
   payload?: ReturnType<typeof mapFollowUpItemToSupabaseInsert>,
   userId = '',
   accessToken = '',
+  tokenStatus = '',
 ): FollowUpSupabaseDebug {
   const config = getSupabaseFollowUpConfigStatus();
   const supabaseError = error instanceof SupabaseFollowUpError ? error : null;
@@ -4910,6 +4919,7 @@ function createFollowUpSupabaseDebug(
     payloadUserId: payload?.user_id ?? '',
     responseStatus: supabaseError ? `${supabaseError.status} ${supabaseError.statusText}`.trim() : '',
     rowCount: null,
+    tokenStatus,
     urlHost: config.urlHost,
     userId,
   };
@@ -4921,6 +4931,7 @@ function createShoppingSupabaseDebug(
   payload: SupabaseShoppingItemUpsert[] = [],
   userId = '',
   accessToken = '',
+  tokenStatus = '',
 ): ShoppingSupabaseDebug {
   const supabaseError = error instanceof SupabaseShoppingItemError ? error : null;
   const fallbackError = error && !supabaseError ? (error instanceof Error ? error.message : String(error)) : '';
@@ -4935,6 +4946,7 @@ function createShoppingSupabaseDebug(
     payloadUserId: firstPayload?.user_id ?? '',
     responseStatus: supabaseError ? `${supabaseError.status} ${supabaseError.statusText}`.trim() : '',
     rowCount: null,
+    tokenStatus,
     userId,
   };
 }

@@ -81,6 +81,24 @@ export async function signUpWithEmail(email: string, password: string) {
   return readAuthResponse(response);
 }
 
+export function isSupabaseAuthTokenExpired(session: SupabaseAuthSession | null, bufferSeconds = 60) {
+  if (!session?.access_token) return true;
+  if (!session.expires_at) return false;
+  return session.expires_at <= Math.floor(Date.now() / 1000) + bufferSeconds;
+}
+
+export async function refreshSupabaseAuthSession(session: SupabaseAuthSession) {
+  if (!session.refresh_token) throw new Error('ログインセッションの更新情報がありません。もう一度ログインしてください。');
+
+  const response = await fetch(createAuthUrl('/token?grant_type=refresh_token'), {
+    body: JSON.stringify({ refresh_token: session.refresh_token }),
+    headers: createAuthHeaders(),
+    method: 'POST',
+  });
+
+  return readAuthResponse(response);
+}
+
 export async function signOutSupabaseAuth(accessToken: string) {
   if (!accessToken) return;
 
