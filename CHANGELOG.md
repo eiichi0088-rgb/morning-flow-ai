@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.6.4 - 2026-06-04
+
+- Isolated page-specific voice input so Morning Flow speech no longer fills the Shopping List input.
+- Cleared interim speech text when switching pages to avoid cross-page draft bleed.
+- Kept each page's existing edit, organize, localStorage, and Supabase save flows intact.
+
 ## Version 3.6.3 - 2026-06-04
 
 - Added context-aware voice routing so Shopping, Follow Up, and Morning Flow can capture speech directly on their pages.

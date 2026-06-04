@@ -990,6 +990,10 @@ function App() {
     return () => window.clearTimeout(timeoutId);
   }, [highlightedShoppingIds]);
 
+  React.useEffect(() => {
+    setInterimTranscript('');
+  }, [activeView]);
+
   const saveVoiceTextToAiInbox = React.useCallback((text: string, sourceView: AppView) => {
     const normalized = text.trim();
     if (!normalized) return;
@@ -1189,8 +1193,6 @@ function App() {
         );
         setPlan(planWithCarryover);
         setMorningFollowUpCandidates(createMorningFollowUpCandidates(planWithCarryover, followUps));
-        setShoppingText(transcript.trim());
-        setOriginalShoppingText(transcript.trim());
         setShoppingItems(classifiedShoppingItems);
         void syncShoppingItemsToSupabase(classifiedShoppingItems);
         setShoppingUpdatedAt(shoppingPlan.updatedAt);

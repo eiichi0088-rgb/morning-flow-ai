@@ -5,8 +5,16 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.6.3 is based on v3.6.2 plus Context-Aware Direct Routing.
+6. v3.6.4 is based on v3.6.3 plus Page-Specific Voice Input Isolation.
 
+
+## Version 3.6.4 Page-Specific Voice Input Isolation - 2026-06-04
+
+- Screen display: v3.6.4
+- ZIP: morning-flow-ai-v3.6.4.zip
+- Next planned version: Version 3.6.5
+- Morning Flow voice input stays in the editable transcript and is no longer copied to the Shopping List input.
+- Page changes clear interim speech text so previous page voice drafts do not appear in another category.
 
 ## Version 3.6.3 Context-Aware Direct Routing - 2026-06-04
 
