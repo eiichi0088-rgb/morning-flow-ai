@@ -1537,7 +1537,7 @@ function App() {
     setAiInboxMessage('');
   };
 
-  const organizeAiInboxItem = (itemId: string) => {
+  const organizeAiInboxItem = async (itemId: string) => {
     const targetItem = aiInboxItems.find((item) => item.id === itemId);
     if (!targetItem) return;
     const classification = classifyAiInboxText(targetItem.text, targetItem.category);
@@ -1548,14 +1548,18 @@ function App() {
       organizedAt: new Date().toISOString(),
       status: 'organized' as const,
     };
-    const routed = routeHighConfidenceInboxItem(nextItem);
+    const routed = await routeHighConfidenceInboxItem(nextItem);
+    if (nextItem.category === 'followUp' && !routed) {
+      setAiInboxMessage('Follow Upへ保存できませんでした。Supabase Debugと通信状態を確認してください。');
+      return;
+    }
     setAiInboxItems((current) =>
       current.map((item) => (item.id === itemId ? nextItem : item)),
     );
-    setAiInboxMessage(routed ? `${aiInboxCategoryLabel(nextItem.category)}へ振り分けました。` : 'Inbox項目を整理済みにしました。');
+    setAiInboxMessage(routed ? `${aiInboxCategoryLabel(nextItem.category)}へ保存しました。` : 'Inbox項目を整理済みにしました。');
   };
 
-  const routeHighConfidenceInboxItem = (item: AiInboxItem) => {
+  const routeHighConfidenceInboxItem = async (item: AiInboxItem) => {
     if (item.confidence < 85) return false;
     const appendText = (current: string) => `${current}${current ? '\n' : ''}${item.text}`.trim();
 
@@ -1581,6 +1585,21 @@ function App() {
     }
 
     if (item.category === 'followUp') {
+      const followUpItem = createVoiceFollowUp(item.text);
+      if (!followUpItem) return false;
+      const saved = await addFollowUp({
+        company: followUpItem.company,
+        content: followUpItem.content,
+        dueDate: followUpItem.dueDate,
+        duePreset: followUpItem.duePreset,
+        dueTime: followUpItem.dueTime,
+        kind: followUpItem.kind,
+        name: followUpItem.name,
+        priority: followUpItem.priority,
+        source: 'voice',
+        status: followUpItem.status ?? 'pending',
+      });
+      if (!saved) return false;
       setFollowUpCaptureText((current) => appendText(current));
       setIsFollowUpClearConfirmOpen(false);
       setFollowUpReviewItems([]);
