@@ -70,7 +70,9 @@ import {
   getSupabaseAuthConfigStatus,
   isSupabaseAuthTokenExpired,
   refreshSupabaseAuthSession,
+  resendConfirmationEmail,
   restoreSupabaseAuthSessionFromUrl,
+  sendPasswordResetEmail,
   signInWithEmail,
   signOutSupabaseAuth,
   signUpWithEmail,
@@ -659,6 +661,7 @@ function App() {
   const analyticsUserId = React.useMemo(createAnalyticsUserId, []);
   const [activeView, setActiveView] = React.useState<AppView>('morning');
   const [authError, setAuthError] = React.useState('');
+  const [authNotice, setAuthNotice] = React.useState('');
   const [isAuthLoading, setIsAuthLoading] = React.useState(false);
   const [recognition, setRecognition] = React.useState<SpeechRecognitionLike | null>(null);
   const [isListening, setIsListening] = React.useState(false);
@@ -824,8 +827,11 @@ function App() {
         if (!isMounted || !session?.access_token || !session.user) return;
         storeSupabaseAuthSession(session);
         setAuthSession(session);
+        setAuthNotice('メール認証が完了し、ログイン状態を復元しました。');
         setAuthError('');
+        console.info('[MORNING FLOW AI] Supabase auth state change', { event: 'session-restored', userId: session.user.id });
       } catch (error) {
+        console.warn('[MORNING FLOW AI] Supabase auth session restore failed', error);
         if (isMounted) setAuthError(getAuthErrorMessage(error));
       }
     };
@@ -2056,6 +2062,7 @@ function App() {
   const loginWithEmail = async (email: string, password: string) => {
     setIsAuthLoading(true);
     setAuthError('');
+    setAuthNotice('');
     try {
       const session = await signInWithEmail(email, password);
       if (!session?.access_token || !session.user) {
@@ -2063,7 +2070,10 @@ function App() {
       }
       storeSupabaseAuthSession(session);
       setAuthSession(session);
+      setAuthNotice('');
+      console.info('[MORNING FLOW AI] Supabase auth state change', { event: 'login-success', userId: session.user.id });
     } catch (error) {
+      console.warn('[MORNING FLOW AI] Supabase login error', error);
       setAuthError(getAuthErrorMessage(error));
     } finally {
       setIsAuthLoading(false);
@@ -2073,15 +2083,56 @@ function App() {
   const signUpWithEmailPassword = async (email: string, password: string) => {
     setIsAuthLoading(true);
     setAuthError('');
+    setAuthNotice('');
     try {
       const session = await signUpWithEmail(email, password);
+      console.info('[MORNING FLOW AI] Supabase signup result', {
+        hasAccessToken: Boolean(session?.access_token),
+        hasUser: Boolean(session?.user),
+        userId: session?.user?.id,
+      });
       if (session?.access_token && session.user) {
         storeSupabaseAuthSession(session);
         setAuthSession(session);
+        setAuthNotice('');
+        console.info('[MORNING FLOW AI] Supabase auth state change', { event: 'signup-session-created', userId: session.user.id });
         return;
       }
-      setAuthError('確認メールを送信しました。メール内のリンクを開いてからログインしてください。');
+      setAuthNotice('確認メールを送信しました。メール内のリンクを開いてからログインしてください。すでに登録済みの場合も、同じメールに案内が届くことがあります。');
     } catch (error) {
+      console.warn('[MORNING FLOW AI] Supabase signup error', error);
+      setAuthError(getAuthErrorMessage(error));
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const resendSignupConfirmation = async (email: string) => {
+    setIsAuthLoading(true);
+    setAuthError('');
+    setAuthNotice('');
+    try {
+      const result = await resendConfirmationEmail(email);
+      console.info('[MORNING FLOW AI] Supabase confirmation resend result', result);
+      setAuthNotice('確認メールを再送信しました。届かない場合は迷惑メール、入力メールアドレス、Supabaseのメール設定を確認してください。');
+    } catch (error) {
+      console.warn('[MORNING FLOW AI] Supabase confirmation resend error', error);
+      setAuthError(getAuthErrorMessage(error));
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const sendPasswordReset = async (email: string) => {
+    setIsAuthLoading(true);
+    setAuthError('');
+    setAuthNotice('');
+    try {
+      const result = await sendPasswordResetEmail(email);
+      console.info('[MORNING FLOW AI] Supabase password reset result', result);
+      setAuthNotice('パスワード再設定メールを送信しました。メール内のリンクから新しいパスワードを設定してください。');
+    } catch (error) {
+      console.warn('[MORNING FLOW AI] Supabase password reset error', error);
       setAuthError(getAuthErrorMessage(error));
     } finally {
       setIsAuthLoading(false);
@@ -2094,6 +2145,7 @@ function App() {
     resetLocalWorkspaceState();
     clearStoredSupabaseAuthSession();
     setAuthSession(null);
+    setAuthNotice('');
     setActiveView('morning');
     if (accessToken) {
       try {
@@ -2108,9 +2160,12 @@ function App() {
     return (
       <AuthGate
         authError={authError}
+        authNotice={authNotice}
         config={getSupabaseAuthConfigStatus()}
         isLoading={isAuthLoading}
         onLogin={loginWithEmail}
+        onPasswordReset={sendPasswordReset}
+        onResendConfirmation={resendSignupConfirmation}
         onSignUp={signUpWithEmailPassword}
       />
     );
@@ -2483,21 +2538,28 @@ function App() {
 
 function AuthGate({
   authError,
+  authNotice,
   config,
   isLoading,
   onLogin,
+  onPasswordReset,
+  onResendConfirmation,
   onSignUp,
 }: {
   authError: string;
+  authNotice: string;
   config: ReturnType<typeof getSupabaseAuthConfigStatus>;
   isLoading: boolean;
   onLogin: (email: string, password: string) => Promise<void>;
+  onPasswordReset: (email: string) => Promise<void>;
+  onResendConfirmation: (email: string) => Promise<void>;
   onSignUp: (email: string, password: string) => Promise<void>;
 }) {
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [mode, setMode] = React.useState<'login' | 'signup'>('login');
   const canSubmit = Boolean(email.trim() && password.trim().length >= 6 && config.configured && !isLoading);
+  const canUseEmailAction = Boolean(email.trim() && config.configured && !isLoading);
 
   const submit = () => {
     if (!canSubmit) return;
@@ -2550,11 +2612,23 @@ function AuthGate({
               Supabase Authが未設定です。VITE_SUPABASE_URL と VITE_SUPABASE_ANON_KEY を確認してください。
             </p>
           )}
+          {authNotice && <p className="auth-notice">{authNotice}</p>}
           {authError && <p className="error-message">{authError}</p>}
           <button className="organize-button" disabled={!canSubmit} onClick={submit} type="button">
             {isLoading ? <Loader2 className="button-spinner" size={19} /> : <CheckCircle2 size={19} />}
             {mode === 'login' ? 'ログインする' : '登録する'}
           </button>
+          <div className="auth-help-actions">
+            <button className="secondary-button" disabled={!canUseEmailAction} onClick={() => void onResendConfirmation(email.trim())} type="button">
+              確認メールを再送信
+            </button>
+            <button className="secondary-button" disabled={!canUseEmailAction} onClick={() => void onPasswordReset(email.trim())} type="button">
+              パスワード再設定
+            </button>
+          </div>
+          <small className="auth-note">
+            ログインできない場合は、メール未認証・登録未完了・パスワード違い・古い確認メールリンクの可能性があります。
+          </small>
           <small className="auth-note">ログイン後にMORNING FLOW AI本体を表示します。今回はデータ分離までは行いません。</small>
         </section>
       </section>
@@ -4997,10 +5071,25 @@ function getSupabaseFollowUpErrorMessage(error: unknown) {
 
 function getAuthErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  if (/invalid login credentials/i.test(message)) return 'メールアドレスまたはパスワードが違います。';
-  if (/email not confirmed/i.test(message)) return '確認メール内のリンクを開いてからログインしてください。';
-  if (/password/i.test(message)) return 'パスワードを確認してください。6文字以上が必要です。';
-  return message || 'ログインできませんでした。';
+  if (/invalid login credentials/i.test(message)) {
+    return 'ログインできませんでした。メール未認証、パスワード違い、登録未完了、または古い確認メールリンクの可能性があります。確認メールを開く、確認メール再送信、またはパスワード再設定を試してください。';
+  }
+  if (/email not confirmed|not confirmed/i.test(message)) {
+    return 'メール未認証の可能性があります。確認メール内のリンクを開いてから、もう一度ログインしてください。届かない場合は確認メールを再送信してください。';
+  }
+  if (/already registered|user already registered|already been registered/i.test(message)) {
+    return 'すでに登録済みの可能性があります。ログイン、確認メール再送信、またはパスワード再設定を試してください。';
+  }
+  if (/expired|invalid.*link|token/i.test(message)) {
+    return '確認メールリンクが古い、または無効になっている可能性があります。確認メールを再送信して、新しいリンクを開いてください。';
+  }
+  if (/password/i.test(message)) {
+    return 'パスワードを確認してください。忘れた場合はパスワード再設定を試してください。';
+  }
+  if (/rate limit|too many/i.test(message)) {
+    return '短時間に何度も試行されています。少し時間を置いてからもう一度お試しください。';
+  }
+  return message ? `認証に失敗しました。${message}` : '認証に失敗しました。確認メール再送信、またはパスワード再設定を試してください。';
 }
 
 function createFollowUpSupabaseDebug(

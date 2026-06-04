@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 3.6.6 - 2026-06-04
+
+- Added Auth debug logging for signup, login errors, confirmation resend, password reset, and session restore.
+- Improved Japanese guidance for unconfirmed email, wrong password, incomplete signup, and expired confirmation links.
+- Added confirmation email resend and password reset actions to the auth screen.
+- Signup now includes the current app URL as the email confirmation redirect target.
+
 ## Version 3.6.5 - 2026-06-04
 
 - Added multi-user real-device safeguards for Auth redirect session restore and local state isolation.

@@ -15,6 +15,7 @@ type SupabaseAuthResponse = SupabaseAuthSession & {
   error?: string;
   error_description?: string;
   msg?: string;
+  user?: SupabaseAuthUser;
 };
 
 export type SupabaseAuthConfigStatus = {
@@ -68,7 +69,7 @@ export async function signInWithEmail(email: string, password: string) {
     method: 'POST',
   });
 
-  return readAuthResponse(response);
+  return readAuthResponse(response, 'signin');
 }
 
 export async function signUpWithEmail(email: string, password: string) {
@@ -79,14 +80,55 @@ export async function signUpWithEmail(email: string, password: string) {
     method: 'POST',
   });
 
-  return readAuthResponse(response);
+  return readAuthResponse(response, 'signup');
+}
+
+export async function resendConfirmationEmail(email: string) {
+  const redirectTo = window.location.origin + window.location.pathname;
+  const response = await fetch(createAuthUrl('/resend'), {
+    body: JSON.stringify({
+      email,
+      options: { email_redirect_to: redirectTo },
+      type: 'signup',
+    }),
+    headers: createAuthHeaders(),
+    method: 'POST',
+  });
+
+  return readAuthResponse(response, 'resend-confirmation');
+}
+
+export async function sendPasswordResetEmail(email: string) {
+  const redirectTo = window.location.origin + window.location.pathname;
+  const response = await fetch(createAuthUrl('/recover'), {
+    body: JSON.stringify({
+      email,
+      redirect_to: redirectTo,
+    }),
+    headers: createAuthHeaders(),
+    method: 'POST',
+  });
+
+  return readAuthResponse(response, 'password-reset');
 }
 
 export async function restoreSupabaseAuthSessionFromUrl() {
   const params = readAuthParamsFromUrl();
   const accessToken = params.get('access_token');
   const refreshToken = params.get('refresh_token') ?? undefined;
-  if (!accessToken) return null;
+  const code = params.get('code');
+  console.info('[MORNING FLOW AI] Supabase auth restore params', {
+    hasAccessToken: Boolean(accessToken),
+    hasCode: Boolean(code),
+    hasRefreshToken: Boolean(refreshToken),
+    type: params.get('type') ?? '',
+  });
+  if (!accessToken) {
+    if (code) {
+      throw new Error('確認メールリンクから戻りましたが、ログイン情報を復元できませんでした。古い確認メールリンクの可能性があります。もう一度ログイン、または確認メール再送信を試してください。');
+    }
+    return null;
+  }
 
   const expiresAtText = params.get('expires_at');
   const expiresInText = params.get('expires_in');
@@ -105,6 +147,10 @@ export async function restoreSupabaseAuthSessionFromUrl() {
   };
 
   clearAuthParamsFromUrl();
+  console.info('[MORNING FLOW AI] Supabase auth session restore result', {
+    restored: true,
+    userId: session.user.id,
+  });
   return session;
 }
 
@@ -191,10 +237,22 @@ function createAuthUrl(path: string) {
   return `${supabaseUrl.replace(/\/$/, '')}/auth/v1${path}`;
 }
 
-async function readAuthResponse(response: Response) {
+async function readAuthResponse(response: Response, operation = 'auth') {
   const text = await response.text();
   const body = text ? (JSON.parse(text) as SupabaseAuthResponse) : null;
+  console.info('[MORNING FLOW AI] Supabase auth response', {
+    body,
+    operation,
+    status: response.status,
+    statusText: response.statusText,
+  });
   if (!response.ok || body?.error) {
+    console.warn('[MORNING FLOW AI] Supabase auth error', {
+      body,
+      operation,
+      status: response.status,
+      statusText: response.statusText,
+    });
     throw new Error(body?.error_description || body?.msg || body?.error || 'ログインに失敗しました。');
   }
 

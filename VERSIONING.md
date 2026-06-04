@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.6.5 is based on v3.6.4 plus Multi-User Real Device Verification safeguards.
+6. v3.6.6 is based on v3.6.5 plus Auth Signup / Email Confirmation Debug.
 
+
+## Version 3.6.6 Auth Signup / Email Confirmation Debug - 2026-06-04
+
+- Screen display: v3.6.6
+- ZIP: morning-flow-ai-v3.6.6.zip
+- Next planned version: Version 3.6.7
+- Auth screen can resend confirmation email and send password reset email.
+- Login and signup failures show clearer Japanese guidance.
+- Developer console logs signup result, login error, session restore result, and auth state changes.
 
 ## Version 3.6.5 Multi-User Real Device Verification - 2026-06-04
 

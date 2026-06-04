@@ -988,6 +988,23 @@ h1 {
   padding: 15px;
 }
 
+.auth-notice {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(141, 229, 255, 0.26);
+  border-radius: 18px;
+  color: #dff7ff;
+  background: rgba(10, 74, 102, 0.32);
+  line-height: 1.55;
+  backdrop-filter: blur(18px);
+}
+
+.auth-help-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 .auth-form label {
   display: grid;
   gap: 7px;
