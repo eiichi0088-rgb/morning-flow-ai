@@ -87,7 +87,14 @@ export async function upsertSupabaseShoppingItems(items: SupabaseShoppingItemUps
     method: 'POST',
   });
 
-  return readSupabaseResponse<SupabaseShoppingItemRow[]>(response);
+  const rows = await readSupabaseResponse<SupabaseShoppingItemRow[]>(response);
+  console.info('[MORNING FLOW AI] Supabase shopping upsert response', {
+    rowCount: rows.length,
+    status: response.status,
+    statusText: response.statusText,
+    url: response.url,
+  });
+  return rows;
 }
 
 export async function updateSupabaseShoppingItem(itemId: string, userId: string, accessToken: string, updates: Partial<SupabaseShoppingItemUpsert>) {

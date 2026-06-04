@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.6.1 - 2026-06-04
+
+- Added Shopping Save Debug for Supabase shopping item save failures.
+- Debug shows current user id, payload `user_id`, Auth Mode, response status, response body, error, and INSERT payload.
+- Shopping upsert responses are logged for save verification.
+
 ## Version 3.6.0 - 2026-06-04
 
 - Added Supabase sync for Shopping List using `shopping_items`.

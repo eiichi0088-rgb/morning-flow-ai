@@ -58,8 +58,10 @@ import {
   isSupabaseShoppingConfigured,
   mapShoppingItemToSupabase,
   mapSupabaseRowToShoppingItem,
+  SupabaseShoppingItemError,
   updateSupabaseShoppingItem,
   upsertSupabaseShoppingItems,
+  type SupabaseShoppingItemUpsert,
 } from './services/supabaseShoppingItems';
 import { findRecipeMatch } from './services/recipeDatabase';
 import {
@@ -210,6 +212,18 @@ type FollowUpSupabaseDebug = {
   responseStatus: string;
   rowCount: number | null;
   urlHost: string;
+  userId: string;
+};
+
+type ShoppingSupabaseDebug = {
+  authMode: string;
+  bodyPreview: string;
+  error: string;
+  lastOperation: string;
+  payloadPreview: string;
+  payloadUserId: string;
+  responseStatus: string;
+  rowCount: number | null;
   userId: string;
 };
 
@@ -672,6 +686,9 @@ function App() {
   const [shoppingSyncStatus, setShoppingSyncStatus] = React.useState<'local' | 'syncing' | 'synced' | 'error'>(
     isSupabaseShoppingConfigured() ? 'syncing' : 'local',
   );
+  const [shoppingSupabaseDebug, setShoppingSupabaseDebug] = React.useState<ShoppingSupabaseDebug>(() =>
+    createShoppingSupabaseDebug('init'),
+  );
   const [shoppingCaptureMode, setShoppingCaptureMode] = React.useState<ShoppingCaptureMode>('shopping');
   const [mealPlanText, setMealPlanText] = React.useState('');
   const [originalMealPlanText, setOriginalMealPlanText] = React.useState('');
@@ -906,17 +923,26 @@ function App() {
       const auth = getShoppingSupabaseAuth();
       if (!auth) {
         setShoppingSyncStatus('local');
+        setShoppingSupabaseDebug(createShoppingSupabaseDebug('local:save'));
         return;
       }
+      const payload = items.map((item) => mapShoppingItemToSupabase(item, auth.userId));
       try {
         setShoppingSyncStatus('syncing');
-        await upsertSupabaseShoppingItems(items.map((item) => mapShoppingItemToSupabase(item, auth.userId)), auth.accessToken);
+        setShoppingSupabaseDebug(createShoppingSupabaseDebug('upsert:start', undefined, payload, auth.userId, auth.accessToken));
+        const rows = await upsertSupabaseShoppingItems(payload, auth.accessToken);
         setShoppingSyncError('');
         setShoppingSyncStatus('synced');
+        setShoppingSupabaseDebug({
+          ...createShoppingSupabaseDebug('upsert:success', undefined, payload, auth.userId, auth.accessToken),
+          responseStatus: '201 Created',
+          rowCount: rows.length,
+        });
       } catch (error) {
         console.error('[MORNING FLOW AI] Shopping upsert failed', error);
         setShoppingSyncError('買い物リストを保存できませんでした。通信を確認してください。');
         setShoppingSyncStatus('error');
+        setShoppingSupabaseDebug(createShoppingSupabaseDebug('upsert:error', error, payload, auth.userId, auth.accessToken));
       }
     },
     [getShoppingSupabaseAuth],
@@ -2024,6 +2050,7 @@ function App() {
           onStopListening={stopListening}
           shoppingSyncError={shoppingSyncError}
           shoppingSyncStatus={shoppingSyncStatus}
+          shoppingSupabaseDebug={shoppingSupabaseDebug}
           onEditItem={editShoppingItem}
           onTextChange={(value) => {
             if (shoppingCaptureMode === 'meal') {
@@ -3637,6 +3664,7 @@ function ShoppingListPage({
   onStopListening,
   shoppingSyncError,
   shoppingSyncStatus,
+  shoppingSupabaseDebug,
   onDeleteItem,
   onEditItem,
   onShare,
@@ -3681,6 +3709,7 @@ function ShoppingListPage({
   onStopListening: () => void;
   shoppingSyncError: string;
   shoppingSyncStatus: 'local' | 'syncing' | 'synced' | 'error';
+  shoppingSupabaseDebug: ShoppingSupabaseDebug;
   onDeleteItem: (itemId: string) => void;
   onEditItem: (itemId: string) => void;
   onShare: () => void;
@@ -3729,6 +3758,19 @@ function ShoppingListPage({
       <div className={`shopping-sync-status ${shoppingSyncStatus}`}>
         <span>{getShoppingSyncStatusLabel(shoppingSyncStatus)}</span>
         {shoppingSyncError && <small>{shoppingSyncError}</small>}
+        {(shoppingSyncError || shoppingSupabaseDebug.lastOperation.includes('upsert')) && (
+          <details className="follow-up-debug-details" open={Boolean(shoppingSyncError)}>
+            <summary>Shopping Save Debug</summary>
+            <small>Current User ID: {shoppingSupabaseDebug.userId || 'not checked'}</small>
+            <small>Payload User ID: {shoppingSupabaseDebug.payloadUserId || 'not checked'}</small>
+            <small>Auth Mode: {shoppingSupabaseDebug.authMode || 'not checked'}</small>
+            <small>Response: {shoppingSupabaseDebug.responseStatus || 'not received'}</small>
+            <small>Rows: {typeof shoppingSupabaseDebug.rowCount === 'number' ? shoppingSupabaseDebug.rowCount : 'not checked'}</small>
+            <small>Body: {shoppingSupabaseDebug.bodyPreview || 'not received'}</small>
+            <small>Error: {shoppingSupabaseDebug.error || 'none'}</small>
+            <small>INSERT Payload: {shoppingSupabaseDebug.payloadPreview || 'not checked'}</small>
+          </details>
+        )}
       </div>
 
       <div className="flow-switcher" aria-label="MORNING FLOW AI menu">
@@ -4869,6 +4911,30 @@ function createFollowUpSupabaseDebug(
     responseStatus: supabaseError ? `${supabaseError.status} ${supabaseError.statusText}`.trim() : '',
     rowCount: null,
     urlHost: config.urlHost,
+    userId,
+  };
+}
+
+function createShoppingSupabaseDebug(
+  lastOperation: string,
+  error?: unknown,
+  payload: SupabaseShoppingItemUpsert[] = [],
+  userId = '',
+  accessToken = '',
+): ShoppingSupabaseDebug {
+  const supabaseError = error instanceof SupabaseShoppingItemError ? error : null;
+  const fallbackError = error && !supabaseError ? (error instanceof Error ? error.message : String(error)) : '';
+  const firstPayload = payload[0];
+
+  return {
+    authMode: accessToken ? 'authenticated-access-token' : 'anon-key',
+    bodyPreview: supabaseError?.body ? supabaseError.body.slice(0, 260) : '',
+    error: supabaseError ? supabaseError.message : fallbackError,
+    lastOperation,
+    payloadPreview: payload.length ? JSON.stringify(payload).slice(0, 320) : '',
+    payloadUserId: firstPayload?.user_id ?? '',
+    responseStatus: supabaseError ? `${supabaseError.status} ${supabaseError.statusText}`.trim() : '',
+    rowCount: null,
     userId,
   };
 }

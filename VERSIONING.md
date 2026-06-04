@@ -5,8 +5,16 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.6.0 is based on v3.5.3 plus Shopping List Supabase sync.
+6. v3.6.1 is based on v3.6.0 plus Shopping Save Debug.
 
+
+## Version 3.6.1 Shopping Save Debug - 2026-06-04
+
+- Screen display: v3.6.1
+- ZIP: morning-flow-ai-v3.6.1.zip
+- Next planned version: Version 3.6.2
+- Shopping Save Debug shows current user id, payload `user_id`, Auth Mode, response status, response body, error, and INSERT payload.
+- Shopping upsert responses are logged for save verification.
 
 ## Version 3.6.0 Shopping List Supabase Sync - 2026-06-04
 
