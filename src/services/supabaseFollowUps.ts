@@ -78,12 +78,12 @@ function getSupabaseHostLabel() {
   }
 }
 
-function createSupabaseHeaders(extraHeaders: Record<string, string> = {}) {
+function createSupabaseHeaders(accessToken = '', extraHeaders: Record<string, string> = {}) {
   if (!supabaseAnonKey) throw new Error('Supabase is not configured.');
 
   return {
     apikey: supabaseAnonKey,
-    Authorization: `Bearer ${supabaseAnonKey}`,
+    Authorization: `Bearer ${accessToken || supabaseAnonKey}`,
     'Content-Type': 'application/json',
     ...extraHeaders,
   };
@@ -103,20 +103,20 @@ async function readSupabaseResponse<T>(response: Response): Promise<T> {
   return text ? (JSON.parse(text) as T) : ([] as T);
 }
 
-export async function fetchSupabaseFollowUps(userId: string) {
+export async function fetchSupabaseFollowUps(userId: string, accessToken: string) {
   const response = await fetch(createFollowUpsUrl(`select=*&user_id=eq.${encodeURIComponent(userId)}&order=updated_at.desc`), {
-    headers: createSupabaseHeaders(),
+    headers: createSupabaseHeaders(accessToken),
     method: 'GET',
   });
 
   return readSupabaseResponse<SupabaseFollowUpRow[]>(response);
 }
 
-export async function insertSupabaseFollowUp(item: SupabaseFollowUpInsert) {
+export async function insertSupabaseFollowUp(item: SupabaseFollowUpInsert, accessToken: string) {
   const url = createFollowUpsUrl();
   const response = await fetch(createFollowUpsUrl(), {
     body: JSON.stringify(item),
-    headers: createSupabaseHeaders({ Prefer: 'return=representation' }),
+    headers: createSupabaseHeaders(accessToken, { Prefer: 'return=representation' }),
     method: 'POST',
   });
 
@@ -130,13 +130,13 @@ export async function insertSupabaseFollowUp(item: SupabaseFollowUpInsert) {
   return rows[0];
 }
 
-export async function updateSupabaseFollowUp(itemId: string, userId: string, updates: SupabaseFollowUpUpdate) {
+export async function updateSupabaseFollowUp(itemId: string, userId: string, accessToken: string, updates: SupabaseFollowUpUpdate) {
   const response = await fetch(createFollowUpsUrl(`id=eq.${encodeURIComponent(itemId)}&user_id=eq.${encodeURIComponent(userId)}`), {
     body: JSON.stringify({
       ...updates,
       updated_at: updates.updated_at ?? new Date().toISOString(),
     }),
-    headers: createSupabaseHeaders({ Prefer: 'return=representation' }),
+    headers: createSupabaseHeaders(accessToken, { Prefer: 'return=representation' }),
     method: 'PATCH',
   });
 
@@ -144,9 +144,9 @@ export async function updateSupabaseFollowUp(itemId: string, userId: string, upd
   return rows[0];
 }
 
-export async function deleteSupabaseFollowUp(itemId: string, userId: string) {
+export async function deleteSupabaseFollowUp(itemId: string, userId: string, accessToken: string) {
   const response = await fetch(createFollowUpsUrl(`id=eq.${encodeURIComponent(itemId)}&user_id=eq.${encodeURIComponent(userId)}`), {
-    headers: createSupabaseHeaders(),
+    headers: createSupabaseHeaders(accessToken),
     method: 'DELETE',
   });
 

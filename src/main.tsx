@@ -188,6 +188,7 @@ type FollowUpDraftItem = Omit<FollowUpItem, 'completed' | 'completedAt' | 'creat
 };
 
 type FollowUpSupabaseDebug = {
+  authMode: string;
   bodyPreview: string;
   configured: boolean;
   error: string;
@@ -837,7 +838,8 @@ function App() {
       return;
     }
     const userId = authSession?.user.id;
-    if (!userId) {
+    const accessToken = authSession?.access_token ?? '';
+    if (!userId || !accessToken) {
       setFollowUpSyncStatus('error');
       setFollowUpSyncError('ログインユーザーを確認できませんでした。');
       return;
@@ -845,7 +847,7 @@ function App() {
 
     setFollowUpSyncStatus('syncing');
     try {
-      const rows = await fetchSupabaseFollowUps(userId);
+      const rows = await fetchSupabaseFollowUps(userId, accessToken);
       setFollowUps(rows.map(mapSupabaseRowToFollowUpItem));
       setFollowUpSyncError('');
       setFollowUpLastSyncedAt(new Date().toISOString());
@@ -854,7 +856,7 @@ function App() {
       setFollowUpSyncError('同期できませんでした。通信を確認してください。');
       setFollowUpSyncStatus('error');
     }
-  }, [authSession?.user.id]);
+  }, [authSession?.access_token, authSession?.user.id]);
 
   React.useEffect(() => {
     void syncFollowUpsFromSupabase();
@@ -1373,17 +1375,18 @@ function App() {
 
     if (isSupabaseFollowUpConfigured()) {
       let userId = authSession?.user.id ?? '';
+      const accessToken = authSession?.access_token ?? '';
       let insertPayload: ReturnType<typeof mapFollowUpItemToSupabaseInsert> | undefined;
       try {
-        if (!userId) throw new Error('ログインユーザーを確認できませんでした。');
+        if (!userId || !accessToken) throw new Error('ログインユーザーを確認できませんでした。');
         setFollowUpSyncStatus('syncing');
         insertPayload = mapFollowUpItemToSupabaseInsert(nextItem, userId);
         console.info('[MORNING FLOW AI] Supabase follow-up insert start', {
           config: getSupabaseFollowUpConfigStatus(),
           payload: insertPayload,
         });
-        setFollowUpSupabaseDebug(createFollowUpSupabaseDebug('insert:start', undefined, insertPayload, userId));
-        const savedRow = await insertSupabaseFollowUp(insertPayload);
+        setFollowUpSupabaseDebug(createFollowUpSupabaseDebug('insert:start', undefined, insertPayload, userId, accessToken));
+        const savedRow = await insertSupabaseFollowUp(insertPayload, accessToken);
         if (!savedRow) {
           throw new Error('Supabase insert returned no row. Check table permissions and Prefer return=representation support.');
         }
@@ -1393,7 +1396,7 @@ function App() {
         setFollowUpSyncError('');
         setFollowUpSyncStatus('synced');
         setFollowUpSupabaseDebug({
-          ...createFollowUpSupabaseDebug('insert:success', undefined, insertPayload, userId),
+          ...createFollowUpSupabaseDebug('insert:success', undefined, insertPayload, userId, accessToken),
           responseStatus: '201 Created',
           rowCount: 1,
         });
@@ -1403,7 +1406,7 @@ function App() {
         const message = getSupabaseFollowUpErrorMessage(error);
         setFollowUpSyncError(message);
         setFollowUpSyncStatus('error');
-        setFollowUpSupabaseDebug(createFollowUpSupabaseDebug('insert:error', error, insertPayload, userId));
+        setFollowUpSupabaseDebug(createFollowUpSupabaseDebug('insert:error', error, insertPayload, userId, accessToken));
         return false;
       }
     }
@@ -1641,12 +1644,13 @@ function App() {
     );
     if (isSupabaseFollowUpConfigured()) {
       const userId = authSession?.user.id;
-      if (!userId) {
+      const accessToken = authSession?.access_token ?? '';
+      if (!userId || !accessToken) {
         setFollowUpSyncError('ログインユーザーを確認できませんでした。');
         setFollowUpSyncStatus('error');
         return;
       }
-      void updateSupabaseFollowUp(itemId, userId, {
+      void updateSupabaseFollowUp(itemId, userId, accessToken, {
         completed_at: completedAt,
         status: 'done',
       })
@@ -1677,12 +1681,13 @@ function App() {
     );
     if (isSupabaseFollowUpConfigured()) {
       const userId = authSession?.user.id;
-      if (!userId) {
+      const accessToken = authSession?.access_token ?? '';
+      if (!userId || !accessToken) {
         setFollowUpSyncError('ログインユーザーを確認できませんでした。');
         setFollowUpSyncStatus('error');
         return;
       }
-      void updateSupabaseFollowUp(itemId, userId, {
+      void updateSupabaseFollowUp(itemId, userId, accessToken, {
         completed_at: null,
         status: 'pending',
       })
@@ -1715,12 +1720,13 @@ function App() {
     setFollowUps((current) => current.map((currentItem) => (currentItem.id === itemId ? nextItem : currentItem)));
     if (isSupabaseFollowUpConfigured()) {
       const userId = authSession?.user.id;
-      if (!userId) {
+      const accessToken = authSession?.access_token ?? '';
+      if (!userId || !accessToken) {
         setFollowUpSyncError('ログインユーザーを確認できませんでした。');
         setFollowUpSyncStatus('error');
         return;
       }
-      void updateSupabaseFollowUp(itemId, userId, {
+      void updateSupabaseFollowUp(itemId, userId, accessToken, {
         memo: nextContent,
         person_name: nextName,
         title: formatFollowUpTitle(nextItem),
@@ -1741,12 +1747,13 @@ function App() {
     setFollowUps((current) => current.filter((item) => item.id !== itemId));
     if (isSupabaseFollowUpConfigured()) {
       const userId = authSession?.user.id;
-      if (!userId) {
+      const accessToken = authSession?.access_token ?? '';
+      if (!userId || !accessToken) {
         setFollowUpSyncError('ログインユーザーを確認できませんでした。');
         setFollowUpSyncStatus('error');
         return;
       }
-      void deleteSupabaseFollowUp(itemId, userId)
+      void deleteSupabaseFollowUp(itemId, userId, accessToken)
         .then(() => {
           setFollowUpSyncError('');
           setFollowUpSyncStatus('synced');
@@ -2508,6 +2515,7 @@ function FollowUpManagerPage({
           <small>Supabase URL: {followUpSupabaseDebug.hasUrl ? followUpSupabaseDebug.urlHost : 'not configured'}</small>
           <small>Anon Key: {followUpSupabaseDebug.hasAnonKey ? 'configured' : 'not configured'}</small>
           <small>Last Operation: {followUpSupabaseDebug.lastOperation || 'not checked'}</small>
+          <small>Auth Mode: {followUpSupabaseDebug.authMode || 'not checked'}</small>
           <small>Current User ID: {followUpSupabaseDebug.userId || 'not checked'}</small>
           <small>Payload User ID: {followUpSupabaseDebug.payloadUserId || 'not checked'}</small>
           <small>Response: {followUpSupabaseDebug.responseStatus || 'not received'}</small>
@@ -3159,6 +3167,7 @@ function AiInboxPage({
         <section className="follow-up-sync-status error">
           <span>Follow Up Save Debug</span>
           {followUpSyncError && <small className="follow-up-sync-error">{followUpSyncError}</small>}
+          <small>Auth Mode: {followUpSupabaseDebug.authMode || 'not checked'}</small>
           <small>Current User ID: {followUpSupabaseDebug.userId || 'not checked'}</small>
           <small>Payload User ID: {followUpSupabaseDebug.payloadUserId || 'not checked'}</small>
           <small>Response: {followUpSupabaseDebug.responseStatus || 'not received'}</small>
@@ -4734,12 +4743,14 @@ function createFollowUpSupabaseDebug(
   error?: unknown,
   payload?: ReturnType<typeof mapFollowUpItemToSupabaseInsert>,
   userId = '',
+  accessToken = '',
 ): FollowUpSupabaseDebug {
   const config = getSupabaseFollowUpConfigStatus();
   const supabaseError = error instanceof SupabaseFollowUpError ? error : null;
   const fallbackError = error && !supabaseError ? (error instanceof Error ? error.message : String(error)) : '';
 
   return {
+    authMode: accessToken ? 'authenticated-access-token' : 'anon-key',
     bodyPreview: supabaseError?.body ? supabaseError.body.slice(0, 220) : '',
     configured: config.configured,
     error: supabaseError ? supabaseError.message : fallbackError,

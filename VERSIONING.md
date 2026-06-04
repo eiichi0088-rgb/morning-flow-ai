@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.5.2 is based on v3.5.1 plus version display sync.
+6. v3.5.3 is based on v3.5.2 plus authenticated Follow Up REST requests.
 
+
+## Version 3.5.3 Follow Up Auth Token RLS Fix - 2026-06-04
+
+- Screen display: v3.5.3
+- ZIP: morning-flow-ai-v3.5.3.zip
+- Next planned version: Version 3.5.4
+- Follow Up Supabase REST requests now send the logged-in user's access token in the Authorization header.
+- Fetch, insert, update, and delete run as the authenticated user instead of the anon role.
+- Follow Up Save Debug shows Auth Mode.
 
 ## Version 3.5.2 Version Display Sync - 2026-06-04
 

@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.5.3 - 2026-06-04
+
+- Fixed Follow Up Supabase REST requests to send the logged-in user's access token in the Authorization header.
+- Follow Up fetch, insert, update, and delete now run as the authenticated user instead of the anon role.
+- Added Auth Mode to Follow Up Save Debug.
+
 ## Version 3.5.2 - 2026-06-04
 
 - Updated the visible MORNING FLOW AI version display to `v3.5.2`.
