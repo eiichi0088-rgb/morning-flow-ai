@@ -5,8 +5,19 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.5.3 is based on v3.5.2 plus authenticated Follow Up REST requests.
+6. v3.6.0 is based on v3.5.3 plus Shopping List Supabase sync.
 
+
+## Version 3.6.0 Shopping List Supabase Sync - 2026-06-04
+
+- Screen display: v3.6.0
+- ZIP: morning-flow-ai-v3.6.0.zip
+- Next planned version: Version 3.6.1
+- Shopping List syncs through Supabase `shopping_items`.
+- Shopping reads/writes are scoped by logged-in `user_id` and sent with the authenticated access token.
+- LocalStorage backup remains in place.
+- Shopping List refreshes from Supabase every 15 seconds.
+- Recommended RLS: authenticated users can select/insert/update/delete only rows where `user_id = auth.uid()`.
 
 ## Version 3.5.3 Follow Up Auth Token RLS Fix - 2026-06-04
 

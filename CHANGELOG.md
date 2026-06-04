@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 3.6.0 - 2026-06-04
+
+- Added Supabase sync for Shopping List using `shopping_items`.
+- Shopping items are saved, fetched, checked, edited, and deleted by logged-in `user_id`.
+- LocalStorage shopping backup remains in place.
+- Shopping List refreshes from Supabase every 15 seconds when configured and logged in.
+
 ## Version 3.5.3 - 2026-06-04
 
 - Fixed Follow Up Supabase REST requests to send the logged-in user's access token in the Authorization header.

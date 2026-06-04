@@ -1053,6 +1053,32 @@ h1 {
   padding-bottom: 26px;
 }
 
+.shopping-sync-status {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(141, 229, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(141, 229, 255, 0.06);
+  padding: 9px 11px;
+}
+
+.shopping-sync-status span {
+  color: rgba(141, 229, 255, 0.92);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.shopping-sync-status small {
+  color: rgba(226, 235, 245, 0.74);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.shopping-sync-status.error {
+  border-color: rgba(255, 142, 124, 0.28);
+  background: rgba(126, 35, 29, 0.16);
+}
+
 .follow-up-page {
   padding-bottom: 28px;
 }

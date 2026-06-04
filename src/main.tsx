@@ -51,6 +51,16 @@ import {
   parseShoppingItemInput,
   type ShoppingItem,
 } from './services/shoppingPlanner';
+import {
+  deleteAllSupabaseShoppingItems,
+  deleteSupabaseShoppingItem,
+  fetchSupabaseShoppingItems,
+  isSupabaseShoppingConfigured,
+  mapShoppingItemToSupabase,
+  mapSupabaseRowToShoppingItem,
+  updateSupabaseShoppingItem,
+  upsertSupabaseShoppingItems,
+} from './services/supabaseShoppingItems';
 import { findRecipeMatch } from './services/recipeDatabase';
 import {
   clearStoredSupabaseAuthSession,
@@ -658,6 +668,10 @@ function App() {
   const [shoppingUpdatedAt, setShoppingUpdatedAt] = React.useState('');
   const [shoppingError, setShoppingError] = React.useState('');
   const [shoppingShareMessage, setShoppingShareMessage] = React.useState('');
+  const [shoppingSyncError, setShoppingSyncError] = React.useState('');
+  const [shoppingSyncStatus, setShoppingSyncStatus] = React.useState<'local' | 'syncing' | 'synced' | 'error'>(
+    isSupabaseShoppingConfigured() ? 'syncing' : 'local',
+  );
   const [shoppingCaptureMode, setShoppingCaptureMode] = React.useState<ShoppingCaptureMode>('shopping');
   const [mealPlanText, setMealPlanText] = React.useState('');
   const [originalMealPlanText, setOriginalMealPlanText] = React.useState('');
@@ -858,6 +872,56 @@ function App() {
     }
   }, [authSession?.access_token, authSession?.user.id]);
 
+  const getShoppingSupabaseAuth = React.useCallback(() => {
+    if (!isSupabaseShoppingConfigured()) return null;
+    const userId = authSession?.user.id;
+    const accessToken = authSession?.access_token ?? '';
+    if (!userId || !accessToken) return null;
+    return { accessToken, userId };
+  }, [authSession?.access_token, authSession?.user.id]);
+
+  const syncShoppingItemsFromSupabase = React.useCallback(async () => {
+    const auth = getShoppingSupabaseAuth();
+    if (!auth) {
+      setShoppingSyncStatus('local');
+      return;
+    }
+
+    setShoppingSyncStatus('syncing');
+    try {
+      const rows = await fetchSupabaseShoppingItems(auth.userId, auth.accessToken);
+      setShoppingItems(rows.map(mapSupabaseRowToShoppingItem));
+      setShoppingUpdatedAt(new Date().toISOString());
+      setShoppingSyncError('');
+      setShoppingSyncStatus('synced');
+    } catch (error) {
+      console.error('[MORNING FLOW AI] Shopping sync failed', error);
+      setShoppingSyncError('買い物リストを同期できませんでした。通信を確認してください。');
+      setShoppingSyncStatus('error');
+    }
+  }, [getShoppingSupabaseAuth]);
+
+  const syncShoppingItemsToSupabase = React.useCallback(
+    async (items: ShoppingItem[]) => {
+      const auth = getShoppingSupabaseAuth();
+      if (!auth) {
+        setShoppingSyncStatus('local');
+        return;
+      }
+      try {
+        setShoppingSyncStatus('syncing');
+        await upsertSupabaseShoppingItems(items.map((item) => mapShoppingItemToSupabase(item, auth.userId)), auth.accessToken);
+        setShoppingSyncError('');
+        setShoppingSyncStatus('synced');
+      } catch (error) {
+        console.error('[MORNING FLOW AI] Shopping upsert failed', error);
+        setShoppingSyncError('買い物リストを保存できませんでした。通信を確認してください。');
+        setShoppingSyncStatus('error');
+      }
+    },
+    [getShoppingSupabaseAuth],
+  );
+
   React.useEffect(() => {
     void syncFollowUpsFromSupabase();
 
@@ -868,6 +932,17 @@ function App() {
 
     return () => window.clearInterval(intervalId);
   }, [syncFollowUpsFromSupabase]);
+
+  React.useEffect(() => {
+    void syncShoppingItemsFromSupabase();
+
+    if (!getShoppingSupabaseAuth()) return;
+    const intervalId = window.setInterval(() => {
+      void syncShoppingItemsFromSupabase();
+    }, 15000);
+
+    return () => window.clearInterval(intervalId);
+  }, [getShoppingSupabaseAuth, syncShoppingItemsFromSupabase]);
 
   React.useEffect(() => {
     if (!highlightedShoppingIds.length) return;
@@ -1035,6 +1110,7 @@ function App() {
         setShoppingText(transcript.trim());
         setOriginalShoppingText(transcript.trim());
         setShoppingItems(classifiedShoppingItems);
+        void syncShoppingItemsToSupabase(classifiedShoppingItems);
         setShoppingUpdatedAt(shoppingPlan.updatedAt);
         setCaptureMode('create');
         setUpdateInstruction('');
@@ -1159,6 +1235,7 @@ function App() {
     createShoppingPlan(shoppingText, shoppingItems)
       .then((shoppingPlan) => {
         setShoppingItems(shoppingPlan.items);
+        void syncShoppingItemsToSupabase(shoppingPlan.items);
         setShoppingUpdatedAt(shoppingPlan.updatedAt);
         setOriginalShoppingText(shoppingText.trim());
         setHighlightedShoppingIds(shoppingPlan.items.filter((item) => !previousIds.has(item.id)).map((item) => item.id));
@@ -1246,6 +1323,7 @@ function App() {
     const previousIds = new Set(shoppingItems.map((item) => item.id));
     const nextItems = mergeMealCandidatesIntoShoppingItems(shoppingItems, mealCandidates);
     setShoppingItems(nextItems);
+    void syncShoppingItemsToSupabase(nextItems);
     setShoppingUpdatedAt(new Date().toISOString());
     setHighlightedShoppingIds(nextItems.filter((item) => !previousIds.has(item.id)).map((item) => item.id));
     setSelectedShoppingShareIds([]);
@@ -1265,6 +1343,8 @@ function App() {
     setMealServings(4);
     setShoppingCaptureMode('shopping');
     setShoppingItems([]);
+    const auth = getShoppingSupabaseAuth();
+    if (auth) void deleteAllSupabaseShoppingItems(auth.userId, auth.accessToken);
     setShoppingUpdatedAt('');
     setShoppingError('');
     setInterimTranscript('');
@@ -1287,6 +1367,8 @@ function App() {
 
     if (shoppingItems.length && window.confirm('整理済みリストも削除しますか？')) {
       setShoppingItems([]);
+      const auth = getShoppingSupabaseAuth();
+      if (auth) void deleteAllSupabaseShoppingItems(auth.userId, auth.accessToken);
       setShoppingUpdatedAt('');
       setHighlightedShoppingIds([]);
       setSelectedShoppingShareIds([]);
@@ -1312,6 +1394,8 @@ function App() {
 
     if (shouldResetItems) {
       setShoppingItems([]);
+      const auth = getShoppingSupabaseAuth();
+      if (auth) void deleteAllSupabaseShoppingItems(auth.userId, auth.accessToken);
       setShoppingUpdatedAt('');
       setHighlightedShoppingIds([]);
       setSelectedShoppingShareIds([]);
@@ -1319,10 +1403,16 @@ function App() {
   };
 
   const toggleShoppingItem = (itemId: string) => {
+    const item = shoppingItems.find((currentItem) => currentItem.id === itemId);
+    const nextCompleted = !item?.completed;
     setShoppingItems((current) =>
       current.map((item) => (item.id === itemId ? { ...item, completed: !item.completed } : item)),
     );
     setShoppingUpdatedAt(new Date().toISOString());
+    const auth = getShoppingSupabaseAuth();
+    if (auth && item) {
+      void updateSupabaseShoppingItem(itemId, auth.userId, auth.accessToken, { checked: nextCompleted });
+    }
   };
 
   const toggleShoppingShareItem = (itemId: string) => {
@@ -1340,24 +1430,30 @@ function App() {
     const parsed = parseShoppingItemInput(nextText);
     if (!parsed.name) return;
 
-    setShoppingItems((current) =>
-      current.map((currentItem) =>
-        currentItem.id === itemId
-          ? {
-              ...currentItem,
-              name: parsed.name,
-              quantity: parsed.quantity,
-            }
-          : currentItem,
-      ),
-    );
+    const nextItem = {
+      ...item,
+      category: classifyShoppingItem(parsed.name),
+      name: parsed.name,
+      quantity: parsed.quantity,
+    };
+    setShoppingItems((current) => current.map((currentItem) => (currentItem.id === itemId ? nextItem : currentItem)));
     setShoppingUpdatedAt(new Date().toISOString());
+    const auth = getShoppingSupabaseAuth();
+    if (auth) {
+      void updateSupabaseShoppingItem(itemId, auth.userId, auth.accessToken, {
+        category: nextItem.category,
+        name: nextItem.name,
+        quantity: nextItem.quantity,
+      });
+    }
   };
 
   const deleteShoppingItem = (itemId: string) => {
     setShoppingItems((current) => current.filter((item) => item.id !== itemId));
     setSelectedShoppingShareIds((current) => current.filter((id) => id !== itemId));
     setShoppingUpdatedAt(new Date().toISOString());
+    const auth = getShoppingSupabaseAuth();
+    if (auth) void deleteSupabaseShoppingItem(itemId, auth.userId, auth.accessToken);
   };
 
   const addFollowUp = async (item: Omit<FollowUpItem, 'completed' | 'completedAt' | 'createdAt' | 'id'>): Promise<boolean> => {
@@ -1926,6 +2022,8 @@ function App() {
           onResetRequest={() => setIsShoppingResetDialogOpen(true)}
           onStartListening={startListening}
           onStopListening={stopListening}
+          shoppingSyncError={shoppingSyncError}
+          shoppingSyncStatus={shoppingSyncStatus}
           onEditItem={editShoppingItem}
           onTextChange={(value) => {
             if (shoppingCaptureMode === 'meal') {
@@ -3537,6 +3635,8 @@ function ShoppingListPage({
   onResetRequest,
   onStartListening,
   onStopListening,
+  shoppingSyncError,
+  shoppingSyncStatus,
   onDeleteItem,
   onEditItem,
   onShare,
@@ -3579,6 +3679,8 @@ function ShoppingListPage({
   onResetRequest: () => void;
   onStartListening: () => void;
   onStopListening: () => void;
+  shoppingSyncError: string;
+  shoppingSyncStatus: 'local' | 'syncing' | 'synced' | 'error';
   onDeleteItem: (itemId: string) => void;
   onEditItem: (itemId: string) => void;
   onShare: () => void;
@@ -3622,6 +3724,11 @@ function ShoppingListPage({
         <button className="icon-ghost-button" type="button" onClick={onBack} aria-label="トップページへ戻る">
           <Home size={20} />
         </button>
+      </div>
+
+      <div className={`shopping-sync-status ${shoppingSyncStatus}`}>
+        <span>{getShoppingSyncStatusLabel(shoppingSyncStatus)}</span>
+        {shoppingSyncError && <small>{shoppingSyncError}</small>}
       </div>
 
       <div className="flow-switcher" aria-label="MORNING FLOW AI menu">
@@ -4770,6 +4877,13 @@ function getFollowUpSyncStatusLabel(status: 'local' | 'syncing' | 'synced' | 'er
   if (status === 'synced') return 'Supabase同期済み';
   if (status === 'syncing') return '同期中...';
   if (status === 'error') return 'Supabase同期エラー';
+  return 'ローカル保存';
+}
+
+function getShoppingSyncStatusLabel(status: 'local' | 'syncing' | 'synced' | 'error') {
+  if (status === 'synced') return '買い物リスト同期済み';
+  if (status === 'syncing') return '買い物リスト同期中...';
+  if (status === 'error') return '買い物リスト同期エラー';
   return 'ローカル保存';
 }
 
