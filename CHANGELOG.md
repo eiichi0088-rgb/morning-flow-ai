@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.5.1 - 2026-06-04
+
+- Added Follow Up save debug details for AI Inbox save failures.
+- Debug now shows current user id, payload `user_id`, response status, response body, error, and INSERT payload preview.
+- AI Inbox can show Follow Up save debug directly when Supabase insert fails.
+
 ## Version 3.5.0 - 2026-06-04
 
 - Added Follow Up user data isolation using `follow_ups.user_id`.

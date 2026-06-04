@@ -194,9 +194,12 @@ type FollowUpSupabaseDebug = {
   hasAnonKey: boolean;
   hasUrl: boolean;
   lastOperation: string;
+  payloadPreview: string;
+  payloadUserId: string;
   responseStatus: string;
   rowCount: number | null;
   urlHost: string;
+  userId: string;
 };
 
 type FeedbackType = 'usability' | 'improvement' | 'bug' | 'feature' | 'other';
@@ -1369,16 +1372,17 @@ function App() {
     trackAnalyticsFeature(analyticsUserId, 'follow_up');
 
     if (isSupabaseFollowUpConfigured()) {
+      let userId = authSession?.user.id ?? '';
+      let insertPayload: ReturnType<typeof mapFollowUpItemToSupabaseInsert> | undefined;
       try {
-        const userId = authSession?.user.id;
         if (!userId) throw new Error('ログインユーザーを確認できませんでした。');
         setFollowUpSyncStatus('syncing');
-        const insertPayload = mapFollowUpItemToSupabaseInsert(nextItem, userId);
+        insertPayload = mapFollowUpItemToSupabaseInsert(nextItem, userId);
         console.info('[MORNING FLOW AI] Supabase follow-up insert start', {
           config: getSupabaseFollowUpConfigStatus(),
           payload: insertPayload,
         });
-        setFollowUpSupabaseDebug(createFollowUpSupabaseDebug('insert:start'));
+        setFollowUpSupabaseDebug(createFollowUpSupabaseDebug('insert:start', undefined, insertPayload, userId));
         const savedRow = await insertSupabaseFollowUp(insertPayload);
         if (!savedRow) {
           throw new Error('Supabase insert returned no row. Check table permissions and Prefer return=representation support.');
@@ -1389,7 +1393,7 @@ function App() {
         setFollowUpSyncError('');
         setFollowUpSyncStatus('synced');
         setFollowUpSupabaseDebug({
-          ...createFollowUpSupabaseDebug('insert:success'),
+          ...createFollowUpSupabaseDebug('insert:success', undefined, insertPayload, userId),
           responseStatus: '201 Created',
           rowCount: 1,
         });
@@ -1399,7 +1403,7 @@ function App() {
         const message = getSupabaseFollowUpErrorMessage(error);
         setFollowUpSyncError(message);
         setFollowUpSyncStatus('error');
-        setFollowUpSupabaseDebug(createFollowUpSupabaseDebug('insert:error', error));
+        setFollowUpSupabaseDebug(createFollowUpSupabaseDebug('insert:error', error, insertPayload, userId));
         return false;
       }
     }
@@ -1978,6 +1982,8 @@ function App() {
         />
       ) : isInboxView ? (
         <AiInboxPage
+          followUpSupabaseDebug={followUpSupabaseDebug}
+          followUpSyncError={followUpSyncError}
           items={aiInboxItems}
           message={aiInboxMessage}
           onBack={() => setActiveView('morning')}
@@ -2502,8 +2508,11 @@ function FollowUpManagerPage({
           <small>Supabase URL: {followUpSupabaseDebug.hasUrl ? followUpSupabaseDebug.urlHost : 'not configured'}</small>
           <small>Anon Key: {followUpSupabaseDebug.hasAnonKey ? 'configured' : 'not configured'}</small>
           <small>Last Operation: {followUpSupabaseDebug.lastOperation || 'not checked'}</small>
+          <small>Current User ID: {followUpSupabaseDebug.userId || 'not checked'}</small>
+          <small>Payload User ID: {followUpSupabaseDebug.payloadUserId || 'not checked'}</small>
           <small>Response: {followUpSupabaseDebug.responseStatus || 'not received'}</small>
           <small>Rows: {typeof followUpSupabaseDebug.rowCount === 'number' ? followUpSupabaseDebug.rowCount : 'not checked'}</small>
+          <small>Payload: {followUpSupabaseDebug.payloadPreview || 'not checked'}</small>
           <small>Body: {followUpSupabaseDebug.bodyPreview || 'not received'}</small>
           <small>Error: {followUpSupabaseDebug.error || 'none'}</small>
         </details>
@@ -3094,6 +3103,8 @@ function AnalyticsMetric({ label, value }: { label: string; value: number | stri
 }
 
 function AiInboxPage({
+  followUpSupabaseDebug,
+  followUpSyncError,
   items,
   message,
   onBack,
@@ -3102,6 +3113,8 @@ function AiInboxPage({
   onOrganize,
   onReopen,
 }: {
+  followUpSupabaseDebug: FollowUpSupabaseDebug;
+  followUpSyncError: string;
   items: AiInboxItem[];
   message: string;
   onBack: () => void;
@@ -3142,6 +3155,18 @@ function AiInboxPage({
 
       <p className="ai-inbox-lead">音声入力はまずここに保存されます。分類候補を確認してから整理してください。</p>
       {message && <p className="follow-up-suggestion">{message}</p>}
+      {(followUpSyncError || followUpSupabaseDebug.lastOperation.includes('insert')) && (
+        <section className="follow-up-sync-status error">
+          <span>Follow Up Save Debug</span>
+          {followUpSyncError && <small className="follow-up-sync-error">{followUpSyncError}</small>}
+          <small>Current User ID: {followUpSupabaseDebug.userId || 'not checked'}</small>
+          <small>Payload User ID: {followUpSupabaseDebug.payloadUserId || 'not checked'}</small>
+          <small>Response: {followUpSupabaseDebug.responseStatus || 'not received'}</small>
+          <small>Body: {followUpSupabaseDebug.bodyPreview || 'not received'}</small>
+          <small>Error: {followUpSupabaseDebug.error || 'none'}</small>
+          <small>Payload: {followUpSupabaseDebug.payloadPreview || 'not checked'}</small>
+        </section>
+      )}
 
       <AiInboxSection
         emptyText="未整理のInboxはありません。"
@@ -4704,7 +4729,12 @@ function getAuthErrorMessage(error: unknown) {
   return message || 'ログインできませんでした。';
 }
 
-function createFollowUpSupabaseDebug(lastOperation: string, error?: unknown): FollowUpSupabaseDebug {
+function createFollowUpSupabaseDebug(
+  lastOperation: string,
+  error?: unknown,
+  payload?: ReturnType<typeof mapFollowUpItemToSupabaseInsert>,
+  userId = '',
+): FollowUpSupabaseDebug {
   const config = getSupabaseFollowUpConfigStatus();
   const supabaseError = error instanceof SupabaseFollowUpError ? error : null;
   const fallbackError = error && !supabaseError ? (error instanceof Error ? error.message : String(error)) : '';
@@ -4716,9 +4746,12 @@ function createFollowUpSupabaseDebug(lastOperation: string, error?: unknown): Fo
     hasAnonKey: config.hasAnonKey,
     hasUrl: config.hasUrl,
     lastOperation,
+    payloadPreview: payload ? JSON.stringify(payload).slice(0, 260) : '',
+    payloadUserId: payload?.user_id ?? '',
     responseStatus: supabaseError ? `${supabaseError.status} ${supabaseError.statusText}`.trim() : '',
     rowCount: null,
     urlHost: config.urlHost,
+    userId,
   };
 }
 

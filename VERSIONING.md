@@ -5,8 +5,16 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.5.0 is based on v3.4.0 plus Follow Up user data isolation.
+6. v3.5.1 is based on v3.5.0 plus Follow Up save debug visibility.
 
+
+## Version 3.5.1 Follow Up Save Fix Debug - 2026-06-04
+
+- Screen display: v3.5.1
+- ZIP: morning-flow-ai-v3.5.1.zip
+- Next planned version: Version 3.5.2
+- AI Inbox Follow Up save failures now show current user id, payload `user_id`, response status, response body, error, and payload preview.
+- Follow Up Supabase Debug includes INSERT user id and payload details.
 
 ## Version 3.5.0 User Data Isolation - 2026-06-04
 
