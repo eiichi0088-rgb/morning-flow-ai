@@ -5,8 +5,16 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.6.2 is based on v3.6.1 plus Supabase Auth token refresh.
+6. v3.6.3 is based on v3.6.2 plus Context-Aware Direct Routing.
 
+
+## Version 3.6.3 Context-Aware Direct Routing - 2026-06-04
+
+- Screen display: v3.6.3
+- ZIP: morning-flow-ai-v3.6.3.zip
+- Next planned version: Version 3.6.4
+- Shopping, Follow Up, and Morning Flow page voice input stays in the active page instead of always going through AI Inbox.
+- AI Inbox remains the generic capture destination for unclear, idea, and mixed-category input.
 
 ## Version 3.6.2 Supabase Auth Token Refresh Fix - 2026-06-04
 

@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.6.3 - 2026-06-04
+
+- Added context-aware voice routing so Shopping, Follow Up, and Morning Flow can capture speech directly on their pages.
+- AI Inbox remains available for general, unclear, idea, and mixed-category voice notes.
+- Dedicated page captures now avoid unnecessary AI Inbox detours while keeping existing organize and Supabase sync flows.
+
 ## Version 3.6.2 - 2026-06-04
 
 - Added Supabase Auth session refresh before Follow Up and Shopping Supabase requests.

@@ -1009,6 +1009,48 @@ function App() {
     setActiveView('inbox');
   }, []);
 
+  const routeFinalVoiceText = React.useCallback(
+    (text: string, sourceView: AppView) => {
+      const normalized = text.trim();
+      if (!normalized) return;
+
+      if (sourceView === 'shopping') {
+        if (shoppingCaptureMode === 'meal') {
+          setMealPlanText((current) => appendVoiceText(current, normalized));
+        } else {
+          setShoppingText((current) => appendVoiceText(current, normalized));
+        }
+        setInterimTranscript('');
+        return;
+      }
+
+      if (sourceView === 'followUp') {
+        setFollowUpCaptureText((current) => appendVoiceText(current, normalized));
+        setInterimTranscript('');
+        return;
+      }
+
+      if (sourceView === 'feedback') {
+        setFeedbackText((current) => appendVoiceText(current, normalized));
+        setInterimTranscript('');
+        return;
+      }
+
+      if (sourceView === 'morning' && !shouldRouteMorningVoiceToAiInbox(normalized)) {
+        setTranscript((current) => appendVoiceText(current, normalized));
+        setOriginalTranscript((current) => appendVoiceText(current, normalized));
+        setPlan(null);
+        setMorningFollowUpCandidates([]);
+        setMorningFollowUpMessage('');
+        setInterimTranscript('');
+        return;
+      }
+
+      saveVoiceTextToAiInbox(normalized, sourceView);
+    },
+    [saveVoiceTextToAiInbox, shoppingCaptureMode],
+  );
+
   React.useEffect(() => {
     if (!SpeechRecognition) return;
 
@@ -1057,7 +1099,7 @@ function App() {
       }
 
       if (finalText) {
-        saveVoiceTextToAiInbox(finalText, activeView);
+        routeFinalVoiceText(finalText, activeView);
       }
       setInterimTranscript(interimText.trim());
     };
@@ -1067,7 +1109,7 @@ function App() {
     return () => {
       instance.abort();
     };
-  }, [activeView, saveVoiceTextToAiInbox]);
+  }, [activeView, routeFinalVoiceText]);
 
   const startListening = () => {
     if (!recognition || isListening) return;
@@ -4985,6 +5027,35 @@ function classifyAiInboxText(text: string, fallback: AiInboxCategory = 'memo'): 
   if (hasScheduleTimeText(text)) return { category: 'todo', confidence: 91 };
   if (isScheduleActionText(text)) return { category: 'todo', confidence: 84 };
   return { category: fallback, confidence: fallback === 'memo' ? 72 : 80 };
+}
+
+function shouldRouteMorningVoiceToAiInbox(text: string) {
+  const normalized = text.trim();
+  if (!normalized) return false;
+
+  const hasShopping = hasShoppingItemIntent(normalized) || hasShoppingActionIntent(normalized) || isShoppingItemText(normalized);
+  const hasFollowUp = detectFollowUpIntent(normalized);
+  const hasIdea = detectIdeaIntent(normalized);
+  const hasTodoOrSchedule = detectTodoOrScheduleIntent(normalized);
+
+  if (hasIdea) return true;
+  if (hasShopping && hasFollowUp) return true;
+  return hasShopping && !hasTodoOrSchedule;
+}
+
+function detectIdeaIntent(text: string) {
+  return /\u30a2\u30a4\u30c7\u30a2|\u601d\u3044\u3064\u3044\u305f|\u4f01\u753b|\u65b0\u3057\u3044|\u30e1\u30e2|\u8003\u3048\u308b|\u8003\u3048\u3066\u304a\u304f|\u6848/i.test(text);
+}
+
+function detectTodoOrScheduleIntent(text: string) {
+  return /\d{1,2}\s*[:：]\s*\d{2}|\d{1,2}\s*\u6642|\u5348\u524d|\u5348\u5f8c|\u4eca\u65e5|\u660e\u65e5|\u4e88\u5b9a|\u884c\u304f|\u3059\u308b|\u3084\u308b|\u98df\u3079\u308b|\u30e9\u30f3\u30c1|\u5915\u98df|\u671d\u98df/.test(text);
+}
+
+function appendVoiceText(current: string, nextText: string) {
+  const currentText = current.trim();
+  const incomingText = nextText.trim();
+  if (!incomingText) return currentText;
+  return [currentText, incomingText].filter(Boolean).join('\n');
 }
 
 function normalizeAiInboxItem(item: AiInboxItem): AiInboxItem {
