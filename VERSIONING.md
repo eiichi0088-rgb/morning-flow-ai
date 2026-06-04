@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.6.6 is based on v3.6.5 plus Auth Signup / Email Confirmation Debug.
+6. v3.6.7 is based on v3.6.6 plus user-selectable onboarding guide preferences.
 
+
+## Version 3.6.7 Onboarding Guide Preference Control - 2026-06-04
+
+- Screen display: v3.6.7
+- ZIP: morning-flow-ai-v3.6.7.zip
+- Next planned version: Version 3.6.8
+- Users can choose whether the guide is shown every time, only the first time, or never.
+- Settings page includes "使い方ガイドを見る" and onboarding preference controls.
+- Onboarding preference is saved per `user_id` and stores reusable guide ids.
 
 ## Version 3.6.6 Auth Signup / Email Confirmation Debug - 2026-06-04
 

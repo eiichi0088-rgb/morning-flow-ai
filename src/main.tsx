@@ -149,9 +149,15 @@ type CalendarEvent = {
 };
 
 type CaptureMode = 'create' | 'update';
-type AppView = 'morning' | 'shopping' | 'followUp' | 'inbox' | 'feedback' | 'analytics';
+type AppView = 'morning' | 'shopping' | 'followUp' | 'inbox' | 'feedback' | 'analytics' | 'settings';
 type AiInboxCategory = 'todo' | 'shopping' | 'followUp' | 'memo' | 'idea';
 type AiInboxStatus = 'unprocessed' | 'organized';
+type OnboardingPreference = 'always_show' | 'first_time_only' | 'disabled';
+
+type OnboardingSettings = {
+  preference: OnboardingPreference;
+  seenGuideIds: string[];
+};
 
 type AiInboxItem = {
   id: string;
@@ -335,6 +341,7 @@ const analyticsInstallTrackedKey = 'morning-flow-ai:analytics-install-tracked:v1
 const analyticsDebugStorageKey = 'morning-flow-ai:analytics-debug-log:v1';
 const developerModeStorageKey = 'mfai_developer_mode';
 const developerModePasscode = '19810303';
+const onboardingGuideId = 'morning-flow-ai-core-guide-v1';
 const appVersion = __APP_VERSION__;
 const isMealDatabaseExperimentalEnabled = false;
 type AppleCalendarDisposition = 'inline' | 'attachment';
@@ -646,6 +653,47 @@ function createPrivateSessionKeys(sessionId: string): PrivateSessionKeys {
   };
 }
 
+function createDefaultOnboardingSettings(): OnboardingSettings {
+  return {
+    preference: 'first_time_only',
+    seenGuideIds: [],
+  };
+}
+
+function getOnboardingSettingsStorageKey(userId: string) {
+  return `morning-flow-ai:user:${userId}:onboarding-preferences:v1`;
+}
+
+function loadOnboardingSettings(userId: string): OnboardingSettings {
+  const saved = localStorage.getItem(getOnboardingSettingsStorageKey(userId));
+  if (!saved) return createDefaultOnboardingSettings();
+
+  try {
+    const parsed = JSON.parse(saved) as Partial<OnboardingSettings>;
+    return {
+      preference: isOnboardingPreference(parsed.preference) ? parsed.preference : 'first_time_only',
+      seenGuideIds: Array.isArray(parsed.seenGuideIds) ? parsed.seenGuideIds.filter((item): item is string => typeof item === 'string') : [],
+    };
+  } catch {
+    localStorage.removeItem(getOnboardingSettingsStorageKey(userId));
+    return createDefaultOnboardingSettings();
+  }
+}
+
+function saveOnboardingSettingsForUser(userId: string, settings: OnboardingSettings) {
+  localStorage.setItem(getOnboardingSettingsStorageKey(userId), JSON.stringify(settings));
+}
+
+function shouldShowOnboardingGuide(settings: OnboardingSettings, guideId: string) {
+  if (settings.preference === 'always_show') return true;
+  if (settings.preference === 'disabled') return false;
+  return !settings.seenGuideIds.includes(guideId);
+}
+
+function isOnboardingPreference(value: unknown): value is OnboardingPreference {
+  return value === 'always_show' || value === 'first_time_only' || value === 'disabled';
+}
+
 function removeLegacySharedStorage(currentSessionId: string) {
   legacySharedStorageKeys.forEach((key) => localStorage.removeItem(key));
   Object.keys(localStorage)
@@ -662,6 +710,8 @@ function App() {
   const [activeView, setActiveView] = React.useState<AppView>('morning');
   const [authError, setAuthError] = React.useState('');
   const [authNotice, setAuthNotice] = React.useState('');
+  const [onboardingSettings, setOnboardingSettings] = React.useState<OnboardingSettings>(createDefaultOnboardingSettings);
+  const [isOnboardingGuideOpen, setIsOnboardingGuideOpen] = React.useState(false);
   const [isAuthLoading, setIsAuthLoading] = React.useState(false);
   const [recognition, setRecognition] = React.useState<SpeechRecognitionLike | null>(null);
   const [isListening, setIsListening] = React.useState(false);
@@ -772,6 +822,50 @@ function App() {
     setAuthSession(refreshedSession);
     return { session: refreshedSession, tokenStatus: 'token expired / token refreshed' };
   }, [authSession]);
+
+  React.useEffect(() => {
+    const userId = authSession?.user.id;
+    if (!userId) {
+      setOnboardingSettings(createDefaultOnboardingSettings());
+      setIsOnboardingGuideOpen(false);
+      return;
+    }
+
+    const settings = loadOnboardingSettings(userId);
+    setOnboardingSettings(settings);
+    setIsOnboardingGuideOpen(shouldShowOnboardingGuide(settings, onboardingGuideId));
+  }, [authSession?.user.id]);
+
+  const saveOnboardingSettings = React.useCallback(
+    (nextSettings: OnboardingSettings) => {
+      setOnboardingSettings(nextSettings);
+      if (authSession?.user.id) saveOnboardingSettingsForUser(authSession.user.id, nextSettings);
+    },
+    [authSession?.user.id],
+  );
+
+  const finishOnboardingGuide = React.useCallback(
+    (preference: OnboardingPreference) => {
+      const nextSettings = {
+        preference,
+        seenGuideIds: Array.from(new Set([...onboardingSettings.seenGuideIds, onboardingGuideId])),
+      };
+      saveOnboardingSettings(nextSettings);
+      setIsOnboardingGuideOpen(false);
+    },
+    [onboardingSettings.seenGuideIds, saveOnboardingSettings],
+  );
+
+  const updateOnboardingPreference = React.useCallback(
+    (preference: OnboardingPreference) => {
+      const nextSettings = {
+        ...onboardingSettings,
+        preference,
+      };
+      saveOnboardingSettings(nextSettings);
+    },
+    [onboardingSettings, saveOnboardingSettings],
+  );
 
   const resetLocalWorkspaceState = React.useCallback(() => {
     setActiveView('morning');
@@ -2178,7 +2272,7 @@ function App() {
         <span className="morning-orbit orbit-two" />
         <span className="horizon-line" />
       </div>
-      <AuthStatusBar email={authSession.user.email} onLogout={() => void logout()} />
+      <AuthStatusBar email={authSession.user.email} onLogout={() => void logout()} onSettings={() => setActiveView('settings')} />
 
       {isShoppingView ? (
         <ShoppingListPage
@@ -2311,6 +2405,13 @@ function App() {
         />
       ) : activeView === 'analytics' ? (
         <AnalyticsDashboardPage onBack={() => setActiveView('morning')} userId={analyticsUserId} />
+      ) : activeView === 'settings' ? (
+        <SettingsPage
+          onboardingPreference={onboardingSettings.preference}
+          onBack={() => setActiveView('morning')}
+          onOpenGuide={() => setIsOnboardingGuideOpen(true)}
+          onPreferenceChange={updateOnboardingPreference}
+        />
       ) : (
       <section className="hero-panel" aria-label="音声入力">
         <div className="top-bar">
@@ -2532,6 +2633,12 @@ function App() {
           </section>
         </div>
       )}
+      {isOnboardingGuideOpen && (
+        <OnboardingGuideDialog
+          onClose={() => finishOnboardingGuide(onboardingSettings.preference)}
+          onFinish={finishOnboardingGuide}
+        />
+      )}
     </main>
   );
 }
@@ -2636,13 +2743,125 @@ function AuthGate({
   );
 }
 
-function AuthStatusBar({ email, onLogout }: { email?: string; onLogout: () => void }) {
+function AuthStatusBar({ email, onLogout, onSettings }: { email?: string; onLogout: () => void; onSettings: () => void }) {
   return (
     <div className="auth-status-bar">
       <span>ログイン中 {email || 'User'}</span>
-      <button onClick={onLogout} type="button">
-        ログアウト
+      <div className="auth-status-actions">
+        <button onClick={onSettings} type="button">
+          設定
+        </button>
+        <button onClick={onLogout} type="button">
+          ログアウト
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SettingsPage({
+  onboardingPreference,
+  onBack,
+  onOpenGuide,
+  onPreferenceChange,
+}: {
+  onboardingPreference: OnboardingPreference;
+  onBack: () => void;
+  onOpenGuide: () => void;
+  onPreferenceChange: (preference: OnboardingPreference) => void;
+}) {
+  return (
+    <section className="hero-panel settings-page" aria-label="設定">
+      <div className="top-bar">
+        <div>
+          <p className="eyebrow">MORNING FLOW AI <span>{appVersion}</span></p>
+          <h1>設定</h1>
+          <p className="hero-subtitle">Guide Preferences</p>
+        </div>
+        <div className="brand-mark" aria-hidden="true">
+          <Sparkles size={21} />
+        </div>
+      </div>
+
+      <section className="settings-card">
+        <div>
+          <span className="settings-label">使い方ガイド</span>
+          <strong>初回ガイドの表示設定</strong>
+        </div>
+        <button className="organize-button" onClick={onOpenGuide} type="button">
+          使い方ガイドを見る
+        </button>
+        <div className="settings-options" role="radiogroup" aria-label="初回ガイド表示設定">
+          <label>
+            <input
+              checked={onboardingPreference === 'always_show'}
+              name="onboardingPreference"
+              onChange={() => onPreferenceChange('always_show')}
+              type="radio"
+            />
+            初回ガイドを毎回表示する
+          </label>
+          <label>
+            <input
+              checked={onboardingPreference === 'first_time_only'}
+              name="onboardingPreference"
+              onChange={() => onPreferenceChange('first_time_only')}
+              type="radio"
+            />
+            初回だけ表示する
+          </label>
+          <label>
+            <input
+              checked={onboardingPreference === 'disabled'}
+              name="onboardingPreference"
+              onChange={() => onPreferenceChange('disabled')}
+              type="radio"
+            />
+            初回ガイドを表示しない
+          </label>
+        </div>
+      </section>
+
+      <button className="secondary-button" onClick={onBack} type="button">
+        <Home size={18} />
+        ホームへ戻る
       </button>
+    </section>
+  );
+}
+
+function OnboardingGuideDialog({
+  onClose,
+  onFinish,
+}: {
+  onClose: () => void;
+  onFinish: (preference: OnboardingPreference) => void;
+}) {
+  return (
+    <div className="confirm-dialog-backdrop onboarding-backdrop" role="presentation">
+      <section className="confirm-dialog onboarding-dialog" role="dialog" aria-modal="true" aria-label="使い方ガイド">
+        <div className="confirm-dialog-icon" aria-hidden="true">
+          <Sparkles size={23} />
+        </div>
+        <h2>使い方ガイド</h2>
+        <div className="onboarding-guide-list">
+          <p>1. ホームでは今日の予定を話して整理できます。</p>
+          <p>2. 買い物リストでは買う物だけを話すと、その場で分解して保存します。</p>
+          <p>3. Follow Upでは電話・LINE・返信などを話すと、保存前に確認できます。</p>
+          <p>4. 迷った内容や複数カテゴリが混ざる内容は AI Inbox に集めて整理できます。</p>
+        </div>
+        <div className="confirm-dialog-actions onboarding-actions">
+          <button className="secondary-button" onClick={() => onFinish('disabled')} type="button">
+            次回から表示しない
+          </button>
+          <button className="primary-button" onClick={() => onFinish('always_show')} type="button">
+            毎回表示する
+          </button>
+        </div>
+        <button className="secondary-button" onClick={onClose} type="button">
+          今の設定のまま閉じる
+        </button>
+      </section>
     </div>
   );
 }

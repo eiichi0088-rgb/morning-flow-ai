@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.6.7 - 2026-06-04
+
+- Added user-selectable onboarding guide preferences: `always_show`, `first_time_only`, and `disabled`.
+- Added a Settings page with "使い方ガイドを見る" and onboarding display controls.
+- Onboarding settings are saved per logged-in user id and support reusable guide ids for future guides.
+
 ## Version 3.6.6 - 2026-06-04
 
 - Added Auth debug logging for signup, login errors, confirmation resend, password reset, and session restore.
