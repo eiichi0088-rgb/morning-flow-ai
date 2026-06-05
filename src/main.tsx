@@ -4978,15 +4978,16 @@ function PlanView({
     () => calendarEvents.filter((event) => isFutureLocalDate(event.start, today)),
     [calendarEvents, today],
   );
+  const futureEventGroups = React.useMemo(() => groupFutureEventsByDate(futureEvents), [futureEvents]);
   const todayTodos = React.useMemo(
-    () => plan.todos.filter((todo) => !isFutureDatedText(todo, today) && (isFoodEventText(todo) || !isShoppingItemText(todo))).slice(0, 5),
+    () => plan.todos.filter((todo) => !isFutureDatedText(todo, today) && (isFoodEventText(todo) || !isShoppingItemText(todo))),
     [plan.todos, today],
   );
   const visibleShoppingItems = React.useMemo(
     () => dedupeShoppingItemsForDisplay(groupShoppingItems(shoppingItems).flatMap((group) => group.items)),
     [shoppingItems],
   );
-  const visibleSchedule = todayEvents.slice(0, 5);
+  const visibleSchedule = todayEvents;
   return (
     <section className="plan-stack" aria-label="AI organized result">
       <PlanSection icon={<ListChecks size={18} />} title={'\u4eca\u65e5\u306e\u3084\u308b\u3053\u3068'}>
@@ -5036,14 +5037,21 @@ function PlanView({
         )}
       </PlanSection>
 
-      {futureEvents.length > 0 && (
+      {futureEventGroups.length > 0 && (
         <PlanSection icon={<CalendarClock size={18} />} title={'\u672a\u6765\u306e\u4e88\u5b9a'}>
-          <div className="schedule-list">
-            {futureEvents.map((event) => (
-              <div className="schedule-item" key={event.id}>
-                <time>{formatEventDateTime(event.start)}</time>
-                <span>{event.title}</span>
-              </div>
+          <div className="future-schedule-list">
+            {futureEventGroups.map((group) => (
+              <section className="future-schedule-day" key={group.dateLabel}>
+                <strong>{group.dateLabel}</strong>
+                <div className="schedule-list">
+                  {group.events.map((event) => (
+                    <div className="schedule-item" key={event.id}>
+                      <time>{formatEventTime(event.start)}</time>
+                      <span>{event.title}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         </PlanSection>
@@ -5074,6 +5082,25 @@ function dedupeShoppingItemsForDisplay(items: ShoppingItem[]) {
     seen.add(key);
     return true;
   });
+}
+
+function groupFutureEventsByDate(events: CalendarEvent[]) {
+  const groups = new Map<string, CalendarEvent[]>();
+  events.forEach((event) => {
+    const dateLabel = event.start.toLocaleDateString('ja-JP', {
+      month: 'numeric',
+      day: 'numeric',
+      weekday: 'short',
+    });
+    const currentEvents = groups.get(dateLabel) ?? [];
+    currentEvents.push(event);
+    groups.set(dateLabel, currentEvents);
+  });
+
+  return Array.from(groups.entries()).map(([dateLabel, groupedEvents]) => ({
+    dateLabel,
+    events: groupedEvents.sort((a, b) => a.start.getTime() - b.start.getTime()),
+  }));
 }
 
 function GoogleCalendarExportPanel({ analyticsUserId, events }: { analyticsUserId: string; events: CalendarEvent[] }) {
@@ -6255,6 +6282,7 @@ function prepareUnifiedMorningPlan(plan: MorningPlan, sourceText: string, shoppi
   const shoppingNames = new Set(shoppingItems.map((item) => normalizeTaskText(item.name)));
   const extractedActions = extractScheduleActionsFromUnifiedInput(sourceText);
   const extractedSchedule = extractDatedScheduleItems(sourceText);
+  const fullCapture = createFullCapturePlanItems(sourceText);
   const futureTaskNames = new Set(extractedSchedule.map((item) => normalizeTaskText(item.task)));
   const hasShoppingAction = hasShoppingActionIntent(sourceText);
   const hasShoppingItems = hasShoppingItemIntent(sourceText) && extractShoppingItemsFromUnifiedInput(sourceText).length > 0;
@@ -6272,14 +6300,19 @@ function prepareUnifiedMorningPlan(plan: MorningPlan, sourceText: string, shoppi
   return {
     ...plan,
     todos: mergeStrings(
-      [...plan.todos.filter((todo) => !isShoppingText(todo) && !isFutureTaskText(todo)), ...extractedActions, ...shoppingAction],
+      [
+        ...plan.todos.filter((todo) => !isShoppingText(todo) && !isFutureTaskText(todo)),
+        ...extractedActions,
+        ...fullCapture.todos,
+        ...shoppingAction,
+      ],
       [],
     ),
     schedule: sortScheduleByTime(
       filterUnconfirmedDefaultScheduleTimes(
         mergeSchedule(
         plan.schedule.filter((item) => !isShoppingText(item.task) && !isFutureTaskText(item.task)),
-        mergeSchedule(extractedSchedule, shoppingSchedule),
+        mergeSchedule(mergeSchedule(extractedSchedule, fullCapture.schedule), shoppingSchedule),
         ),
         sourceText,
       ),
@@ -6310,6 +6343,119 @@ function filterUnconfirmedDefaultScheduleTimes(schedule: MorningPlan['schedule']
     const isDefaultNine = normalizedTime === '09:00' || normalizedTime === '9:00' || normalizedTime === '9時' || normalizedTime === '09時';
     if (!isDefaultNine) return true;
     return /\b0?9(?::00)?\b|0?9時/.test(normalizedSource);
+  });
+}
+
+function createFullCapturePlanItems(sourceText: string): { schedule: MorningPlan['schedule']; todos: string[] } {
+  const segments = splitFullCaptureSegments(sourceText);
+  const schedule: MorningPlan['schedule'] = [];
+  const todos: string[] = [];
+  let lastTime = '';
+
+  segments.forEach((segment) => {
+    const time = extractFullCaptureTime(segment);
+    const actions = extractFullCaptureActions(segment);
+    const effectiveTime = time || (hasSequentialTimeCue(segment) ? nextFullCaptureTime(lastTime) : '');
+    if (time) lastTime = time;
+
+    actions.forEach((action) => {
+      if (!action || isShoppingItemText(action)) return;
+      todos.push(action);
+      if (effectiveTime) schedule.push({ time: effectiveTime, task: action });
+    });
+  });
+
+  return {
+    schedule: dedupeFullCaptureSchedule(schedule),
+    todos: Array.from(new Set(todos.map((item) => item.trim()).filter(Boolean))),
+  };
+}
+
+function splitFullCaptureSegments(sourceText: string) {
+  return sourceText
+    .replace(/そして|それから|そのあと|その後/g, '。')
+    .split(/[。！？\n\r、]+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .flatMap((segment) => splitSegmentByFullCaptureConnector(segment));
+}
+
+function splitSegmentByFullCaptureConnector(segment: string) {
+  return segment
+    .split(/(?:して|行って|触って|作成して|炊いて)(?=[^、。！？\n\r]*?(?:する|行く|開店|閉店|休憩|準備|作成|炊く|触る|起きる|戻る|ジム))/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function extractFullCaptureTime(segment: string) {
+  const normalized = normalizeJapaneseDateText(segment);
+  const match = normalized.match(/(?:(明後日|明日|今日))?(\d{1,2})(?:時|:)(半|\d{2})?/);
+  if (!match) return '';
+
+  const datePrefix = match[1] ? `${match[1]} ` : '';
+  const hour = Number(match[2]);
+  const minute = match[3] === '半' ? 30 : Number(match[3] ?? 0);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return '';
+  return `${datePrefix}${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+function hasSequentialTimeCue(segment: string) {
+  return /その後|そのあと|それから|続いて/.test(segment);
+}
+
+function nextFullCaptureTime(previousTime: string) {
+  const match = previousTime.match(/^(?:(明後日|明日|今日)\s*)?(\d{2}):(\d{2})$/);
+  if (!match) return '';
+  const prefix = match[1] ? `${match[1]} ` : '';
+  const minutes = Number(match[2]) * 60 + Number(match[3]) + 30;
+  const hour = Math.floor(minutes / 60) % 24;
+  const minute = minutes % 60;
+  return `${prefix}${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+function extractFullCaptureActions(segment: string) {
+  const cleaned = segment
+    .replace(/^(明日は|明日|今日は|今日|その後|そのあと|それから|そして)/, '')
+    .replace(/\d{1,2}(?:時|:)(?:半|\d{2})?(?:には|に|から|まで)?/g, '')
+    .replace(/1時間ほど|少し|ほど/g, '')
+    .trim();
+  const actions: string[] = [];
+
+  if (/起き|起床/.test(cleaned)) actions.push('起床');
+  if (/パソコン.*触|PC.*触/.test(cleaned)) actions.push('パソコンを触る');
+  if (/アプリ.*(作成|作る|開発)/.test(cleaned)) actions.push('アプリ作成');
+  if (/店へ行|店に行|お店へ行|お店に行/.test(cleaned)) actions.push('店へ行く');
+  if (/オープン準備|開店準備/.test(cleaned)) actions.push('オープン準備');
+  if (/チャーシュー.*(炊|作)/.test(cleaned)) actions.push('チャーシューを炊く');
+  if (/休憩/.test(cleaned)) actions.push(/まで/.test(segment) ? '店へ戻る' : '休憩');
+  if (/開店/.test(cleaned)) actions.push('開店');
+  if (/閉店/.test(cleaned)) actions.push('閉店');
+  if (/ジム.*行/.test(cleaned)) actions.push('ジムへ行く');
+  if (/銀行.*行/.test(cleaned)) actions.push('銀行へ行く');
+  if (/Instagram|インスタ/.test(cleaned)) actions.push('Instagram投稿');
+
+  const fallback = normalizeFullCaptureAction(cleaned);
+  if (!actions.length && fallback && isFullCaptureActionText(fallback)) actions.push(fallback);
+  return Array.from(new Set(actions));
+}
+
+function normalizeFullCaptureAction(value: string) {
+  return value
+    .replace(/^(には|に|から|まで|は|を|が|へ)/, '')
+    .trim();
+}
+
+function isFullCaptureActionText(value: string) {
+  return /(行く|作成|作る|触る|準備|炊く|休憩|開店|閉店|起床|起きる|戻る|投稿|電話|確認)/.test(value);
+}
+
+function dedupeFullCaptureSchedule(schedule: MorningPlan['schedule']) {
+  const seen = new Set<string>();
+  return schedule.filter((item) => {
+    const key = getScheduleKey(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 }
 

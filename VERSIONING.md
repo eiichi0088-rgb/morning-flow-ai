@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.7.1 is based on v3.7.0 plus Morning Priority UX.
+6. v3.7.2 is based on v3.7.1 plus Full Capture AI Planning.
 
+
+## Version 3.7.2 Full Capture AI Planning - 2026-06-06
+
+- Screen display: v3.7.2
+- ZIP: morning-flow-ai-v3.7.2.zip
+- Next planned version: Version 3.7.3
+- Morning AI整理 keeps extractable actions from the full transcript and merges them into existing `plan.todos`.
+- Time-based transcript actions are merged into existing `plan.schedule` without changing Supabase or localStorage schemas.
+- Future Schedule is shown as grouped schedule rows instead of long text blocks.
 
 ## Version 3.7.1 Morning Priority UX - 2026-06-05
 

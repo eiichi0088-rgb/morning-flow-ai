@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.7.2 - 2026-06-06
+
+- Added Full Capture AI Planning so morning voice input keeps extractable actions instead of dropping lower-priority items.
+- Merged transcript-derived actions into display/save-compatible `plan.todos` and time-based items into `plan.schedule` without changing storage schemas.
+- Improved Future Schedule display with grouped date sections and schedule-style rows.
+
 ## Version 3.7.1 - 2026-06-05
 
 - Added Phase 2 Morning Priority UX with a three-step guide on the home screen.
