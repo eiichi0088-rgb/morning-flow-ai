@@ -16,6 +16,7 @@
 - Full Capture schedule items keep their own extracted times and override same-task AI schedule guesses.
 - Todos and top priority cards use canonical dedupe to reduce duplicate meaning items and long labels.
 - Future Schedule remains grouped by date and sorted in schedule order.
+- Future transcript times inherit the spoken date context, and top priority cards favor actionable items over routine start/end markers.
 
 ## Version 3.7.2 Full Capture AI Planning - 2026-06-06
 

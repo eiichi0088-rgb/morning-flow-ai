@@ -6,6 +6,7 @@
 - Improved Smart Planning cleanup so transcript-derived schedule items keep their own individual times.
 - Added canonical Todo dedupe to avoid pairs like "起床" and "起床する".
 - Cleaned top priority and Future Schedule display to reduce duplicates and long text blocks.
+- Improved tomorrow/future transcript handling so later times inherit the spoken date context and priority cards favor actionable items.
 
 ## Version 3.7.2 - 2026-06-06
 

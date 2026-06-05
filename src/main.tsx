@@ -761,6 +761,10 @@ function cleanPriorityLabel(value: string) {
     .replace(/^(今日の予定|今日やること|予定|タスク)[:：\s]*/, '')
     .trim();
   if (!cleaned) return '';
+  const withoutTime = cleaned
+    .replace(/^(?:明後日|明日|今日)?\s*\d{1,2}(?:時(?:半|\d{1,2}分?)?|:\d{2})(?:には|に|から|まで)?\s*/, '')
+    .trim();
+  if (withoutTime && withoutTime.length <= 28) return withoutTime;
   if (cleaned.length <= 28) return cleaned;
   const compactMatch = cleaned.match(/(店へ行く|開店準備|オープン準備|ジムへ行く|閉店|開店|起床|銀行へ行く|電話|LINE返信|確認)/);
   if (compactMatch) return compactMatch[1];
@@ -800,7 +804,20 @@ function createTopPriorityItems({
   }
   shoppingItems.forEach((item) => addItem({ id: `priority-shopping-${item.id}`, label: formatShoppingItemLabel(item), completed: item.completed }));
 
-  return priorityItems.slice(0, 3);
+  return [...priorityItems]
+    .sort((a, b) => getTopPriorityRank(a.label) - getTopPriorityRank(b.label))
+    .slice(0, 3);
+}
+
+function getTopPriorityRank(label: string) {
+  if (/店へ行く|店に行く|銀行へ行く/.test(label)) return 10;
+  if (/開店準備|オープン準備|開店/.test(label)) return 20;
+  if (/ジムへ行く|ジムに行く/.test(label)) return 30;
+  if (/電話|LINE|返信|確認|連絡/.test(label)) return 35;
+  if (/買い物へ行く/.test(label)) return 45;
+  if (/閉店/.test(label)) return 80;
+  if (/起床|起きる/.test(label)) return 90;
+  return 40;
 }
 
 function createDefaultOnboardingSettings(): OnboardingSettings {
@@ -6405,10 +6422,11 @@ function createFullCapturePlanItems(sourceText: string): { schedule: MorningPlan
   const segments = splitFullCaptureSegments(sourceText);
   const schedule: MorningPlan['schedule'] = [];
   const todos: string[] = [];
+  const defaultDatePrefix = getFullCaptureDefaultDatePrefix(sourceText);
   let lastTime = '';
 
   segments.forEach((segment) => {
-    const time = extractFullCaptureTime(segment);
+    const time = applyFullCaptureDefaultDatePrefix(extractFullCaptureTime(segment), defaultDatePrefix);
     const actions = extractFullCaptureActions(segment);
     const effectiveTime = time || (lastTime && (hasSequentialTimeCue(segment) || actions.length) ? nextFullCaptureTime(lastTime) : '');
     if (time) lastTime = time;
@@ -6427,6 +6445,19 @@ function createFullCapturePlanItems(sourceText: string): { schedule: MorningPlan
     schedule: dedupeFullCaptureSchedule(schedule),
     todos: dedupePlanningTodos(todos),
   };
+}
+
+function getFullCaptureDefaultDatePrefix(sourceText: string) {
+  const normalized = normalizeJapaneseDateText(sourceText);
+  if (/明後日/.test(normalized)) return '明後日';
+  if (/明日/.test(normalized)) return '明日';
+  if (/今日/.test(normalized)) return '今日';
+  return '';
+}
+
+function applyFullCaptureDefaultDatePrefix(time: string, defaultDatePrefix: string) {
+  if (!time || !defaultDatePrefix || /^(明後日|明日|今日)\s/.test(time)) return time;
+  return `${defaultDatePrefix} ${time}`;
 }
 
 function splitFullCaptureSegments(sourceText: string) {
@@ -7026,6 +7057,7 @@ function normalizeTaskText(value: string) {
 function normalizePlanningItemKey(value: string) {
   return normalizeTaskText(value)
     .replace(/^(今日は|明日は|今日|明日)/, '')
+    .replace(/\d{1,2}(?:時(?:半|\d{1,2}分?)?|:\d{2})(?:には|に|から|まで)?/g, '')
     .replace(/(を|へ|に|の|が)/g, '')
     .replace(/する$/, '')
     .replace(/起きる|起床する/g, '起床')
