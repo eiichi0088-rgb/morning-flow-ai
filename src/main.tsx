@@ -1443,8 +1443,9 @@ function App() {
 
     Promise.all([createAiMorningPlan(transcript), createShoppingPlan(transcript, shoppingItems)])
       .then(([nextPlan, shoppingPlan]) => {
-        const classifiedShoppingItems = hasShoppingItemIntent(transcript)
-          ? mergeShoppingPlans(shoppingPlan.items, extractShoppingItemsFromUnifiedInput(transcript))
+        const normalizedShoppingItems = normalizeMorningShoppingItems(transcript, shoppingPlan.items, shoppingItems);
+        const classifiedShoppingItems = hasShoppingItemIntent(transcript) || normalizedShoppingItems.length > shoppingItems.length
+          ? normalizedShoppingItems
           : shoppingItems;
         const planWithCarryover = addCarryoverToPlan(
           prepareUnifiedMorningPlan(nextPlan, transcript, classifiedShoppingItems),
@@ -5607,7 +5608,7 @@ function shouldRouteMorningVoiceToAiInbox(text: string) {
 
   if (hasIdea) return true;
   if (hasShopping && hasFollowUp) return true;
-  return hasShopping && !hasTodoOrSchedule;
+  return false;
 }
 
 function detectIdeaIntent(text: string) {
@@ -6283,7 +6284,14 @@ function mergeShoppingPlans(aiItems: ShoppingItem[], localItems: ShoppingItem[])
   return Array.from(byName.values());
 }
 
+function normalizeMorningShoppingItems(text: string, aiItems: ShoppingItem[], currentItems: ShoppingItem[]) {
+  const localItems = extractShoppingItemsFromUnifiedInput(text);
+  const directItems = extractDirectJapaneseShoppingItems(text);
+  return mergeShoppingPlans(mergeShoppingPlans(currentItems, aiItems), mergeShoppingPlans(localItems, directItems));
+}
+
 function extractShoppingItemsFromUnifiedInput(text: string): ShoppingItem[] {
+  const directItems = extractDirectJapaneseShoppingItems(text);
   const normalized = normalizeJapaneseDateText(text)
     .replace(/帰りに/g, '')
     .replace(/を買う/g, '、')
@@ -6298,7 +6306,7 @@ function extractShoppingItemsFromUnifiedInput(text: string): ShoppingItem[] {
     .filter((item) => !isScheduleActionText(item))
     .filter((item) => isShoppingItemText(item));
 
-  return candidates.map((candidate) => {
+  const extractedItems = candidates.map((candidate) => {
     const parsed = parseShoppingItemInput(candidate);
     const name = parsed.name || candidate;
     return {
@@ -6310,6 +6318,82 @@ function extractShoppingItemsFromUnifiedInput(text: string): ShoppingItem[] {
       addedAt: new Date().toISOString(),
     };
   });
+  return mergeShoppingPlans(directItems, extractedItems);
+}
+
+function extractDirectJapaneseShoppingItems(text: string): ShoppingItem[] {
+  if (!hasDirectJapaneseShoppingIntent(text)) return [];
+
+  const items: ShoppingItem[] = [];
+  const consumedRanges: Array<[number, number]> = [];
+  const quantityPattern =
+    /([一-龥ぁ-んァ-ヶーA-Za-z]+?)\s*([0-9０-９一二三四五六七八九十]+)\s*(本|丁|個|つ|パック|袋|箱|枚|束|玉|缶|瓶|杯|斤|g|G|グラム|kg|KG|キロ|ml|mL|ML|L|リットル)/g;
+  let match: RegExpExecArray | null;
+  while ((match = quantityPattern.exec(text))) {
+    const name = cleanDirectShoppingItemName(match[1]);
+    const quantity = normalizeDirectShoppingQuantity(`${match[2]}${match[3]}`);
+    if (!name) continue;
+    items.push(createDirectShoppingItem(name, quantity));
+    consumedRanges.push([match.index, match.index + match[0].length]);
+  }
+
+  const remainingText = consumedRanges
+    .reduce((current, [start, end]) => `${current.slice(0, start)}${' '.repeat(end - start)}${current.slice(end)}`, text)
+    .replace(/今日は|今日の買い物|今日買うもの|買うもの|買います|買う|購入|買って|買い物|スーパー|ドラッグストア|コンビニ/g, '、');
+
+  remainingText
+    .split(/[、。,.，\n\r\s]+|と/)
+    .map(cleanDirectShoppingItemName)
+    .filter(Boolean)
+    .forEach((name) => items.push(createDirectShoppingItem(name, '')));
+
+  return dedupeDirectShoppingItems(items);
+}
+
+function hasDirectJapaneseShoppingIntent(text: string) {
+  return /買い物|買う|買います|買って|購入|今日買うもの|買うもの|スーパー|ドラッグストア|コンビニ/.test(text);
+}
+
+function cleanDirectShoppingItemName(value: string) {
+  return value
+    .replace(/^(今日は|今日|の|は|を|が|に|へ|で|と)+/, '')
+    .replace(/(を|が|は|も|です|で|お願いします|ください)$/, '')
+    .trim();
+}
+
+function normalizeDirectShoppingQuantity(value: string) {
+  return value.replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0)).trim();
+}
+
+function createDirectShoppingItem(name: string, quantity: string): ShoppingItem {
+  return {
+    addedAt: new Date().toISOString(),
+    category: classifyShoppingItem(name),
+    completed: false,
+    id: createLocalShoppingItemId(name),
+    name,
+    quantity,
+    source: 'manual',
+  };
+}
+
+function dedupeDirectShoppingItems(items: ShoppingItem[]) {
+  const byName = new Map<string, ShoppingItem>();
+  items.forEach((item) => {
+    const key = normalizeTaskText(item.name);
+    if (!key || isShoppingMetaOrDirectNoise(item.name)) return;
+    const existing = byName.get(key);
+    if (existing) {
+      if (!existing.quantity && item.quantity) existing.quantity = item.quantity;
+      return;
+    }
+    byName.set(key, item);
+  });
+  return Array.from(byName.values());
+}
+
+function isShoppingMetaOrDirectNoise(text: string) {
+  return /^(今日|今日は|今日の|買い物|買う|買います|購入|もの|リスト|スーパー|ドラッグストア|コンビニ)$/.test(text);
 }
 
 function extractScheduleActionsFromUnifiedInput(text: string) {
@@ -6331,10 +6415,12 @@ function extractScheduleActionsFromUnifiedInput(text: string) {
 }
 
 function hasShoppingActionIntent(text: string) {
+  if (/買い物.*(行く|行きます|行って|行こう)|スーパー.*(行く|行きます|行って|行こう)/.test(text)) return true;
   return /(買い物|スーパー|店|ドラッグストア|コンビニ|市場).*(行く|寄る|行って|寄って)|(?:行く|寄る).*(買い物|スーパー|店|ドラッグストア|コンビニ|市場)/.test(text);
 }
 
 function hasShoppingItemIntent(text: string) {
+  if (hasDirectJapaneseShoppingIntent(text)) return true;
   return /(今日買うもの|買うもの|買い物リスト|買って|買う|購入|スーパーで|店で|ドラッグストアで|コンビニで)/.test(text);
 }
 
