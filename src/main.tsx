@@ -755,6 +755,18 @@ function formatDashboardFollowUpLabel(item: FollowUpItem) {
   return `${item.name} ${item.content}`.trim();
 }
 
+function cleanPriorityLabel(value: string) {
+  const cleaned = value
+    .replace(/\s+/g, ' ')
+    .replace(/^(今日の予定|今日やること|予定|タスク)[:：\s]*/, '')
+    .trim();
+  if (!cleaned) return '';
+  if (cleaned.length <= 28) return cleaned;
+  const compactMatch = cleaned.match(/(店へ行く|開店準備|オープン準備|ジムへ行く|閉店|開店|起床|銀行へ行く|電話|LINE返信|確認)/);
+  if (compactMatch) return compactMatch[1];
+  return `${cleaned.slice(0, 28)}…`;
+}
+
 function createTopPriorityItems({
   aiInboxItems,
   followUps,
@@ -770,10 +782,12 @@ function createTopPriorityItems({
 }): MorningDashboardItem[] {
   const priorityItems: MorningDashboardItem[] = [];
   const addItem = (item: MorningDashboardItem | null | undefined) => {
-    if (!item?.label.trim()) return;
-    const key = normalizeTaskText(item.label);
-    if (!key || priorityItems.some((current) => normalizeTaskText(current.label) === key)) return;
-    priorityItems.push(item);
+    if (!item) return;
+    const label = cleanPriorityLabel(item?.label ?? '');
+    if (!label) return;
+    const key = normalizePlanningItemKey(label);
+    if (!key || priorityItems.some((current) => normalizePlanningItemKey(current.label) === key)) return;
+    priorityItems.push({ ...item, label });
   };
 
   todayScheduleItems.forEach(addItem);
@@ -5047,7 +5061,7 @@ function PlanView({
                   {group.events.map((event) => (
                     <div className="schedule-item" key={event.id}>
                       <time>{formatEventTime(event.start)}</time>
-                      <span>{event.title}</span>
+                      <span>{cleanScheduleDisplayTitle(event.title)}</span>
                     </div>
                   ))}
                 </div>
@@ -5085,22 +5099,33 @@ function dedupeShoppingItemsForDisplay(items: ShoppingItem[]) {
 }
 
 function groupFutureEventsByDate(events: CalendarEvent[]) {
-  const groups = new Map<string, CalendarEvent[]>();
+  const groups = new Map<string, { dateLabel: string; events: CalendarEvent[]; sortTime: number }>();
   events.forEach((event) => {
     const dateLabel = event.start.toLocaleDateString('ja-JP', {
       month: 'numeric',
       day: 'numeric',
       weekday: 'short',
     });
-    const currentEvents = groups.get(dateLabel) ?? [];
-    currentEvents.push(event);
-    groups.set(dateLabel, currentEvents);
+    const dateKey = event.start.toDateString();
+    const currentGroup = groups.get(dateKey) ?? {
+      dateLabel,
+      events: [],
+      sortTime: startOfLocalDay(event.start).getTime(),
+    };
+    currentGroup.events.push(event);
+    groups.set(dateKey, currentGroup);
   });
 
-  return Array.from(groups.entries()).map(([dateLabel, groupedEvents]) => ({
-    dateLabel,
-    events: groupedEvents.sort((a, b) => a.start.getTime() - b.start.getTime()),
-  }));
+  return Array.from(groups.values())
+    .sort((a, b) => a.sortTime - b.sortTime)
+    .map((group) => ({
+      dateLabel: group.dateLabel,
+      events: group.events.sort((a, b) => a.start.getTime() - b.start.getTime()),
+    }));
+}
+
+function cleanScheduleDisplayTitle(value: string) {
+  return cleanPriorityLabel(value).replace(/^(明日は|明日|今日は|今日)\s*/, '');
 }
 
 function GoogleCalendarExportPanel({ analyticsUserId, events }: { analyticsUserId: string; events: CalendarEvent[] }) {
@@ -6274,6 +6299,28 @@ function mergeStrings(previousItems: string[], nextItems: string[]) {
   return Array.from(new Set([...previousItems, ...nextItems].map((item) => item.trim()).filter(Boolean)));
 }
 
+function dedupePlanningTodos(items: string[]) {
+  const byKey = new Map<string, string>();
+  items.forEach((item) => {
+    const cleaned = item.trim();
+    const key = normalizePlanningItemKey(cleaned);
+    if (!key) return;
+    const existing = byKey.get(key);
+    if (!existing || cleaned.length < existing.length) {
+      byKey.set(key, cleaned);
+    }
+  });
+  return Array.from(byKey.values());
+}
+
+function removeScheduleItemsCoveredBy(
+  schedule: MorningPlan['schedule'],
+  preferredSchedule: MorningPlan['schedule'],
+) {
+  const preferredTaskKeys = new Set(preferredSchedule.map((item) => normalizePlanningItemKey(item.task)));
+  return schedule.filter((item) => !preferredTaskKeys.has(normalizePlanningItemKey(item.task)));
+}
+
 function sortScheduleByTime(schedule: MorningPlan['schedule']) {
   return [...schedule].sort((a, b) => getScheduleStartMinutes(a.time) - getScheduleStartMinutes(b.time));
 }
@@ -6299,20 +6346,28 @@ function prepareUnifiedMorningPlan(plan: MorningPlan, sourceText: string, shoppi
 
   return {
     ...plan,
-    todos: mergeStrings(
-      [
-        ...plan.todos.filter((todo) => !isShoppingText(todo) && !isFutureTaskText(todo)),
-        ...extractedActions,
-        ...fullCapture.todos,
-        ...shoppingAction,
-      ],
-      [],
+    todos: dedupePlanningTodos(
+      mergeStrings(
+        [
+          ...plan.todos.filter((todo) => !isShoppingText(todo) && !isFutureTaskText(todo)),
+          ...extractedActions,
+          ...fullCapture.todos,
+          ...shoppingAction,
+        ],
+        [],
+      ),
     ),
     schedule: sortScheduleByTime(
       filterUnconfirmedDefaultScheduleTimes(
         mergeSchedule(
-        plan.schedule.filter((item) => !isShoppingText(item.task) && !isFutureTaskText(item.task)),
-        mergeSchedule(mergeSchedule(extractedSchedule, fullCapture.schedule), shoppingSchedule),
+          removeScheduleItemsCoveredBy(
+            plan.schedule.filter((item) => !isShoppingText(item.task) && !isFutureTaskText(item.task)),
+            fullCapture.schedule,
+          ),
+          mergeSchedule(
+            removeScheduleItemsCoveredBy(extractedSchedule, fullCapture.schedule),
+            mergeSchedule(fullCapture.schedule, shoppingSchedule),
+          ),
         ),
         sourceText,
       ),
@@ -6355,25 +6410,29 @@ function createFullCapturePlanItems(sourceText: string): { schedule: MorningPlan
   segments.forEach((segment) => {
     const time = extractFullCaptureTime(segment);
     const actions = extractFullCaptureActions(segment);
-    const effectiveTime = time || (hasSequentialTimeCue(segment) ? nextFullCaptureTime(lastTime) : '');
+    const effectiveTime = time || (lastTime && (hasSequentialTimeCue(segment) || actions.length) ? nextFullCaptureTime(lastTime) : '');
     if (time) lastTime = time;
 
     actions.forEach((action) => {
       if (!action || isShoppingItemText(action)) return;
       todos.push(action);
-      if (effectiveTime) schedule.push({ time: effectiveTime, task: action });
+      if (effectiveTime) {
+        schedule.push({ time: effectiveTime, task: action });
+        if (!time) lastTime = effectiveTime;
+      }
     });
   });
 
   return {
     schedule: dedupeFullCaptureSchedule(schedule),
-    todos: Array.from(new Set(todos.map((item) => item.trim()).filter(Boolean))),
+    todos: dedupePlanningTodos(todos),
   };
 }
 
 function splitFullCaptureSegments(sourceText: string) {
   return sourceText
     .replace(/そして|それから|そのあと|その後/g, '。')
+    .replace(/([^\s。！？\n\r、])((?:明後日|明日|今日)?\d{1,2}(?:時|:))/g, '$1。$2')
     .split(/[。！？\n\r、]+/)
     .map((segment) => segment.trim())
     .filter(Boolean)
@@ -6962,6 +7021,18 @@ function includesSimilarTask(tasks: string[], title: string) {
 
 function normalizeTaskText(value: string) {
   return value.replace(/\s/g, '').toLowerCase();
+}
+
+function normalizePlanningItemKey(value: string) {
+  return normalizeTaskText(value)
+    .replace(/^(今日は|明日は|今日|明日)/, '')
+    .replace(/(を|へ|に|の|が)/g, '')
+    .replace(/する$/, '')
+    .replace(/起きる|起床する/g, '起床')
+    .replace(/開店準備/g, 'オープン準備')
+    .replace(/ジム行く/g, 'ジム行く')
+    .replace(/line/g, 'LINE')
+    .replace(/ライン/g, 'LINE');
 }
 
 function parseScheduleTime(timeText: string) {

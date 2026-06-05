@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.7.2 is based on v3.7.1 plus Full Capture AI Planning.
+6. v3.7.3 is based on v3.7.2 plus Smart Planning Cleanup.
 
+
+## Version 3.7.3 Smart Planning Cleanup - 2026-06-06
+
+- Screen display: v3.7.3
+- ZIP: morning-flow-ai-v3.7.3.zip
+- Next planned version: Version 3.7.4
+- Full Capture schedule items keep their own extracted times and override same-task AI schedule guesses.
+- Todos and top priority cards use canonical dedupe to reduce duplicate meaning items and long labels.
+- Future Schedule remains grouped by date and sorted in schedule order.
 
 ## Version 3.7.2 Full Capture AI Planning - 2026-06-06
 

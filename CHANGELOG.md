@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.7.3 - 2026-06-06
+
+- Improved Smart Planning cleanup so transcript-derived schedule items keep their own individual times.
+- Added canonical Todo dedupe to avoid pairs like "起床" and "起床する".
+- Cleaned top priority and Future Schedule display to reduce duplicates and long text blocks.
+
 ## Version 3.7.2 - 2026-06-06
 
 - Added Full Capture AI Planning so morning voice input keeps extractable actions instead of dropping lower-priority items.
