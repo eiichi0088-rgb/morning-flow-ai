@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.7.3 is based on v3.7.2 plus Smart Planning Cleanup.
+6. v3.7.4 is based on v3.7.3 plus Deduplication Engine.
 
+
+## Version 3.7.4 Deduplication Engine - 2026-06-06
+
+- Screen display: v3.7.4
+- ZIP: morning-flow-ai-v3.7.4.zip
+- Next planned version: Version 3.7.5
+- Morning Todo, Schedule, Top Priority, and Future Schedule now pass through a shared deduplication cleanup.
+- Task normalization removes time/date prefixes, punctuation, spacing, and common action variants before comparison.
+- Schedule cleanup prefers Full Capture timing and removes likely wrong same-action 08:00 candidates.
 
 ## Version 3.7.3 Smart Planning Cleanup - 2026-06-06
 

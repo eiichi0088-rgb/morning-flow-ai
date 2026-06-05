@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.7.4 - 2026-06-06
+
+- Added a Deduplication Engine for Morning Todo, Schedule, Top Priority, and Future Schedule display.
+- Strengthened task normalization for time prefixes, date prefixes, punctuation, spacing, and common Japanese action variants.
+- Schedule cleanup now prefers Full Capture timing, removes same-action duplicates, and drops likely wrong 08:00 candidates.
+
 ## Version 3.7.3 - 2026-06-06
 
 - Improved Smart Planning cleanup so transcript-derived schedule items keep their own individual times.

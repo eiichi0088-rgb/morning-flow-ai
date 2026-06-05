@@ -688,11 +688,13 @@ function createMorningDashboardData(
   followUps: FollowUpItem[],
   aiInboxItems: AiInboxItem[],
 ): MorningDashboardData {
-  const todayScheduleItems = (plan?.schedule ?? []).map((item, index) => ({
+  const dashboardSchedule = dedupeSchedule(plan?.schedule ?? []);
+  const dashboardTodos = dedupeTodos(plan?.todos ?? []);
+  const todayScheduleItems = dashboardSchedule.map((item, index) => ({
     id: `schedule-${index}-${item.time}-${item.task}`,
-    label: `${item.time} ${item.task}`,
+    label: `${item.time} ${cleanPlanningActionLabel(item.task)}`,
   }));
-  const todayTodoItems = (plan?.todos ?? []).map((todo, index) => ({
+  const todayTodoItems = dashboardTodos.map((todo, index) => ({
     id: `todo-${index}-${todo}`,
     label: todo,
   }));
@@ -756,19 +758,12 @@ function formatDashboardFollowUpLabel(item: FollowUpItem) {
 }
 
 function cleanPriorityLabel(value: string) {
-  const cleaned = value
-    .replace(/\s+/g, ' ')
-    .replace(/^(今日の予定|今日やること|予定|タスク)[:：\s]*/, '')
-    .trim();
+  const cleaned = cleanPlanningActionLabel(value);
   if (!cleaned) return '';
-  const withoutTime = cleaned
-    .replace(/^(?:明後日|明日|今日)?\s*\d{1,2}(?:時(?:半|\d{1,2}分?)?|:\d{2})(?:には|に|から|まで)?\s*/, '')
-    .trim();
-  if (withoutTime && withoutTime.length <= 28) return withoutTime;
-  if (cleaned.length <= 28) return cleaned;
+  if (cleaned.length <= 20) return cleaned;
   const compactMatch = cleaned.match(/(店へ行く|開店準備|オープン準備|ジムへ行く|閉店|開店|起床|銀行へ行く|電話|LINE返信|確認)/);
   if (compactMatch) return compactMatch[1];
-  return `${cleaned.slice(0, 28)}…`;
+  return `${cleaned.slice(0, 20)}…`;
 }
 
 function createTopPriorityItems({
@@ -804,7 +799,23 @@ function createTopPriorityItems({
   }
   shoppingItems.forEach((item) => addItem({ id: `priority-shopping-${item.id}`, label: formatShoppingItemLabel(item), completed: item.completed }));
 
-  return [...priorityItems]
+  return dedupeTopPriorityItems(priorityItems);
+}
+
+function dedupeTopPriorityItems(items: MorningDashboardItem[]) {
+  const byKey = new Map<string, MorningDashboardItem>();
+  items.forEach((item) => {
+    const label = cleanPriorityLabel(item.label);
+    const key = normalizeTaskText(label);
+    if (!label || !key || isPlanningLongNoise(label)) return;
+    const nextItem = { ...item, label };
+    const existing = byKey.get(key);
+    if (!existing || getTopPriorityRank(nextItem.label) < getTopPriorityRank(existing.label)) {
+      byKey.set(key, nextItem);
+    }
+  });
+
+  return Array.from(byKey.values())
     .sort((a, b) => getTopPriorityRank(a.label) - getTopPriorityRank(b.label))
     .slice(0, 3);
 }
@@ -6276,8 +6287,8 @@ function isShareCancelError(error: unknown) {
 }
 
 function preserveExistingPlan(previousPlan: MorningPlan, nextPlan: MorningPlan): MorningPlan {
-  const schedule = sortScheduleByTime(mergeSchedule(previousPlan.schedule, nextPlan.schedule));
-  const todos = mergeStrings(previousPlan.todos, nextPlan.todos);
+  const schedule = dedupeSchedule(mergeSchedule(previousPlan.schedule, nextPlan.schedule));
+  const todos = dedupeTodos(mergeStrings(previousPlan.todos, nextPlan.todos));
   const goals = mergeStrings(previousPlan.goals, nextPlan.goals);
 
   return {
@@ -6316,26 +6327,83 @@ function mergeStrings(previousItems: string[], nextItems: string[]) {
   return Array.from(new Set([...previousItems, ...nextItems].map((item) => item.trim()).filter(Boolean)));
 }
 
-function dedupePlanningTodos(items: string[]) {
+function dedupeTodos(items: string[]) {
   const byKey = new Map<string, string>();
   items.forEach((item) => {
-    const cleaned = item.trim();
-    const key = normalizePlanningItemKey(cleaned);
-    if (!key) return;
+    const cleaned = cleanPlanningActionLabel(item);
+    const key = normalizeTaskText(cleaned);
+    if (!key || isPlanningLongNoise(cleaned)) return;
     const existing = byKey.get(key);
-    if (!existing || cleaned.length < existing.length) {
+    if (!existing || cleaned.length < existing.length || getTopPriorityRank(cleaned) < getTopPriorityRank(existing)) {
       byKey.set(key, cleaned);
     }
   });
   return Array.from(byKey.values());
 }
 
+function dedupePlanningTodos(items: string[]) {
+  return dedupeTodos(items);
+}
+
 function removeScheduleItemsCoveredBy(
   schedule: MorningPlan['schedule'],
   preferredSchedule: MorningPlan['schedule'],
 ) {
-  const preferredTaskKeys = new Set(preferredSchedule.map((item) => normalizePlanningItemKey(item.task)));
-  return schedule.filter((item) => !preferredTaskKeys.has(normalizePlanningItemKey(item.task)));
+  const preferredTaskKeys = new Set(preferredSchedule.map((item) => normalizeTaskText(item.task)));
+  return schedule.filter((item) => !preferredTaskKeys.has(normalizeTaskText(item.task)));
+}
+
+function dedupeSchedule(
+  schedule: MorningPlan['schedule'],
+  preferredSchedule: MorningPlan['schedule'] = [],
+) {
+  const preferredKeys = new Set(preferredSchedule.map((item) => getScheduleTaskKey(item.task)));
+  const byTask = new Map<string, MorningPlan['schedule'][number]>();
+
+  schedule.forEach((item) => {
+    const task = cleanPlanningActionLabel(item.task);
+    const taskKey = getScheduleTaskKey(task);
+    if (!taskKey || isPlanningLongNoise(task)) return;
+
+    const candidate = { ...item, task };
+    const existing = byTask.get(taskKey);
+    if (!existing || compareScheduleCandidate(candidate, existing, preferredKeys) < 0) {
+      byTask.set(taskKey, candidate);
+    }
+  });
+
+  const byExact = new Map<string, MorningPlan['schedule'][number]>();
+  byTask.forEach((item) => byExact.set(getScheduleKey(item), item));
+  return sortScheduleByTime(Array.from(byExact.values()));
+}
+
+function getScheduleTaskKey(task: string) {
+  return normalizeTaskText(task);
+}
+
+function compareScheduleCandidate(
+  nextItem: MorningPlan['schedule'][number],
+  currentItem: MorningPlan['schedule'][number],
+  preferredKeys: Set<string>,
+) {
+  const nextPreferred = preferredKeys.has(getScheduleTaskKey(nextItem.task));
+  const currentPreferred = preferredKeys.has(getScheduleTaskKey(currentItem.task));
+  if (nextPreferred !== currentPreferred) return nextPreferred ? -1 : 1;
+
+  const nextIsLikelyWrongDefault = isLikelyWrongDefaultEight(nextItem);
+  const currentIsLikelyWrongDefault = isLikelyWrongDefaultEight(currentItem);
+  if (nextIsLikelyWrongDefault !== currentIsLikelyWrongDefault) return nextIsLikelyWrongDefault ? 1 : -1;
+
+  const nextHasConcreteTime = parseScheduleTime(nextItem.time) !== null;
+  const currentHasConcreteTime = parseScheduleTime(currentItem.time) !== null;
+  if (nextHasConcreteTime !== currentHasConcreteTime) return nextHasConcreteTime ? -1 : 1;
+
+  return nextItem.task.length - currentItem.task.length;
+}
+
+function isLikelyWrongDefaultEight(item: MorningPlan['schedule'][number]) {
+  const minutes = getScheduleStartMinutes(item.time);
+  return minutes === 8 * 60 && !/起床|起きる/.test(item.task);
 }
 
 function sortScheduleByTime(schedule: MorningPlan['schedule']) {
@@ -6361,9 +6429,9 @@ function prepareUnifiedMorningPlan(plan: MorningPlan, sourceText: string, shoppi
   const isFutureTaskText = (value: string) =>
     Array.from(futureTaskNames).some((task) => task && normalizeTaskText(value).includes(task));
 
-  return {
+  const nextPlan = {
     ...plan,
-    todos: dedupePlanningTodos(
+    todos: dedupeTodos(
       mergeStrings(
         [
           ...plan.todos.filter((todo) => !isShoppingText(todo) && !isFutureTaskText(todo)),
@@ -6374,7 +6442,7 @@ function prepareUnifiedMorningPlan(plan: MorningPlan, sourceText: string, shoppi
         [],
       ),
     ),
-    schedule: sortScheduleByTime(
+    schedule: dedupeSchedule(
       filterUnconfirmedDefaultScheduleTimes(
         mergeSchedule(
           removeScheduleItemsCoveredBy(
@@ -6388,6 +6456,7 @@ function prepareUnifiedMorningPlan(plan: MorningPlan, sourceText: string, shoppi
         ),
         sourceText,
       ),
+      fullCapture.schedule,
     ),
     priorities: {
       highest: plan.priorities.highest.filter((item) => !isShoppingText(item) && !isFutureTaskText(item)),
@@ -6405,6 +6474,12 @@ function prepareUnifiedMorningPlan(plan: MorningPlan, sourceText: string, shoppi
       ...plan.coach,
       successConditions: plan.coach.successConditions.filter((item) => !isGeneratedShoppingSupportTask(item)),
     },
+  };
+
+  return {
+    ...nextPlan,
+    todos: dedupeTodos(nextPlan.todos),
+    schedule: dedupeSchedule(nextPlan.schedule, fullCapture.schedule),
   };
 }
 
@@ -7003,7 +7078,7 @@ function createCalendarEvents(plan: MorningPlan): CalendarEvent[] {
   const today = new Date();
   today.setSeconds(0, 0);
 
-  return plan.schedule
+  return dedupeSchedule(plan.schedule)
     .map((item, index) => {
       const range = parseScheduleTime(item.time);
       const fallbackStartMinutes = 9 * 60 + index * 60;
@@ -7051,20 +7126,50 @@ function includesSimilarTask(tasks: string[], title: string) {
 }
 
 function normalizeTaskText(value: string) {
-  return value.replace(/\s/g, '').toLowerCase();
-}
-
-function normalizePlanningItemKey(value: string) {
-  return normalizeTaskText(value)
+  return value
+    .normalize('NFKC')
+    .replace(/\s/g, '')
     .replace(/^(今日は|明日は|今日|明日)/, '')
     .replace(/\d{1,2}(?:時(?:半|\d{1,2}分?)?|:\d{2})(?:には|に|から|まで)?/g, '')
+    .replace(/[、。,.!！?？:：]/g, '')
     .replace(/(を|へ|に|の|が)/g, '')
     .replace(/する$/, '')
     .replace(/起きる|起床する/g, '起床')
     .replace(/開店準備/g, 'オープン準備')
     .replace(/ジム行く/g, 'ジム行く')
     .replace(/line/g, 'LINE')
-    .replace(/ライン/g, 'LINE');
+    .replace(/ライン/g, 'LINE')
+    .toLowerCase();
+}
+
+function normalizePlanningItemKey(value: string) {
+  return normalizeTaskText(value);
+}
+
+function cleanPlanningActionLabel(value: string) {
+  const cleaned = value
+    .normalize('NFKC')
+    .replace(/\s+/g, ' ')
+    .replace(/^(今日の予定|今日やること|予定|タスク)[:：\s]*/, '')
+    .replace(/^(?:明後日|明日|今日)?\s*\d{1,2}(?:時(?:半|\d{1,2}分?)?|:\d{2})(?:には|に|から|まで)?\s*/, '')
+    .replace(/^(明日は|明日|今日は|今日)\s*/, '')
+    .replace(/起床する/g, '起床')
+    .replace(/起きる/g, '起床')
+    .replace(/店に行く/g, '店へ行く')
+    .replace(/お店に行く/g, '店へ行く')
+    .replace(/お店へ行く/g, '店へ行く')
+    .replace(/ジムに行く/g, 'ジムへ行く')
+    .replace(/開店準備/g, 'オープン準備')
+    .trim();
+  const compactMatch = cleaned.match(/(オープン準備|チャーシューを炊く|店へ行く|ジムへ行く|開店|閉店|起床|銀行へ行く|買い物へ行く|LINE返信|電話|確認|連絡|仕込み)/);
+  if (isPlanningLongNoise(cleaned) && compactMatch) return compactMatch[1];
+  return cleaned;
+}
+
+function isPlanningLongNoise(value: string) {
+  const compact = value.replace(/\s/g, '');
+  const actionHits = (compact.match(/起床|起き|店へ行く|店に行く|オープン準備|開店準備|チャーシュー|開店|閉店|ジム/g) ?? []).length;
+  return compact.length > 32 && actionHits >= 2;
 }
 
 function parseScheduleTime(timeText: string) {
