@@ -184,6 +184,7 @@ type MorningDashboardData = {
     count: number;
     items: MorningDashboardItem[];
   };
+  topPriority: MorningDashboardItem[];
   totalCount: number;
 };
 
@@ -708,6 +709,13 @@ function createMorningDashboardData(
     todayScheduleItems[0]?.label ??
     todayTodoItems[0]?.label ??
     (pendingFollowUpItems[0] ? formatDashboardFollowUpLabel(pendingFollowUpItems[0]) : '');
+  const topPriority = createTopPriorityItems({
+    aiInboxItems: unprocessedInboxItems,
+    followUps: pendingFollowUpItems,
+    shoppingItems: openShoppingItems,
+    todayScheduleItems,
+    todayTodoItems,
+  });
 
   return {
     achievementRate,
@@ -734,6 +742,7 @@ function createMorningDashboardData(
         label: formatShoppingItemLabel(item),
       })),
     },
+    topPriority,
     today: {
       count: todayItems.length,
       items: todayItems.slice(0, 3),
@@ -744,6 +753,40 @@ function createMorningDashboardData(
 
 function formatDashboardFollowUpLabel(item: FollowUpItem) {
   return `${item.name} ${item.content}`.trim();
+}
+
+function createTopPriorityItems({
+  aiInboxItems,
+  followUps,
+  shoppingItems,
+  todayScheduleItems,
+  todayTodoItems,
+}: {
+  aiInboxItems: AiInboxItem[];
+  followUps: FollowUpItem[];
+  shoppingItems: ShoppingItem[];
+  todayScheduleItems: MorningDashboardItem[];
+  todayTodoItems: MorningDashboardItem[];
+}): MorningDashboardItem[] {
+  const priorityItems: MorningDashboardItem[] = [];
+  const addItem = (item: MorningDashboardItem | null | undefined) => {
+    if (!item?.label.trim()) return;
+    const key = normalizeTaskText(item.label);
+    if (!key || priorityItems.some((current) => normalizeTaskText(current.label) === key)) return;
+    priorityItems.push(item);
+  };
+
+  todayScheduleItems.forEach(addItem);
+  todayTodoItems.forEach(addItem);
+  followUps.forEach((item) => addItem({ id: `priority-follow-${item.id}`, label: formatDashboardFollowUpLabel(item) }));
+  aiInboxItems.forEach((item) => addItem({ id: `priority-inbox-${item.id}`, label: item.text }));
+
+  if (!priorityItems.length && shoppingItems.length) {
+    addItem({ id: 'priority-shopping-action', label: '買い物へ行く' });
+  }
+  shoppingItems.forEach((item) => addItem({ id: `priority-shopping-${item.id}`, label: formatShoppingItemLabel(item), completed: item.completed }));
+
+  return priorityItems.slice(0, 3);
 }
 
 function createDefaultOnboardingSettings(): OnboardingSettings {
@@ -2541,6 +2584,8 @@ function App() {
           }}
         />
 
+        <MorningStepGuide />
+
         <div className="focus-area">
           <div className={`voice-stage ${isListening ? 'is-listening' : ''}`}>
             <div className="waveform" aria-hidden="true">
@@ -2889,8 +2934,24 @@ function MorningDashboard({
         <strong>まずやること：{data.firstTask || 'まだありません'}</strong>
       </div>
 
+      <section className="top-priority-card" aria-label="今日の最重要3件">
+        <div className="top-priority-header">
+          <span>Today Focus</span>
+          <strong>今日の最重要3件</strong>
+        </div>
+        {data.topPriority.length ? (
+          <ol>
+            {data.topPriority.map((item) => (
+              <li key={item.id}>{item.label}</li>
+            ))}
+          </ol>
+        ) : (
+          <p>まだありません</p>
+        )}
+      </section>
+
       <div className="morning-dashboard-grid">
-        <MorningDashboardCard title="今日の予定" count={data.today.count} items={data.today.items} onOpen={onOpenToday} />
+        <MorningDashboardCard title="今日のやること・予定" count={data.today.count} items={data.today.items} onOpen={onOpenToday} />
         <MorningDashboardCard title="買い物" count={data.shopping.count} items={data.shopping.items} onOpen={onOpenShopping} />
         <MorningDashboardCard title="Follow Up" count={data.followUp.count} items={data.followUp.items} onOpen={onOpenFollowUp} />
         <MorningDashboardCard title="AI Inbox" count={data.aiInbox.count} items={data.aiInbox.items} onOpen={onOpenInbox} />
@@ -2934,6 +2995,25 @@ function MorningDashboardCard({
         <p>まだありません</p>
       )}
     </article>
+  );
+}
+
+function MorningStepGuide() {
+  return (
+    <section className="morning-step-guide" aria-label="使い方ステップ">
+      <div>
+        <span>STEP 1</span>
+        <strong>今日の予定を話す</strong>
+      </div>
+      <div>
+        <span>STEP 2</span>
+        <strong>AI整理</strong>
+      </div>
+      <div>
+        <span>STEP 3</span>
+        <strong>今日をスタート</strong>
+      </div>
+    </section>
   );
 }
 

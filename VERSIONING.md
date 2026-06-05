@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.7.0 is based on v3.6.7 plus Morning Dashboard.
+6. v3.7.1 is based on v3.7.0 plus Morning Priority UX.
 
+
+## Version 3.7.1 Morning Priority UX - 2026-06-05
+
+- Screen display: v3.7.1
+- ZIP: morning-flow-ai-v3.7.1.zip
+- Next planned version: Version 3.7.2
+- Home screen shows STEP 1 / STEP 2 / STEP 3 guidance.
+- Morning Dashboard shows display-only top 3 priority items from existing user-scoped state.
+- No Supabase schema, save flow, or AI classification changes.
 
 ## Version 3.7.0 Morning Dashboard - 2026-06-04
 

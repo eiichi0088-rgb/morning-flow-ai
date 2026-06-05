@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.7.1 - 2026-06-05
+
+- Added Phase 2 Morning Priority UX with a three-step guide on the home screen.
+- Added display-only "今日の最重要3件" extracted from existing Today, Shopping, Follow Up, and AI Inbox state.
+- Adjusted Morning Dashboard priority so the most important morning information appears first.
+
 ## Version 3.7.0 - 2026-06-04
 
 - Added Morning Dashboard to the home screen with Today, Shopping, Follow Up, and AI Inbox summary cards.

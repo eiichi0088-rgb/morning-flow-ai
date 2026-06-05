@@ -1007,6 +1007,55 @@ h1 {
   line-height: 1.4;
 }
 
+.top-priority-card {
+  display: grid;
+  gap: 11px;
+  border: 1px solid rgba(141, 229, 255, 0.22);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(223, 247, 255, 0.15), rgba(141, 229, 255, 0.05)),
+    rgba(6, 28, 44, 0.58);
+  padding: 13px;
+}
+
+.top-priority-header {
+  display: grid;
+  gap: 2px;
+}
+
+.top-priority-header span {
+  color: rgba(141, 229, 255, 0.82);
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.top-priority-header strong {
+  color: rgba(248, 252, 255, 0.96);
+  font-size: 1.02rem;
+}
+
+.top-priority-card ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 1.45rem;
+}
+
+.top-priority-card li {
+  color: rgba(248, 252, 255, 0.92);
+  font-size: 0.96rem;
+  font-weight: 820;
+  line-height: 1.36;
+}
+
+.top-priority-card p {
+  margin: 0;
+  color: rgba(186, 232, 248, 0.78);
+  font-size: 0.86rem;
+}
+
 .morning-dashboard-grid,
 .morning-dashboard-card ul {
   display: grid;
@@ -1054,6 +1103,38 @@ h1 {
   flex: 0 0 auto;
   color: #8de5ff;
   font-weight: 900;
+}
+
+.morning-step-guide {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.morning-step-guide div {
+  display: grid;
+  gap: 5px;
+  min-height: 72px;
+  align-content: center;
+  border: 1px solid rgba(141, 229, 255, 0.15);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(141, 229, 255, 0.09), rgba(255, 255, 255, 0.025)),
+    rgba(4, 15, 30, 0.44);
+  padding: 10px 8px;
+  text-align: center;
+}
+
+.morning-step-guide span {
+  color: rgba(141, 229, 255, 0.82);
+  font-size: 0.66rem;
+  font-weight: 900;
+}
+
+.morning-step-guide strong {
+  color: rgba(248, 252, 255, 0.9);
+  font-size: 0.8rem;
+  line-height: 1.25;
 }
 
 .icon-ghost-button {
