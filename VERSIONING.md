@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.7.5d is based on v3.7.5c plus Editable Transcript Source Fix.
+6. v3.8.0 is based on v3.7.5d plus AI Review Flow.
 
+
+## Version 3.8.0 AI Review Flow - 2026-06-06
+
+- Screen display: v3.8.0
+- ZIP: morning-flow-ai-v3.8.0.zip
+- Next planned version: Version 3.8.1
+- AI整理 now creates a `morningReviewDraft` and shows "AIがこう整理しました" before formal save.
+- `setPlan`, Shopping state, Shopping Supabase sync, Follow Up candidates, and snapshots run only after "保存して今日をスタート".
+- "戻って修正" clears the draft while keeping Editable Transcript intact.
 
 ## Version 3.7.5d Editable Transcript Source Fix - 2026-06-06
 

@@ -188,6 +188,14 @@ type MorningDashboardData = {
   totalCount: number;
 };
 
+type MorningReviewDraft = {
+  followUpCandidates: FollowUpDraftItem[];
+  plan: MorningPlan;
+  shoppingItems: ShoppingItem[];
+  shoppingUpdatedAt: string;
+  sourceText: string;
+};
+
 type AiInboxItem = {
   id: string;
   text: string;
@@ -949,6 +957,7 @@ function App() {
   const [previousSnapshot, setPreviousSnapshot] = React.useState<MorningSnapshot | null>(null);
   const [reviewStatuses, setReviewStatuses] = React.useState<Record<string, ReviewStatus>>({});
   const [carriedTodos, setCarriedTodos] = React.useState<string[]>([]);
+  const [morningReviewDraft, setMorningReviewDraft] = React.useState<MorningReviewDraft | null>(null);
   const planAnchorRef = React.useRef<HTMLDivElement | null>(null);
 
   const isSupported = Boolean(SpeechRecognition);
@@ -966,7 +975,7 @@ function App() {
   const shoppingResultText = [activeShoppingText, isShoppingView ? interimTranscript : ''].filter(Boolean).join('\n');
   const feedbackResultText = [feedbackText, isFeedbackView ? interimTranscript : ''].filter(Boolean).join('\n');
   const followUpResultText = [followUpCaptureText, isFollowUpView ? interimTranscript : ''].filter(Boolean).join('\n');
-  const canOrganize = Boolean(resultText.trim()) && !isListening && captureMode === 'create';
+  const canOrganize = Boolean(resultText.trim()) && !isListening && captureMode === 'create' && !morningReviewDraft;
   const canUpdatePlan = false;
   const canOrganizeShopping = Boolean(activeShoppingText.trim()) && !isListening;
   const canUseNext = canOrganize || canUpdatePlan || Boolean(plan);
@@ -1062,6 +1071,7 @@ function App() {
     setInterimTranscript('');
     setError('');
     setPlan(null);
+    setMorningReviewDraft(null);
     setCaptureMode('create');
     setHighlightedScheduleKeys([]);
     setIsResetDialogOpen(false);
@@ -1392,6 +1402,7 @@ function App() {
         setTranscript((current) => appendVoiceText(current, normalized));
         setOriginalTranscript((current) => appendVoiceText(current, normalized));
         setPlan(null);
+        setMorningReviewDraft(null);
         setMorningFollowUpCandidates([]);
         setMorningFollowUpMessage('');
         setInterimTranscript('');
@@ -1498,6 +1509,7 @@ function App() {
     setError('');
     setIsListening(false);
     setPlan(null);
+    setMorningReviewDraft(null);
     setCarriedTodos([]);
     setCaptureMode('create');
     setHighlightedScheduleKeys([]);
@@ -1515,6 +1527,7 @@ function App() {
     setError('');
     setIsListening(false);
     setPlan(null);
+    setMorningReviewDraft(null);
     setCaptureMode('create');
     setHighlightedScheduleKeys([]);
     setMorningFollowUpCandidates([]);
@@ -1550,16 +1563,18 @@ function App() {
           prepareUnifiedMorningPlan(nextPlan, sourceText, classifiedShoppingItems),
           carriedTodos,
         );
-        setPlan(planWithCarryover);
-        setMorningFollowUpCandidates(createMorningFollowUpCandidates(planWithCarryover, followUps));
-        setShoppingItems(classifiedShoppingItems);
-        void syncShoppingItemsToSupabase(classifiedShoppingItems);
-        setShoppingUpdatedAt(shoppingPlan.updatedAt);
+        const followUpCandidates = createMorningFollowUpCandidates(planWithCarryover, followUps);
+        setMorningReviewDraft({
+          followUpCandidates,
+          plan: planWithCarryover,
+          shoppingItems: classifiedShoppingItems,
+          shoppingUpdatedAt: shoppingPlan.updatedAt,
+          sourceText,
+        });
         setCaptureMode('create');
         setUpdateInstruction('');
         setOriginalUpdateInstruction('');
         setHighlightedScheduleKeys([]);
-        saveMorningSnapshot(sourceText, planWithCarryover, privateSessionKeys.snapshots);
       })
       .catch((reason: unknown) => {
         console.error(reason);
@@ -1568,6 +1583,26 @@ function App() {
       .finally(() => {
         setIsOrganizing(false);
       });
+  };
+
+  const confirmMorningReview = () => {
+    const draft = morningReviewDraft;
+    if (!draft) return;
+
+    setPlan(draft.plan);
+    setShoppingItems(draft.shoppingItems);
+    void syncShoppingItemsToSupabase(draft.shoppingItems);
+    setMorningFollowUpCandidates(draft.followUpCandidates);
+    setShoppingUpdatedAt(draft.shoppingUpdatedAt);
+    saveMorningSnapshot(draft.sourceText, draft.plan, privateSessionKeys.snapshots);
+    setMorningReviewDraft(null);
+    window.requestAnimationFrame(() => {
+      planAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const cancelMorningReview = () => {
+    setMorningReviewDraft(null);
   };
 
   const applyScheduleUpdate = () => {
@@ -1628,6 +1663,7 @@ function App() {
     setInterimTranscript('');
     setIsTranscriptClearConfirmOpen(false);
     setPlan(null);
+    setMorningReviewDraft(null);
     setMorningFollowUpCandidates([]);
     setMorningFollowUpMessage('');
   };
@@ -1637,6 +1673,7 @@ function App() {
     setInterimTranscript('');
     setIsTranscriptClearConfirmOpen(false);
     setPlan(null);
+    setMorningReviewDraft(null);
     setMorningFollowUpCandidates([]);
     setMorningFollowUpMessage('');
   };
@@ -1647,6 +1684,7 @@ function App() {
     setOriginalTranscript('');
     setInterimTranscript('');
     setPlan(null);
+    setMorningReviewDraft(null);
     setError('');
     setMorningFollowUpCandidates([]);
     setMorningFollowUpMessage('');
@@ -2125,6 +2163,7 @@ function App() {
         return nextText;
       });
       setPlan(null);
+      setMorningReviewDraft(null);
       setHighlightedScheduleKeys([]);
       return true;
     }
@@ -2640,6 +2679,15 @@ function App() {
           }}
         />
 
+        {morningReviewDraft && (
+          <MorningReviewCard
+            aiInboxCount={unprocessedInboxCount}
+            draft={morningReviewDraft}
+            onCancel={cancelMorningReview}
+            onConfirm={confirmMorningReview}
+          />
+        )}
+
         <MorningStepGuide />
 
         <div className="focus-area">
@@ -2690,6 +2738,7 @@ function App() {
               setTranscript(value);
               setInterimTranscript('');
               setPlan(null);
+              setMorningReviewDraft(null);
               setIsTranscriptClearConfirmOpen(false);
             }}
             savedText={originalTranscript}
@@ -3051,6 +3100,84 @@ function MorningDashboardCard({
         <p>まだありません</p>
       )}
     </article>
+  );
+}
+
+function MorningReviewCard({
+  aiInboxCount,
+  draft,
+  onCancel,
+  onConfirm,
+}: {
+  aiInboxCount: number;
+  draft: MorningReviewDraft;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const dashboardData = createMorningDashboardData(draft.plan, draft.shoppingItems, [], []);
+  const scheduleItems = cleanScheduleItems(draft.plan.schedule);
+  const todoItems = dedupeTodos(draft.plan.todos);
+  const shoppingPreview = draft.shoppingItems.slice(0, 8);
+  const followUpPreview = draft.followUpCandidates.slice(0, 5);
+
+  return (
+    <section className="morning-review-card" aria-label="AI整理結果確認">
+      <div className="morning-review-header">
+        <div>
+          <span>Review Before Save</span>
+          <strong>AIがこう整理しました</strong>
+        </div>
+        <small>保存前に内容を確認できます</small>
+      </div>
+
+      <div className="morning-review-section">
+        <span>今日の最重要3件</span>
+        {dashboardData.topPriority.length ? (
+          <ol>
+            {dashboardData.topPriority.map((item) => (
+              <li key={item.id}>{item.label}</li>
+            ))}
+          </ol>
+        ) : (
+          <p>まだありません</p>
+        )}
+      </div>
+
+      <div className="morning-review-grid">
+        <MorningReviewList title="今日のやること" items={todoItems} />
+        <MorningReviewList title="今日のスケジュール" items={scheduleItems.map((item) => `${item.time} ${item.task}`)} />
+        <MorningReviewList title="買い物リスト" items={shoppingPreview.map(formatShoppingItemLabel)} />
+        <MorningReviewList title="Follow Up候補" items={followUpPreview.map((item) => `${item.name} ${item.content}`.trim())} />
+        <MorningReviewList title="AI Inbox" items={[`未整理 ${aiInboxCount}件`]} />
+      </div>
+
+      <div className="morning-review-actions">
+        <button className="secondary-button" onClick={onCancel} type="button">
+          戻って修正
+        </button>
+        <button className="primary-button" onClick={onConfirm} type="button">
+          保存して今日をスタート
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function MorningReviewList({ items, title }: { items: string[]; title: string }) {
+  const visibleItems = items.map((item) => item.trim()).filter(Boolean);
+  return (
+    <section className="morning-review-list">
+      <span>{title}</span>
+      {visibleItems.length ? (
+        <ul>
+          {visibleItems.map((item, index) => (
+            <li key={`${title}-${index}-${item}`}>{item}</li>
+          ))}
+        </ul>
+      ) : (
+        <p>まだありません</p>
+      )}
+    </section>
   );
 }
 

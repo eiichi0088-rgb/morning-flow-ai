@@ -1099,6 +1099,84 @@ h1 {
   text-decoration: line-through;
 }
 
+.morning-review-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(141, 229, 255, 0.22);
+  border-radius: 20px;
+  background:
+    linear-gradient(135deg, rgba(141, 229, 255, 0.11), rgba(247, 231, 190, 0.06)),
+    rgba(5, 12, 24, 0.74);
+  box-shadow:
+    0 0 0 1px rgba(141, 229, 255, 0.08),
+    0 18px 44px rgba(0, 0, 0, 0.24);
+}
+
+.morning-review-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.morning-review-header div,
+.morning-review-section,
+.morning-review-list {
+  display: grid;
+  gap: 7px;
+}
+
+.morning-review-header span,
+.morning-review-section > span,
+.morning-review-list > span {
+  color: rgba(141, 229, 255, 0.84);
+  font-size: 0.74rem;
+  font-weight: 820;
+}
+
+.morning-review-header strong {
+  color: rgba(248, 252, 255, 0.96);
+  font-size: 1.05rem;
+}
+
+.morning-review-header small,
+.morning-review-section p,
+.morning-review-list p {
+  margin: 0;
+  color: rgba(186, 232, 248, 0.72);
+  font-size: 0.82rem;
+}
+
+.morning-review-section,
+.morning-review-list {
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(2, 6, 14, 0.22);
+}
+
+.morning-review-section ol,
+.morning-review-list ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding-left: 18px;
+  color: rgba(241, 246, 252, 0.9);
+}
+
+.morning-review-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.morning-review-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 10px;
+}
+
 .dashboard-check {
   flex: 0 0 auto;
   color: #8de5ff;

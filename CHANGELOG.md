@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.8.0 - 2026-06-06
+
+- Added AI Review Flow so AI整理 results are shown in a confirmation card before formal save.
+- Moved Morning plan, Shopping, Follow Up candidates, Supabase shopping sync, and snapshot save to the confirmation step.
+- Added "保存して今日をスタート" and "戻って修正" actions while keeping existing Parser, Deduplication, and classification logic unchanged.
+
 ## Version 3.7.5d - 2026-06-06
 
 - Fixed AI整理 source text so it matches the visible Editable Transcript.
