@@ -5,8 +5,18 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.8.1 is based on v3.8.0 plus Home Screen Branding Update.
+6. v3.8.1a is based on v3.8.1 plus Official Brand Assets Integration.
 
+
+## Version 3.8.1a Official Brand Assets Integration - 2026-06-06
+
+- Screen display: v3.8.1a
+- ZIP: morning-flow-ai-v3.8.1a.zip
+- Next planned version: Version 3.8.2
+- Home hero image now uses `morning-flow-hero.png`.
+- favicon, apple-touch-icon, manifest icon, and PWA icon now use `morning-flow-icon.png`.
+- Temporary SVG brand assets were removed.
+- AI Review Flow, Schedule Parser, Deduplication Engine, Supabase, Google Calendar, and shopping classification remain unchanged.
 
 ## Version 3.8.1 Home Screen Branding Update - 2026-06-06
 

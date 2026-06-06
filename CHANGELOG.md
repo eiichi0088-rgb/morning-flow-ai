@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 3.8.1a - 2026-06-06
+
+- Replaced the temporary SVG home hero with `morning-flow-hero.png`.
+- Unified favicon, apple-touch-icon, manifest icon, and PWA icon references to `morning-flow-icon.png`.
+- Added `manifest.webmanifest` for PWA icon configuration.
+- Kept AI Review Flow, Schedule Parser, Deduplication Engine, Supabase, Google Calendar, and shopping classification unchanged.
+
 ## Version 3.8.1 - 2026-06-06
 
 - Added the Home Screen Branding hero visual above Morning Dashboard.

@@ -90,7 +90,6 @@ import {
   type SupabaseFollowUpRow,
   type SupabaseFollowUpStatus,
 } from './services/supabaseFollowUps';
-import morningFlowHeroUrl from './morning-flow-hero.svg';
 import './styles.css';
 
 type SpeechRecognitionResultListLike = SpeechRecognitionResultList;
@@ -2663,7 +2662,7 @@ function App() {
         </div>
 
         <section className="home-brand-hero" aria-label="MORNING FLOW AI brand visual">
-          <img src={morningFlowHeroUrl} alt="MORNING FLOW AI" />
+          <img src="./assets/morning-flow-hero.png" alt="MORNING FLOW AI" />
         </section>
 
         <MorningDashboard
