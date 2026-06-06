@@ -90,6 +90,7 @@ import {
   type SupabaseFollowUpRow,
   type SupabaseFollowUpStatus,
 } from './services/supabaseFollowUps';
+import morningFlowHeroUrl from './morning-flow-hero.svg';
 import './styles.css';
 
 type SpeechRecognitionResultListLike = SpeechRecognitionResultList;
@@ -2653,7 +2654,6 @@ function App() {
         <div className="top-bar">
           <div>
             <p className="eyebrow">MORNING FLOW AI <span>{appVersion}</span></p>
-            <h1>話して人生を整える</h1>
             <p className="hero-subtitle">Your Day. Optimized.</p>
             <p className="hero-kicker">Speak. Organize. Move.</p>
           </div>
@@ -2661,6 +2661,10 @@ function App() {
             <Sparkles size={21} />
           </div>
         </div>
+
+        <section className="home-brand-hero" aria-label="MORNING FLOW AI brand visual">
+          <img src={morningFlowHeroUrl} alt="MORNING FLOW AI" />
+        </section>
 
         <MorningDashboard
           data={morningDashboard}

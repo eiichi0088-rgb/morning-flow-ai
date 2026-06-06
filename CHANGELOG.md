@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## Version 3.8.1 - 2026-06-06
+
+- Added the Home Screen Branding hero visual above Morning Dashboard.
+- Removed the large home headline and kept the top area focused on the branded AI secretary impression.
+- Added a reusable app icon asset for future manifest/home-screen icon updates.
+- Kept AI Review Flow, scheduling, shopping classification, Calendar, and Supabase logic unchanged.
+
+
 ## Version 3.8.0 - 2026-06-06
 
 - Added AI Review Flow so AI整理 results are shown in a confirmation card before formal save.

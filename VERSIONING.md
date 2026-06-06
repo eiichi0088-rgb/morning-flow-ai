@@ -5,8 +5,18 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.8.0 is based on v3.7.5d plus AI Review Flow.
+6. v3.8.1 is based on v3.8.0 plus Home Screen Branding Update.
 
+
+## Version 3.8.1 Home Screen Branding Update - 2026-06-06
+
+- Screen display: v3.8.1
+- ZIP: morning-flow-ai-v3.8.1.zip
+- Next planned version: Version 3.8.2
+- Added a branded hero visual below the login/version bar and above Morning Dashboard.
+- Removed the large home headline from the first screen.
+- Added a reusable app icon asset for future manifest/home-screen icon work.
+- AI Review Flow, Schedule Parser, Deduplication Engine, shopping classification, Calendar, and Supabase logic remain unchanged.
 
 ## Version 3.8.0 AI Review Flow - 2026-06-06
 
