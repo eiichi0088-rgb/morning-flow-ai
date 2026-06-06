@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.7.5c - 2026-06-06
+
+- Added Schedule Cleanup Safety Fix so parser-derived short schedule items are never removed by long-title cleanup.
+- Added safe parser schedule dedupe that keeps `22:00 閉店` and `22:30 ジムへ行く` as protected parser results.
+- Added schedule cleanup debug logging for parser, preferred, and cleaned schedule arrays.
+
 ## Version 3.7.5b - 2026-06-06
 
 - Strengthened final Schedule cleanup so parser-like short schedules suppress all old long schedule candidates.

@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.7.5b is based on v3.7.5a plus Final Schedule Cleanup.
+6. v3.7.5c is based on v3.7.5b plus Schedule Cleanup Safety Fix.
 
+
+## Version 3.7.5c Schedule Cleanup Safety Fix - 2026-06-06
+
+- Screen display: v3.7.5c
+- ZIP: morning-flow-ai-v3.7.5c.zip
+- Next planned version: Version 3.7.6
+- Parser-derived short schedule items are protected from long-title cleanup.
+- Safe parser dedupe keeps all parser rows, including `22:00 閉店` and `22:30 ジムへ行く`.
+- Debug logging shows parser, preferred, and cleaned schedule arrays after AI整理.
 
 ## Version 3.7.5b Final Schedule Cleanup - 2026-06-06
 

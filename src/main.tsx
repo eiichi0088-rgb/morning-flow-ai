@@ -6382,12 +6382,13 @@ function cleanScheduleItems(
   parserSchedule: MorningPlan['schedule'] = [],
   preferredSchedule: MorningPlan['schedule'] = parserSchedule,
 ) {
-  const inferredParserSchedule = parserSchedule.length >= 2 ? parserSchedule : inferParserScheduleFromItems(schedule);
+  const safeParserSchedule = dedupeParserSchedule(parserSchedule);
+  const inferredParserSchedule = safeParserSchedule.length >= 2 ? safeParserSchedule : inferParserScheduleFromItems(schedule);
   const hasReliableParserSchedule = inferredParserSchedule.length >= 2;
   const parserKeys = new Set(inferredParserSchedule.map((item) => getScheduleTaskKey(item.task)));
 
   if (hasReliableParserSchedule) {
-    return dedupeSchedule(inferredParserSchedule, inferredParserSchedule);
+    return inferredParserSchedule;
   }
 
   const cleanedSchedule = schedule.filter((item) => {
@@ -6401,14 +6402,27 @@ function cleanScheduleItems(
   return dedupeSchedule(cleanedSchedule, preferredSchedule);
 }
 
+function dedupeParserSchedule(parserSchedule: MorningPlan['schedule']) {
+  const byKey = new Map<string, MorningPlan['schedule'][number]>();
+  parserSchedule.forEach((item) => {
+    const task = cleanPlanningActionLabel(item.task);
+    const time = item.time.trim();
+    if (!task || !parseScheduleTime(time)) return;
+    const nextItem = { ...item, task, time };
+    const key = getScheduleKey(nextItem);
+    byKey.set(key, nextItem);
+  });
+  return sortScheduleByTime(Array.from(byKey.values()));
+}
+
 function inferParserScheduleFromItems(schedule: MorningPlan['schedule']) {
-  return schedule.filter((item) => {
+  return dedupeParserSchedule(schedule.filter((item) => {
     const task = cleanPlanningActionLabel(item.task);
     if (!parseScheduleTime(item.time)) return false;
     if (isLongScheduleCandidate(item, new Set(), false)) return false;
     if (!task || task.length > 20) return false;
     return true;
-  });
+  }));
 }
 
 function isLongScheduleCandidate(
@@ -6528,6 +6542,12 @@ function prepareUnifiedMorningPlan(plan: MorningPlan, sourceText: string, shoppi
       successConditions: plan.coach.successConditions.filter((item) => !isGeneratedShoppingSupportTask(item)),
     },
   };
+
+  console.info('[MORNING FLOW AI] Schedule Cleanup Safety', {
+    cleanedSchedule: nextPlan.schedule,
+    parserSchedule: parsedSchedule,
+    preferredSchedule,
+  });
 
   return {
     ...nextPlan,
