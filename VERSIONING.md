@@ -5,10 +5,10 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.8.1a is based on v3.8.1 plus Official Brand Assets Integration.
+6. v3.8.1a is based on v3.8.1 plus Official PNG Asset Replacement.
 
 
-## Version 3.8.1a Official Brand Assets Integration - 2026-06-06
+## Version 3.8.1a Official PNG Asset Replacement - 2026-06-07
 
 - Screen display: v3.8.1a
 - ZIP: morning-flow-ai-v3.8.1a.zip

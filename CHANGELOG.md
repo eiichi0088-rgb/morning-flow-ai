@@ -1,7 +1,7 @@
 # CHANGELOG
 
 
-## Version 3.8.1a - 2026-06-06
+## Version 3.8.1a Official PNG Asset Replacement - 2026-06-07
 
 - Replaced the temporary SVG home hero with `morning-flow-hero.png`.
 - Unified favicon, apple-touch-icon, manifest icon, and PWA icon references to `morning-flow-icon.png`.
