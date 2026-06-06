@@ -5,8 +5,35 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.7.4 is based on v3.7.3 plus Deduplication Engine.
+6. v3.7.5b is based on v3.7.5a plus Final Schedule Cleanup.
 
+
+## Version 3.7.5b Final Schedule Cleanup - 2026-06-06
+
+- Screen display: v3.7.5b
+- ZIP: morning-flow-ai-v3.7.5b.zip
+- Next planned version: Version 3.7.6
+- Parser-like short schedule rows now suppress old long schedule candidates even when parser source metadata is unavailable.
+- Long schedule detection now removes 20+ character connected transcript-style titles.
+- Today and Future Schedule rows display the original schedule source time to prevent `22:00` from appearing as `02:00`.
+
+## Version 3.7.5a Schedule Source Cleanup - 2026-06-06
+
+- Screen display: v3.7.5a
+- ZIP: morning-flow-ai-v3.7.5a.zip
+- Next planned version: Version 3.7.6
+- Reliable parser schedules now suppress old long AI/Full Capture schedule candidates.
+- `cleanScheduleItems()` removes long schedule titles, mixed multi-time titles, and transcript-like schedule blocks.
+- Today Schedule, Future Schedule, and calendar event generation use cleaned schedule items.
+
+## Version 3.7.5 Schedule Parser - 2026-06-06
+
+- Screen display: v3.7.5
+- ZIP: morning-flow-ai-v3.7.5.zip
+- Next planned version: Version 3.7.6
+- Schedule Parser extracts Japanese time/action pairs before Full Capture and AI schedule fallback.
+- Supports continuous transcript strings, `午前/午後/朝/昼/夜`, half-hour expressions, and `その後` schedule completion.
+- Parsed schedule results are passed through Deduplication Engine for Todo, Schedule, and Future Schedule display.
 
 ## Version 3.7.4 Deduplication Engine - 2026-06-06
 

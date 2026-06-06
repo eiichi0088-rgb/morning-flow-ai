@@ -688,7 +688,7 @@ function createMorningDashboardData(
   followUps: FollowUpItem[],
   aiInboxItems: AiInboxItem[],
 ): MorningDashboardData {
-  const dashboardSchedule = dedupeSchedule(plan?.schedule ?? []);
+  const dashboardSchedule = cleanScheduleItems(plan?.schedule ?? []);
   const dashboardTodos = dedupeTodos(plan?.todos ?? []);
   const todayScheduleItems = dashboardSchedule.map((item, index) => ({
     id: `schedule-${index}-${item.time}-${item.task}`,
@@ -5069,8 +5069,8 @@ function PlanView({
                 }`}
                 key={event.id}
               >
-                <time>{formatEventTime(event.start)}</time>
-                <span>{event.title}</span>
+                <time>{formatScheduleDisplayTime(event.sourceTime, event.start)}</time>
+                <span>{cleanScheduleDisplayTitle(event.title)}</span>
               </div>
             ))}
           </div>
@@ -5088,7 +5088,7 @@ function PlanView({
                 <div className="schedule-list">
                   {group.events.map((event) => (
                     <div className="schedule-item" key={event.id}>
-                      <time>{formatEventTime(event.start)}</time>
+                      <time>{formatScheduleDisplayTime(event.sourceTime, event.start)}</time>
                       <span>{cleanScheduleDisplayTitle(event.title)}</span>
                     </div>
                   ))}
@@ -6377,6 +6377,55 @@ function dedupeSchedule(
   return sortScheduleByTime(Array.from(byExact.values()));
 }
 
+function cleanScheduleItems(
+  schedule: MorningPlan['schedule'],
+  parserSchedule: MorningPlan['schedule'] = [],
+  preferredSchedule: MorningPlan['schedule'] = parserSchedule,
+) {
+  const inferredParserSchedule = parserSchedule.length >= 2 ? parserSchedule : inferParserScheduleFromItems(schedule);
+  const hasReliableParserSchedule = inferredParserSchedule.length >= 2;
+  const parserKeys = new Set(inferredParserSchedule.map((item) => getScheduleTaskKey(item.task)));
+
+  if (hasReliableParserSchedule) {
+    return dedupeSchedule(inferredParserSchedule, inferredParserSchedule);
+  }
+
+  const cleanedSchedule = schedule.filter((item) => {
+    if (isLongScheduleCandidate(item, parserKeys, hasReliableParserSchedule)) return false;
+    if (hasReliableParserSchedule && parserKeys.has(getScheduleTaskKey(item.task)) && !inferredParserSchedule.some((parserItem) => getScheduleKey(parserItem) === getScheduleKey(item))) {
+      return false;
+    }
+    return true;
+  });
+
+  return dedupeSchedule(cleanedSchedule, preferredSchedule);
+}
+
+function inferParserScheduleFromItems(schedule: MorningPlan['schedule']) {
+  return schedule.filter((item) => {
+    const task = cleanPlanningActionLabel(item.task);
+    if (!parseScheduleTime(item.time)) return false;
+    if (isLongScheduleCandidate(item, new Set(), false)) return false;
+    if (!task || task.length > 20) return false;
+    return true;
+  });
+}
+
+function isLongScheduleCandidate(
+  item: MorningPlan['schedule'][number],
+  parserKeys: Set<string>,
+  hasReliableParserSchedule: boolean,
+) {
+  const title = item.task.normalize('NFKC').trim();
+  const compact = title.replace(/\s/g, '');
+  const timeHits = (compact.match(/(?:午前|午後|朝|昼|夜)?\d{1,2}(?:時(?:半|\d{1,2}分?)?|:\d{2})/g) ?? []).length;
+  if (compact.length >= 20) return true;
+  if (timeHits >= 2) return true;
+  if (/^(明日は|明日|今日は|今日)/.test(compact) && compact.length >= 18) return true;
+  if (hasReliableParserSchedule && parserKeys.has(getScheduleTaskKey(title)) && compact.length >= 18) return true;
+  return false;
+}
+
 function getScheduleTaskKey(task: string) {
   return normalizeTaskText(task);
 }
@@ -6414,8 +6463,10 @@ function prepareUnifiedMorningPlan(plan: MorningPlan, sourceText: string, shoppi
   const shoppingNames = new Set(shoppingItems.map((item) => normalizeTaskText(item.name)));
   const extractedActions = extractScheduleActionsFromUnifiedInput(sourceText);
   const extractedSchedule = extractDatedScheduleItems(sourceText);
+  const parsedSchedule = parseScheduleSegments(sourceText);
   const fullCapture = createFullCapturePlanItems(sourceText);
-  const futureTaskNames = new Set(extractedSchedule.map((item) => normalizeTaskText(item.task)));
+  const preferredSchedule = dedupeSchedule([...parsedSchedule, ...fullCapture.schedule], parsedSchedule);
+  const futureTaskNames = new Set([...extractedSchedule, ...parsedSchedule].map((item) => normalizeTaskText(item.task)));
   const hasShoppingAction = hasShoppingActionIntent(sourceText);
   const hasShoppingItems = hasShoppingItemIntent(sourceText) && extractShoppingItemsFromUnifiedInput(sourceText).length > 0;
   const shouldAddShoppingAction = hasShoppingAction || hasShoppingItems;
@@ -6436,27 +6487,29 @@ function prepareUnifiedMorningPlan(plan: MorningPlan, sourceText: string, shoppi
         [
           ...plan.todos.filter((todo) => !isShoppingText(todo) && !isFutureTaskText(todo)),
           ...extractedActions,
+          ...parsedSchedule.map((item) => item.task),
           ...fullCapture.todos,
           ...shoppingAction,
         ],
         [],
       ),
     ),
-    schedule: dedupeSchedule(
+    schedule: cleanScheduleItems(
       filterUnconfirmedDefaultScheduleTimes(
         mergeSchedule(
           removeScheduleItemsCoveredBy(
             plan.schedule.filter((item) => !isShoppingText(item.task) && !isFutureTaskText(item.task)),
-            fullCapture.schedule,
+            preferredSchedule,
           ),
           mergeSchedule(
-            removeScheduleItemsCoveredBy(extractedSchedule, fullCapture.schedule),
-            mergeSchedule(fullCapture.schedule, shoppingSchedule),
+            removeScheduleItemsCoveredBy(extractedSchedule, preferredSchedule),
+            mergeSchedule(preferredSchedule, shoppingSchedule),
           ),
         ),
         sourceText,
       ),
-      fullCapture.schedule,
+      parsedSchedule,
+      preferredSchedule,
     ),
     priorities: {
       highest: plan.priorities.highest.filter((item) => !isShoppingText(item) && !isFutureTaskText(item)),
@@ -6479,7 +6532,7 @@ function prepareUnifiedMorningPlan(plan: MorningPlan, sourceText: string, shoppi
   return {
     ...nextPlan,
     todos: dedupeTodos(nextPlan.todos),
-    schedule: dedupeSchedule(nextPlan.schedule, fullCapture.schedule),
+    schedule: cleanScheduleItems(nextPlan.schedule, parsedSchedule, preferredSchedule),
   };
 }
 
@@ -6491,6 +6544,96 @@ function filterUnconfirmedDefaultScheduleTimes(schedule: MorningPlan['schedule']
     if (!isDefaultNine) return true;
     return /\b0?9(?::00)?\b|0?9時/.test(normalizedSource);
   });
+}
+
+function parseScheduleSegments(sourceText: string): MorningPlan['schedule'] {
+  const normalized = sourceText.normalize('NFKC').replace(/[，,]/g, '、');
+  const defaultDatePrefix = getFullCaptureDefaultDatePrefix(normalized);
+  const timePattern = /(?:明後日|明日|今日)?(?:午前|午後|朝|昼|夜)?\s*\d{1,2}(?:時(?:半|\d{1,2}分?)?|:\d{2})/g;
+  const matches = Array.from(normalized.matchAll(timePattern));
+  const schedule: MorningPlan['schedule'] = [];
+  let lastTime = '';
+
+  matches.forEach((match, index) => {
+    if (match.index === undefined) return;
+    const rawTime = match[0];
+    const parsedTime = parseJapaneseScheduleTime(rawTime);
+    if (!parsedTime) return;
+
+    const start = match.index + rawTime.length;
+    const end = matches[index + 1]?.index ?? normalized.length;
+    const segmentBody = normalized.slice(start, end);
+    const time = applyFullCaptureDefaultDatePrefix(parsedTime, defaultDatePrefix);
+    const { primary, after } = splitScheduleSegmentAction(segmentBody);
+    const title = createScheduleParserActionTitle(primary);
+
+    if (title) {
+      schedule.push({ time, task: title });
+      lastTime = time;
+    }
+
+    const afterTitle = createScheduleParserActionTitle(after);
+    if (afterTitle && lastTime) {
+      const nextTime = nextFullCaptureTime(lastTime);
+      if (nextTime) {
+        schedule.push({ time: nextTime, task: afterTitle });
+        lastTime = nextTime;
+      }
+    }
+  });
+
+  return dedupeSchedule(schedule, schedule);
+}
+
+function parseJapaneseScheduleTime(rawTime: string) {
+  const normalized = normalizeJapaneseDateText(rawTime.normalize('NFKC'));
+  const match = normalized.match(/(?:(明後日|明日|今日))?(午前|午後|朝|昼|夜)?(\d{1,2})(?:時(半|\d{1,2}分?)?|:(\d{2}))/);
+  if (!match) return '';
+
+  const datePrefix = match[1] ? `${match[1]} ` : '';
+  const period = match[2] ?? '';
+  let hour = Number(match[3]);
+  const minuteText = match[4] ?? match[5] ?? '';
+  const minute = minuteText === '半' ? 30 : Number(minuteText.replace('分', '') || 0);
+
+  if (period === '午後' && hour < 12) hour += 12;
+  if (period === '夜' && hour < 12) hour += 12;
+  if (period === '昼' && hour < 12) hour += 12;
+  if (period === '午前' && hour === 12) hour = 0;
+
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return '';
+  return `${datePrefix}${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+function splitScheduleSegmentAction(segmentBody: string) {
+  const cleaned = segmentBody
+    .replace(/^[\s、。]+/, '')
+    .replace(/^(?:には|に|から|まで)/, '')
+    .replace(/^[\s、。]+/, '')
+    .trim();
+  const [primary = '', ...afterParts] = cleaned.split(/(?:、|。)?(?:その後|そのあと|それから|続いて)/);
+  return {
+    primary,
+    after: afterParts.join('、'),
+  };
+}
+
+function createScheduleParserActionTitle(value: string) {
+  const compact = value
+    .replace(/^[\s、。]+/, '')
+    .replace(/^(?:には|に|から|まで)/, '')
+    .replace(/^[\s、。]+/, '')
+    .replace(/[、。]+$/g, '')
+    .replace(/して$/, '')
+    .replace(/する$/, '')
+    .replace(/行って$/, '行く')
+    .replace(/起きて$/, '起床')
+    .trim();
+  if (!compact) return '';
+
+  const extractedActions = extractFullCaptureActions(compact);
+  if (extractedActions.length) return extractedActions[0];
+  return cleanPlanningActionLabel(compact);
 }
 
 function createFullCapturePlanItems(sourceText: string): { schedule: MorningPlan['schedule']; todos: string[] } {
@@ -7078,7 +7221,7 @@ function createCalendarEvents(plan: MorningPlan): CalendarEvent[] {
   const today = new Date();
   today.setSeconds(0, 0);
 
-  return dedupeSchedule(plan.schedule)
+  return cleanScheduleItems(plan.schedule)
     .map((item, index) => {
       const range = parseScheduleTime(item.time);
       const fallbackStartMinutes = 9 * 60 + index * 60;
@@ -7513,6 +7656,14 @@ function formatEventTime(date: Date) {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function formatScheduleDisplayTime(sourceTime: string, fallbackDate: Date) {
+  const range = parseScheduleTime(sourceTime);
+  if (!range) return formatEventTime(fallbackDate);
+  const hour = Math.floor(range.startMinutes / 60);
+  const minute = range.startMinutes % 60;
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
 function formatEventDateTime(date: Date) {

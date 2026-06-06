@@ -1,6 +1,24 @@
 # CHANGELOG
 
 
+## Version 3.7.5b - 2026-06-06
+
+- Strengthened final Schedule cleanup so parser-like short schedules suppress all old long schedule candidates.
+- Lowered long schedule detection to 20 characters and removed transcript-style connected schedule titles.
+- Schedule rows now display time from `sourceTime` directly to prevent `22:00` from appearing as `02:00`.
+
+## Version 3.7.5a - 2026-06-06
+
+- Added Schedule Source Cleanup so reliable parser schedules suppress old long AI/Full Capture schedule candidates.
+- Added `cleanScheduleItems()` to remove long schedule titles, multi-time mixed titles, and transcript-like schedule blocks.
+- Applied schedule cleanup to Today Schedule, Future Schedule, and calendar event source generation.
+
+## Version 3.7.5 - 2026-06-06
+
+- Added Schedule Parser to split Japanese transcript time/action pairs before Full Capture and AI schedule fallback.
+- Supported continuous inputs such as `8時に起床9時半に店へ行く18時に開店22時に閉店`.
+- Added Japanese time handling for morning/afternoon/night expressions and `その後` 30-minute schedule completion.
+
 ## Version 3.7.4 - 2026-06-06
 
 - Added a Deduplication Engine for Morning Todo, Schedule, Top Priority, and Future Schedule display.
