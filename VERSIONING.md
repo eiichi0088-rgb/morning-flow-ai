@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.7.5c is based on v3.7.5b plus Schedule Cleanup Safety Fix.
+6. v3.7.5d is based on v3.7.5c plus Editable Transcript Source Fix.
 
+
+## Version 3.7.5d Editable Transcript Source Fix - 2026-06-06
+
+- Screen display: v3.7.5d
+- ZIP: morning-flow-ai-v3.7.5d.zip
+- Next planned version: Version 3.7.6
+- AI整理 now uses the same `transcript + interimTranscript` source text shown in Editable Transcript.
+- AI整理 start commits the visible source text into `transcript` and clears `interimTranscript`.
+- AI, shopping classification, schedule parser cleanup, and snapshots now receive the same source text.
 
 ## Version 3.7.5c Schedule Cleanup Safety Fix - 2026-06-06
 

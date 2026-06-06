@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+## Version 3.7.5d - 2026-06-06
+
+- Fixed AI整理 source text so it matches the visible Editable Transcript.
+- `organizeMorning()` now uses `transcript + interimTranscript` as the shared source for AI, shopping classification, parser cleanup, and snapshots.
+- AI整理 start now commits the visible source text back into `transcript` and clears `interimTranscript`.
+
 ## Version 3.7.5c - 2026-06-06
 
 - Added Schedule Cleanup Safety Fix so parser-derived short schedule items are never removed by long-title cleanup.

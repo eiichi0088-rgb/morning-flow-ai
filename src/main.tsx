@@ -956,13 +956,17 @@ function App() {
   const isFollowUpView = activeView === 'followUp';
   const isInboxView = activeView === 'inbox';
   const isFeedbackView = activeView === 'feedback';
-  const resultText = [transcript, interimTranscript].filter(Boolean).join('\n');
+  const getMorningSourceText = React.useCallback(
+    () => [transcript, interimTranscript].filter(Boolean).join('\n').trim(),
+    [interimTranscript, transcript],
+  );
+  const resultText = getMorningSourceText();
   const activeShoppingText = shoppingCaptureMode === 'meal' ? mealPlanText : shoppingText;
   const activeSavedShoppingText = shoppingCaptureMode === 'meal' ? originalMealPlanText : originalShoppingText;
   const shoppingResultText = [activeShoppingText, isShoppingView ? interimTranscript : ''].filter(Boolean).join('\n');
   const feedbackResultText = [feedbackText, isFeedbackView ? interimTranscript : ''].filter(Boolean).join('\n');
   const followUpResultText = [followUpCaptureText, isFollowUpView ? interimTranscript : ''].filter(Boolean).join('\n');
-  const canOrganize = Boolean(transcript.trim()) && !isListening && captureMode === 'create';
+  const canOrganize = Boolean(resultText.trim()) && !isListening && captureMode === 'create';
   const canUpdatePlan = false;
   const canOrganizeShopping = Boolean(activeShoppingText.trim()) && !isListening;
   const canUseNext = canOrganize || canUpdatePlan || Boolean(plan);
@@ -1518,22 +1522,32 @@ function App() {
   };
 
   const organizeMorning = () => {
-    if (!transcript.trim()) return;
+    const sourceText = getMorningSourceText();
+    if (!sourceText) return;
 
     trackAnalyticsFeature(analyticsUserId, 'morning_flow');
+    setTranscript(sourceText);
+    setOriginalTranscript(sourceText);
+    setInterimTranscript('');
     setIsOrganizing(true);
     setError('');
     setMorningFollowUpCandidates([]);
     setMorningFollowUpMessage('');
 
-    Promise.all([createAiMorningPlan(transcript), createShoppingPlan(transcript, shoppingItems)])
+    console.info('[MORNING FLOW AI] organizeMorning source text', {
+      sourceText,
+      transcript,
+      interimTranscript,
+    });
+
+    Promise.all([createAiMorningPlan(sourceText), createShoppingPlan(sourceText, shoppingItems)])
       .then(([nextPlan, shoppingPlan]) => {
-        const normalizedShoppingItems = normalizeMorningShoppingItems(transcript, shoppingPlan.items, shoppingItems);
-        const classifiedShoppingItems = hasShoppingItemIntent(transcript) || normalizedShoppingItems.length > shoppingItems.length
+        const normalizedShoppingItems = normalizeMorningShoppingItems(sourceText, shoppingPlan.items, shoppingItems);
+        const classifiedShoppingItems = hasShoppingItemIntent(sourceText) || normalizedShoppingItems.length > shoppingItems.length
           ? normalizedShoppingItems
           : shoppingItems;
         const planWithCarryover = addCarryoverToPlan(
-          prepareUnifiedMorningPlan(nextPlan, transcript, classifiedShoppingItems),
+          prepareUnifiedMorningPlan(nextPlan, sourceText, classifiedShoppingItems),
           carriedTodos,
         );
         setPlan(planWithCarryover);
@@ -1545,7 +1559,7 @@ function App() {
         setUpdateInstruction('');
         setOriginalUpdateInstruction('');
         setHighlightedScheduleKeys([]);
-        saveMorningSnapshot(transcript, planWithCarryover, privateSessionKeys.snapshots);
+        saveMorningSnapshot(sourceText, planWithCarryover, privateSessionKeys.snapshots);
       })
       .catch((reason: unknown) => {
         console.error(reason);
