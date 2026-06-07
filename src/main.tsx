@@ -2649,7 +2649,7 @@ function App() {
           onPreferenceChange={updateOnboardingPreference}
         />
       ) : (
-      <section className="hero-panel" aria-label="音声入力">
+      <section className="hero-panel home-motion-panel" aria-label="音声入力">
         <div className="top-bar">
           <div>
             <p className="eyebrow">MORNING FLOW AI <span>{appVersion}</span></p>

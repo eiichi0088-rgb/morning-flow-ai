@@ -5,8 +5,18 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.8.2 is based on v3.8.1a plus AI Review Card Editing.
+6. v3.8.3 is based on v3.8.2 plus Home Digital Motion Background.
 
+
+## Version 3.8.3 Home Digital Motion Background - 2026-06-07
+
+- Screen display: v3.8.3
+- ZIP: morning-flow-ai-v3.8.3.zip
+- Next planned version: Version 3.8.4
+- Added a CSS-only digital motion layer to the home panel.
+- The background uses slow cyan, green, and morning-orange light streams behind the existing hero image and dashboard.
+- `prefers-reduced-motion` is respected so the home motion becomes static for users who reduce animation.
+- AI Review Flow, Review Card Editing, Schedule Parser, Deduplication Engine, Calendar Export, Shopping List, Supabase, and PWA icon settings remain unchanged.
 
 ## Version 3.8.2 AI Review Card Editing - 2026-06-07
 

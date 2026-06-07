@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 3.8.3 - 2026-06-07
+
+- Added a subtle CSS-only digital motion background to the home panel.
+- Used slow cyan, green, and morning-orange light streams behind the existing hero image and dashboard.
+- Added reduced-motion handling so the motion layer becomes static when motion reduction is enabled.
+- Kept AI Review Flow, Review Card Editing, Schedule Parser, Deduplication Engine, Calendar Export, Shopping List, Supabase, and PWA icon settings unchanged.
+
 ## Version 3.8.2 - 2026-06-07
 
 - Added AI Review Card Editing before formal save.
