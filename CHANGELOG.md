@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 3.8.2 - 2026-06-07
+
+- Added AI Review Card Editing before formal save.
+- Review sections now support independent edit, save, and cancel actions.
+- Edited review draft data is used by "保存して今日をスタート".
+- Kept AI organize logic, Schedule Parser, Deduplication Engine, Calendar Export, Supabase, and Shopping List logic unchanged.
+
 ## Version 3.8.1a Official PNG Asset Replacement - 2026-06-07
 
 - Replaced the temporary SVG home hero with `morning-flow-hero.png`.

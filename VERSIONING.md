@@ -5,8 +5,17 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.8.1a is based on v3.8.1 plus Official PNG Asset Replacement.
+6. v3.8.2 is based on v3.8.1a plus AI Review Card Editing.
 
+
+## Version 3.8.2 AI Review Card Editing - 2026-06-07
+
+- Screen display: v3.8.2
+- ZIP: morning-flow-ai-v3.8.2.zip
+- Next planned version: Version 3.8.3
+- Added edit, save, and cancel controls to AI Review sections before formal save.
+- Edited review draft data is used when the user presses "保存して今日をスタート".
+- AI organize logic, Schedule Parser, Deduplication Engine, Calendar Export, Supabase, and Shopping List logic remain unchanged.
 
 ## Version 3.8.1a Official PNG Asset Replacement - 2026-06-07
 

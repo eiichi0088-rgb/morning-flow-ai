@@ -2688,6 +2688,7 @@ function App() {
             draft={morningReviewDraft}
             onCancel={cancelMorningReview}
             onConfirm={confirmMorningReview}
+            onDraftChange={setMorningReviewDraft}
           />
         )}
 
@@ -3111,17 +3112,22 @@ function MorningReviewCard({
   draft,
   onCancel,
   onConfirm,
+  onDraftChange,
 }: {
   aiInboxCount: number;
   draft: MorningReviewDraft;
   onCancel: () => void;
   onConfirm: () => void;
+  onDraftChange: React.Dispatch<React.SetStateAction<MorningReviewDraft | null>>;
 }) {
   const dashboardData = createMorningDashboardData(draft.plan, draft.shoppingItems, [], []);
   const scheduleItems = cleanScheduleItems(draft.plan.schedule);
   const todoItems = dedupeTodos(draft.plan.todos);
   const shoppingPreview = draft.shoppingItems.slice(0, 8);
   const followUpPreview = draft.followUpCandidates.slice(0, 5);
+  const updateDraft = (updater: (current: MorningReviewDraft) => MorningReviewDraft) => {
+    onDraftChange((current) => (current ? updater(current) : current));
+  };
 
   return (
     <section className="morning-review-card" aria-label="AI整理結果確認">
@@ -3147,10 +3153,76 @@ function MorningReviewCard({
       </div>
 
       <div className="morning-review-grid">
-        <MorningReviewList title="今日のやること" items={todoItems} />
-        <MorningReviewList title="今日のスケジュール" items={scheduleItems.map((item) => `${item.time} ${item.task}`)} />
-        <MorningReviewList title="買い物リスト" items={shoppingPreview.map(formatShoppingItemLabel)} />
-        <MorningReviewList title="Follow Up候補" items={followUpPreview.map((item) => `${item.name} ${item.content}`.trim())} />
+        <MorningReviewList
+          title="今日のやること"
+          items={todoItems}
+          onSave={(items) =>
+            updateDraft((current) => ({
+              ...current,
+              plan: { ...current.plan, todos: dedupeTodos(items) },
+            }))
+          }
+        />
+        <MorningReviewList
+          title="今日のスケジュール"
+          items={scheduleItems.map((item) => `${item.time} ${item.task}`)}
+          onSave={(items) =>
+            updateDraft((current) => ({
+              ...current,
+              plan: {
+                ...current.plan,
+                schedule: cleanScheduleItems(items.map(parseMorningReviewScheduleText)),
+              },
+            }))
+          }
+        />
+        <MorningReviewList
+          title="買い物リスト"
+          items={shoppingPreview.map(formatShoppingItemLabel)}
+          onSave={(items) =>
+            updateDraft((current) => ({
+              ...current,
+              shoppingItems: current.shoppingItems.map((item) => {
+                const previewIndex = shoppingPreview.findIndex((previewItem) => previewItem.id === item.id);
+                const editedText = previewIndex >= 0 ? items[previewIndex] : '';
+                if (!editedText) return item;
+                const parsed = parseShoppingItemInput(editedText);
+                return {
+                  ...item,
+                  name: parsed.name || item.name,
+                  quantity: parsed.quantity,
+                  category: classifyShoppingItem(parsed.name || item.name),
+                };
+              }),
+            }))
+          }
+        />
+        <MorningReviewList
+          title="Follow Up候補"
+          items={followUpPreview.map((item) => `${item.name} ${item.content}`.trim())}
+          onSave={(items) =>
+            updateDraft((current) => ({
+              ...current,
+              followUpCandidates: current.followUpCandidates.map((item) => {
+                const previewIndex = followUpPreview.findIndex((previewItem) => previewItem.id === item.id);
+                const editedText = previewIndex >= 0 ? items[previewIndex] : '';
+                const nextItem = editedText ? createVoiceFollowUp(editedText) : null;
+                return nextItem
+                  ? {
+                      ...item,
+                      name: nextItem.name,
+                      content: nextItem.content,
+                      dueDate: nextItem.dueDate,
+                      duePreset: nextItem.duePreset,
+                      kind: nextItem.kind,
+                      priority: nextItem.priority,
+                      status: nextItem.status,
+                    }
+                  : item;
+              }),
+            }))
+          }
+        />
         <MorningReviewList title="AI Inbox" items={[`未整理 ${aiInboxCount}件`]} />
       </div>
 
@@ -3166,12 +3238,80 @@ function MorningReviewCard({
   );
 }
 
-function MorningReviewList({ items, title }: { items: string[]; title: string }) {
+function parseMorningReviewScheduleText(text: string): MorningPlan['schedule'][number] {
+  const trimmed = text.trim();
+  const match = trimmed.match(/^([0-2]?\d(?::[0-5]\d)?|[0-2]?\d時(?:半)?)(?:\s+|　+)?(.+)$/);
+  if (!match) return { time: '', task: trimmed };
+  return {
+    time: match[1],
+    task: match[2].trim(),
+  };
+}
+
+function MorningReviewList({ items, onSave, title }: { items: string[]; onSave?: (items: string[]) => void; title: string }) {
+  const [isEditing, setIsEditing] = React.useState(false);
+  const [draftItems, setDraftItems] = React.useState(items);
+  React.useEffect(() => {
+    if (!isEditing) setDraftItems(items);
+  }, [isEditing, items]);
   const visibleItems = items.map((item) => item.trim()).filter(Boolean);
   return (
-    <section className="morning-review-list">
-      <span>{title}</span>
-      {visibleItems.length ? (
+    <section className={`morning-review-list ${isEditing ? 'is-editing' : ''}`}>
+      <div className="morning-review-list-header">
+        <span>{title}</span>
+        {onSave ? (
+          isEditing ? (
+            <div>
+              <button
+                className="review-mini-button"
+                onClick={() => {
+                  setDraftItems(items);
+                  setIsEditing(false);
+                }}
+                type="button"
+              >
+                キャンセル
+              </button>
+              <button
+                className="review-mini-button is-primary"
+                onClick={() => {
+                  onSave(draftItems.map((item) => item.trim()).filter(Boolean));
+                  setIsEditing(false);
+                }}
+                type="button"
+              >
+                保存
+              </button>
+            </div>
+          ) : (
+            <button className="review-mini-button" onClick={() => setIsEditing(true)} type="button">
+              <Pencil size={13} />
+              編集
+            </button>
+          )
+        ) : null}
+      </div>
+      {isEditing ? (
+        <div className="review-edit-stack">
+          {draftItems.map((item, index) => (
+            <div className="review-edit-grid" key={`${title}-edit-${index}`}>
+              <label className="review-edit-field review-edit-wide">
+                <small>タイトル / メモ</small>
+                <input
+                  value={item}
+                  onChange={(event) =>
+                    setDraftItems((current) => current.map((value, itemIndex) => (itemIndex === index ? event.target.value : value)))
+                  }
+                />
+              </label>
+              <label className="review-edit-field">
+                <small>カテゴリ</small>
+                <input readOnly value={title} />
+              </label>
+            </div>
+          ))}
+        </div>
+      ) : visibleItems.length ? (
         <ul>
           {visibleItems.map((item, index) => (
             <li key={`${title}-${index}-${item}`}>{item}</li>
