@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## Version 3.8.4 - 2026-06-07
+
+- Added user-id guards before applying Supabase Follow Up and Shopping sync results.
+- Discards stale Supabase results when a previous user's request returns after logout or another user login.
+- Clears local workspace state before applying a different authenticated user session.
+- Strengthened the home digital motion background again with visible fiber beams, particle dots, and moving grid/circuit texture while keeping v3.8.4 isolation fixes intact.
+- Kept AI organize logic, AI Review Flow, Review Card Editing, Schedule Parser, Deduplication Engine, Calendar Export, Shopping List classification, Supabase Auth, and PWA icon settings unchanged.
+
 ## Version 3.8.3a - 2026-06-07
 
 - Strengthened the home digital motion background with more visible neon fiber lines, particle dots, and moving cyber grid texture.

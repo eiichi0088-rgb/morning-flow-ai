@@ -890,6 +890,7 @@ function removeLegacySharedStorage(currentSessionId: string) {
 function App() {
   const devicePrivateSessionId = React.useMemo(createPrivateSessionId, []);
   const [authSession, setAuthSession] = React.useState<SupabaseAuthSession | null>(() => getStoredSupabaseAuthSession());
+  const currentUserIdRef = React.useRef<string | null>(authSession?.user.id ?? null);
   const privateSessionId = authSession?.user.id ? `user-${authSession.user.id}` : devicePrivateSessionId;
   const privateSessionKeys = React.useMemo(() => createPrivateSessionKeys(privateSessionId), [privateSessionId]);
   const analyticsUserId = React.useMemo(createAnalyticsUserId, []);
@@ -1014,6 +1015,7 @@ function App() {
       throw new Error('ログインセッションを更新できませんでした。もう一度ログインしてください。');
     }
     storeSupabaseAuthSession(refreshedSession);
+    currentUserIdRef.current = refreshedSession.user.id;
     setAuthSession(refreshedSession);
     return { session: refreshedSession, tokenStatus: 'token expired / token refreshed' };
   }, [authSession]);
@@ -1108,6 +1110,23 @@ function App() {
     setIsListening(false);
   }, []);
 
+  const applyAuthenticatedSession = React.useCallback(
+    (session: SupabaseAuthSession) => {
+      const nextUserId = session.user.id;
+      if (currentUserIdRef.current !== nextUserId) {
+        resetLocalWorkspaceState();
+      }
+      currentUserIdRef.current = nextUserId;
+      storeSupabaseAuthSession(session);
+      setAuthSession(session);
+    },
+    [resetLocalWorkspaceState],
+  );
+
+  React.useEffect(() => {
+    currentUserIdRef.current = authSession?.user.id ?? null;
+  }, [authSession?.user.id]);
+
   React.useEffect(() => {
     let isMounted = true;
     const restoreSession = async () => {
@@ -1115,8 +1134,7 @@ function App() {
       try {
         const session = await restoreSupabaseAuthSessionFromUrl();
         if (!isMounted || !session?.access_token || !session.user) return;
-        storeSupabaseAuthSession(session);
-        setAuthSession(session);
+        applyAuthenticatedSession(session);
         setAuthNotice('メール認証が完了し、ログイン状態を復元しました。');
         setAuthError('');
         console.info('[MORNING FLOW AI] Supabase auth state change', { event: 'session-restored', userId: session.user.id });
@@ -1129,7 +1147,7 @@ function App() {
     return () => {
       isMounted = false;
     };
-  }, [authSession?.user]);
+  }, [applyAuthenticatedSession, authSession?.user]);
 
   React.useEffect(() => {
     if (!localStorage.getItem(analyticsInstallTrackedKey)) {
@@ -1252,7 +1270,15 @@ function App() {
     setFollowUpSyncStatus('syncing');
     try {
       const { session } = await getFreshAuthSession();
-      const rows = await fetchSupabaseFollowUps(session.user.id, session.access_token);
+      const requestedUserId = session.user.id;
+      const rows = await fetchSupabaseFollowUps(requestedUserId, session.access_token);
+      if (currentUserIdRef.current !== requestedUserId) {
+        console.warn('[MORNING FLOW AI] Discarded stale follow-up sync result', {
+          currentUserId: currentUserIdRef.current,
+          requestedUserId,
+        });
+        return;
+      }
       setFollowUps(rows.map(mapSupabaseRowToFollowUpItem));
       setFollowUpSyncError('');
       setFollowUpLastSyncedAt(new Date().toISOString());
@@ -1278,7 +1304,15 @@ function App() {
 
     setShoppingSyncStatus('syncing');
     try {
-      const rows = await fetchSupabaseShoppingItems(auth.userId, auth.accessToken);
+      const requestedUserId = auth.userId;
+      const rows = await fetchSupabaseShoppingItems(requestedUserId, auth.accessToken);
+      if (currentUserIdRef.current !== requestedUserId) {
+        console.warn('[MORNING FLOW AI] Discarded stale shopping sync result', {
+          currentUserId: currentUserIdRef.current,
+          requestedUserId,
+        });
+        return;
+      }
       setShoppingItems(rows.map(mapSupabaseRowToShoppingItem));
       setShoppingUpdatedAt(new Date().toISOString());
       setShoppingSyncError('');
@@ -1976,6 +2010,13 @@ function App() {
         if (!savedRow) {
           throw new Error('Supabase insert returned no row. Check table permissions and Prefer return=representation support.');
         }
+        if (currentUserIdRef.current !== userId) {
+          console.warn('[MORNING FLOW AI] Discarded stale follow-up insert result', {
+            currentUserId: currentUserIdRef.current,
+            requestedUserId: userId,
+          });
+          return false;
+        }
         const savedItem = mapSupabaseRowToFollowUpItem(savedRow);
         setFollowUps((current) => [...current.filter((currentItem) => currentItem.id !== savedItem.id), savedItem]);
         notifyFollowUpDueToday(savedItem);
@@ -2422,8 +2463,7 @@ function App() {
         userId: session?.user?.id,
       });
       if (session?.access_token && session.user) {
-        storeSupabaseAuthSession(session);
-        setAuthSession(session);
+        applyAuthenticatedSession(session);
         setAuthNotice('');
         console.info('[MORNING FLOW AI] Supabase auth state change', { event: 'signup-session-created', userId: session.user.id });
         return;
@@ -2474,6 +2514,7 @@ function App() {
     recognition?.abort();
     resetLocalWorkspaceState();
     clearStoredSupabaseAuthSession();
+    currentUserIdRef.current = null;
     setAuthSession(null);
     setAuthNotice('');
     setActiveView('morning');
@@ -2650,6 +2691,12 @@ function App() {
         />
       ) : (
       <section className="hero-panel home-motion-panel" aria-label="音声入力">
+        <div className="digital-motion-field" aria-hidden="true">
+          {Array.from({ length: 7 }).map((_, index) => (
+            <span key={index} />
+          ))}
+        </div>
+
         <div className="top-bar">
           <div>
             <p className="eyebrow">MORNING FLOW AI <span>{appVersion}</span></p>

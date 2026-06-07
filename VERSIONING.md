@@ -5,8 +5,19 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.8.3a is based on v3.8.3 plus Digital Motion Strong Visual Update.
+6. v3.8.4 is based on v3.8.3a plus User Data Isolation Fix.
 
+
+## Version 3.8.4 User Data Isolation Fix - 2026-06-07
+
+- Screen display: v3.8.4
+- ZIP: morning-flow-ai-v3.8.4.zip
+- Next planned version: Version 3.8.5
+- Added current-user guards before applying Supabase Follow Up and Shopping sync results.
+- Stale async results from a previous user are discarded if the active user changed before the request completed.
+- Login, signup-session, and email-confirmation restore now clear local workspace state before applying a different authenticated user.
+- Home Digital Motion was strengthened further with visible fiber beams, particle dots, and moving grid/circuit texture without downgrading the v3.8.4 user isolation fix.
+- AI organize logic, AI Review Flow, Review Card Editing, Schedule Parser, Deduplication Engine, Calendar Export, Shopping List classification, Supabase Auth, and PWA icon settings remain unchanged.
 
 ## Version 3.8.3a Digital Motion Strong Visual Update - 2026-06-07
 
