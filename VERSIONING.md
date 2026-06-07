@@ -5,8 +5,18 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.8.4 is based on v3.8.3a plus User Data Isolation Fix.
+6. v3.8.5 is based on v3.8.4 plus Shopping Intelligence Upgrade.
 
+
+## Version 3.8.5 Shopping Intelligence Upgrade - 2026-06-07
+
+- Screen display: v3.8.5
+- ZIP: morning-flow-ai-v3.8.5.zip
+- Next planned version: Version 3.8.6
+- Added a Shopping Post Processor to clean shopping items before review, save, local load, and Supabase sync.
+- Shopping input is normalized toward one product per item with delimiter splitting, quantity cleanup, duplicate consolidation, and empty/noise item removal.
+- Today Top Priority no longer fills all three priority slots with shopping products when shopping is the only category.
+- AI Review Flow, Review Card Editing, Schedule Parser, Deduplication Engine, User Data Isolation Fix, Supabase Auth, Home Digital Motion Background, PWA settings, and calendar export remain unchanged.
 
 ## Version 3.8.4 User Data Isolation Fix - 2026-06-07
 

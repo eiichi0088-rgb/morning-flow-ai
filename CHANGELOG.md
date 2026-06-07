@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 3.8.5 - 2026-06-07
+
+- Added a Shopping Post Processor so shopping results are cleaned before review, save, local load, and Supabase sync.
+- Strengthened one-product-per-item cleanup for Japanese shopping input with delimiters, quantities, duplicate removal, and noise filtering.
+- Prevented shopping-only item lists from filling all Today Top Priority slots.
+- Kept AI Review Flow, Review Card Editing, Schedule Parser, Deduplication Engine, User Data Isolation Fix, Supabase Auth, Home Digital Motion Background, and PWA settings unchanged.
+
 ## Version 3.8.4 - 2026-06-07
 
 - Added user-id guards before applying Supabase Follow Up and Shopping sync results.

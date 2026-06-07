@@ -49,6 +49,7 @@ import {
   formatShoppingItemLabel,
   groupShoppingItems,
   parseShoppingItemInput,
+  postProcessShoppingItems,
   type ShoppingItem,
 } from './services/shoppingPlanner';
 import {
@@ -805,7 +806,14 @@ function createTopPriorityItems({
   if (!priorityItems.length && shoppingItems.length) {
     addItem({ id: 'priority-shopping-action', label: '買い物へ行く' });
   }
-  shoppingItems.forEach((item) => addItem({ id: `priority-shopping-${item.id}`, label: formatShoppingItemLabel(item), completed: item.completed }));
+  const canUseShoppingAsSupplement = priorityItems.length > 1 && priorityItems.length < 3;
+  if (canUseShoppingAsSupplement) {
+    shoppingItems.forEach((item) => {
+      if (priorityItems.length < 3) {
+        addItem({ id: `priority-shopping-${item.id}`, label: formatShoppingItemLabel(item), completed: item.completed });
+      }
+    });
+  }
 
   return dedupeTopPriorityItems(priorityItems);
 }
@@ -1181,7 +1189,7 @@ function App() {
         };
         setShoppingText(parsed.text ?? '');
         setOriginalShoppingText(parsed.text ?? '');
-        setShoppingItems(Array.isArray(parsed.items) ? parsed.items : []);
+        setShoppingItems(Array.isArray(parsed.items) ? postProcessShoppingItems(parsed.items, parsed.text ?? '') : []);
         setShoppingUpdatedAt(parsed.updatedAt ?? '');
         setMealPlanText(parsed.mealText ?? '');
         setOriginalMealPlanText(parsed.mealText ?? '');
@@ -1313,7 +1321,7 @@ function App() {
         });
         return;
       }
-      setShoppingItems(rows.map(mapSupabaseRowToShoppingItem));
+      setShoppingItems(postProcessShoppingItems(rows.map(mapSupabaseRowToShoppingItem)));
       setShoppingUpdatedAt(new Date().toISOString());
       setShoppingSyncError('');
       setShoppingSyncStatus('synced');
@@ -1589,10 +1597,14 @@ function App() {
 
     Promise.all([createAiMorningPlan(sourceText), createShoppingPlan(sourceText, shoppingItems)])
       .then(([nextPlan, shoppingPlan]) => {
-        const normalizedShoppingItems = normalizeMorningShoppingItems(sourceText, shoppingPlan.items, shoppingItems);
-        const classifiedShoppingItems = hasShoppingItemIntent(sourceText) || normalizedShoppingItems.length > shoppingItems.length
+        const currentShoppingItems = postProcessShoppingItems(shoppingItems);
+        const normalizedShoppingItems = postProcessShoppingItems(
+          normalizeMorningShoppingItems(sourceText, shoppingPlan.items, currentShoppingItems),
+          sourceText,
+        );
+        const classifiedShoppingItems = hasShoppingItemIntent(sourceText) || normalizedShoppingItems.length > currentShoppingItems.length
           ? normalizedShoppingItems
-          : shoppingItems;
+          : currentShoppingItems;
         const planWithCarryover = addCarryoverToPlan(
           prepareUnifiedMorningPlan(nextPlan, sourceText, classifiedShoppingItems),
           carriedTodos,
@@ -1624,8 +1636,9 @@ function App() {
     if (!draft) return;
 
     setPlan(draft.plan);
-    setShoppingItems(draft.shoppingItems);
-    void syncShoppingItemsToSupabase(draft.shoppingItems);
+    const reviewedShoppingItems = postProcessShoppingItems(draft.shoppingItems, draft.sourceText);
+    setShoppingItems(reviewedShoppingItems);
+    void syncShoppingItemsToSupabase(reviewedShoppingItems);
     setMorningFollowUpCandidates(draft.followUpCandidates);
     setShoppingUpdatedAt(draft.shoppingUpdatedAt);
     saveMorningSnapshot(draft.sourceText, draft.plan, privateSessionKeys.snapshots);
@@ -1749,11 +1762,12 @@ function App() {
 
     createShoppingPlan(shoppingText, shoppingItems)
       .then((shoppingPlan) => {
-        setShoppingItems(shoppingPlan.items);
-        void syncShoppingItemsToSupabase(shoppingPlan.items);
+        const processedItems = postProcessShoppingItems(shoppingPlan.items, shoppingText);
+        setShoppingItems(processedItems);
+        void syncShoppingItemsToSupabase(processedItems);
         setShoppingUpdatedAt(shoppingPlan.updatedAt);
         setOriginalShoppingText(shoppingText.trim());
-        setHighlightedShoppingIds(shoppingPlan.items.filter((item) => !previousIds.has(item.id)).map((item) => item.id));
+        setHighlightedShoppingIds(processedItems.filter((item) => !previousIds.has(item.id)).map((item) => item.id));
         setSelectedShoppingShareIds([]);
       })
       .catch((reason: unknown) => {
@@ -3229,7 +3243,7 @@ function MorningReviewCard({
           onSave={(items) =>
             updateDraft((current) => ({
               ...current,
-              shoppingItems: current.shoppingItems.map((item) => {
+              shoppingItems: postProcessShoppingItems(current.shoppingItems.map((item) => {
                 const previewIndex = shoppingPreview.findIndex((previewItem) => previewItem.id === item.id);
                 const editedText = previewIndex >= 0 ? items[previewIndex] : '';
                 if (!editedText) return item;
@@ -3240,7 +3254,7 @@ function MorningReviewCard({
                   quantity: parsed.quantity,
                   category: classifyShoppingItem(parsed.name || item.name),
                 };
-              }),
+              }), current.sourceText),
             }))
           }
         />

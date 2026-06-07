@@ -102,7 +102,7 @@ export async function createShoppingPlan(
 }
 
 export function groupShoppingItems(items: ShoppingItem[]) {
-  const normalizedItems = cleanupShoppingItems(items.map(normalizeStoredItem));
+  const normalizedItems = postProcessShoppingItems(items.map(normalizeStoredItem));
 
   return shoppingCategories
     .map((category) => ({
@@ -129,6 +129,9 @@ export function formatShoppingItemLabel(item: Pick<ShoppingItem, 'name' | 'quant
 }
 
 export function parseShoppingItemInput(value: string): ParsedShoppingInput {
+  const japaneseParsed = parseJapaneseShoppingItemInput(value);
+  if (japaneseParsed.name) return japaneseParsed;
+
   const cleaned = cleanShoppingItemName(value);
   if (!cleaned) return { name: '', quantity: '' };
 
@@ -155,6 +158,44 @@ export function parseShoppingItemInput(value: string): ParsedShoppingInput {
   };
 }
 
+export function postProcessShoppingItems(items: ShoppingItem[], sourceText = ''): ShoppingItem[] {
+  const expandedItems = items.flatMap((item) => splitShoppingItemRecord(item));
+  const sourceItems = sourceText ? extractJapaneseShoppingItems(sourceText).map(createPostProcessedShoppingItem) : [];
+  const byName = new Map<string, { item: ShoppingItem; count: number; quantities: string[] }>();
+
+  [...expandedItems, ...sourceItems].forEach((item) => {
+    const parsed = parseShoppingItemInput(formatShoppingItemLabel(item));
+    const name = normalizeShoppingDisplayName(parsed.name || item.name);
+    const quantity = normalizeQuantity(parsed.quantity || item.quantity || '');
+    if (!name || isShoppingMetaOrActionText(name) || isJapaneseShoppingNoise(name)) return;
+
+    const key = normalizeName(name);
+    if (!key) return;
+    const normalizedItem: ShoppingItem = {
+      ...item,
+      category: normalizeCategory(item.category || classifyShoppingItem(name)),
+      name,
+      quantity,
+    };
+    const existing = byName.get(key);
+    if (!existing) {
+      byName.set(key, { count: 1, item: normalizedItem, quantities: quantity ? [quantity] : [] });
+      return;
+    }
+
+    existing.count += 1;
+    if (quantity && !existing.quantities.includes(quantity)) existing.quantities.push(quantity);
+    if (!existing.item.quantity && quantity) existing.item.quantity = quantity;
+  });
+
+  return sortShoppingItems(
+    Array.from(byName.values()).map(({ count, item, quantities }) => {
+      if (count >= 2 && !quantities.length) return { ...item, quantity: `×${count}` };
+      return item;
+    }),
+  );
+}
+
 async function createShoppingPlanWithAi(
   text: string,
   currentItems: ShoppingItem[],
@@ -175,7 +216,7 @@ async function createShoppingPlanWithAi(
     throw new Error(payload?.message ?? 'Shopping AI request failed.');
   }
 
-  return mergeAiItems(currentItems, payload?.plan?.items ?? []);
+  return mergeAiItems(currentItems, [...(payload?.plan?.items ?? []), ...extractJapaneseShoppingItems(text)], text);
 }
 
 function createShoppingPlanWithLocalRules(
@@ -188,12 +229,14 @@ function createShoppingPlanWithLocalRules(
       ...item,
       category: classifyShoppingItem(item.name),
     })),
+    text,
   );
 }
 
 function mergeAiItems(
   currentItems: ShoppingItem[],
   aiItems: Array<{ name: string; quantity?: string; category: ShoppingCategory }>,
+  sourceText = '',
 ): ShoppingPlan {
   const existingByName = new Map(currentItems.map((item) => [normalizeName(item.name), item]));
   const nextItems = [...currentItems];
@@ -228,9 +271,136 @@ function mergeAiItems(
   });
 
   return {
-    items: sortShoppingItems(cleanupShoppingItems(nextItems)),
+    items: postProcessShoppingItems(nextItems, sourceText),
     updatedAt: new Date().toISOString(),
   };
+}
+
+function splitShoppingItemRecord(item: ShoppingItem): ShoppingItem[] {
+  const label = formatShoppingItemLabel(item);
+  const parsedItems = extractJapaneseShoppingItems(label);
+  if (parsedItems.length <= 1) return [item];
+
+  return parsedItems.map((parsed) => ({
+    ...item,
+    category: normalizeCategory(parsed.category),
+    id: createShoppingItemId(),
+    name: parsed.name,
+    quantity: parsed.quantity || '',
+  }));
+}
+
+function createPostProcessedShoppingItem(item: { name: string; quantity?: string; category?: ShoppingCategory }): ShoppingItem {
+  const name = normalizeShoppingDisplayName(item.name);
+  return {
+    addedAt: new Date().toISOString(),
+    category: normalizeCategory(item.category || classifyShoppingItem(name)),
+    completed: false,
+    id: createShoppingItemId(),
+    name,
+    quantity: normalizeQuantity(item.quantity || ''),
+    source: 'voice',
+  };
+}
+
+function extractJapaneseShoppingItems(text: string): Array<{ name: string; quantity: string; category: ShoppingCategory }> {
+  const normalizedText = normalizeShoppingSourceText(text);
+  const items: Array<{ name: string; quantity: string; category: ShoppingCategory }> = [];
+  const consumedRanges: Array<[number, number]> = [];
+  const quantityPattern =
+    /([一-龥ぁ-んァ-ヶーA-Za-z][一-龥ぁ-んァ-ヶーA-Za-z\s]*?)(?:が|を|は)?\s*([0-9０-９一二三四五六七八九十百]+(?:[.．][0-9０-９]+)?\s*(?:パック|個|本|袋|箱|枚|束|玉|丁|缶|瓶|杯|粒|ロール|グラム|g|G|kg|KG|キロ|ml|mL|ML|L|l|リットル|つ))/g;
+
+  let match: RegExpExecArray | null;
+  while ((match = quantityPattern.exec(normalizedText))) {
+    const name = normalizeShoppingDisplayName(match[1]);
+    const quantity = normalizeJapaneseQuantity(match[2]);
+    if (name && !isJapaneseShoppingNoise(name)) {
+      items.push({ category: classifyShoppingItem(name), name, quantity });
+      consumedRanges.push([match.index, match.index + match[0].length]);
+    }
+  }
+
+  const remainingText = consumedRanges
+    .reduce((current, [start, end]) => `${current.slice(0, start)}${' '.repeat(end - start)}${current.slice(end)}`, normalizedText)
+    .replace(/今日の買い物|今日買うもの|買うもの|買い物リスト|買い物です|のお買い物|お買い物|買い物|購入品|購入/g, '、');
+
+  remainingText
+    .split(/(?:\r?\n|、|,|，|・|それと|あと|及び|および|\s+と\s+|と(?=[一-龥ぁ-んァ-ヶーA-Za-z]))+/)
+    .map(normalizeShoppingDisplayName)
+    .filter((name) => name && !isJapaneseShoppingNoise(name))
+    .forEach((name) => items.push({ category: classifyShoppingItem(name), name, quantity: '' }));
+
+  return dedupeJapaneseShoppingItems(items);
+}
+
+function parseJapaneseShoppingItemInput(value: string): ParsedShoppingInput {
+  const items = extractJapaneseShoppingItems(value);
+  if (items.length === 1) {
+    return {
+      name: items[0].name,
+      quantity: items[0].quantity,
+    };
+  }
+  return { name: '', quantity: '' };
+}
+
+function dedupeJapaneseShoppingItems(items: Array<{ name: string; quantity: string; category: ShoppingCategory }>) {
+  const byName = new Map<string, { item: { name: string; quantity: string; category: ShoppingCategory }; count: number }>();
+  items.forEach((item) => {
+    const key = normalizeName(item.name);
+    if (!key) return;
+    const existing = byName.get(key);
+    if (!existing) {
+      byName.set(key, { count: 1, item });
+      return;
+    }
+    existing.count += 1;
+    if (!existing.item.quantity && item.quantity) existing.item.quantity = item.quantity;
+  });
+
+  return Array.from(byName.values()).map(({ count, item }) => ({
+    ...item,
+    quantity: count >= 2 && !item.quantity ? `×${count}` : item.quantity,
+  }));
+}
+
+function normalizeShoppingSourceText(value: string) {
+  return value
+    .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/[，､]/g, '、')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeShoppingDisplayName(value: string) {
+  return value
+    .replace(/今日の買い物|今日買うもの|買うもの|買い物リスト|買い物です|のお買い物|お買い物|買い物|購入品|購入/g, '')
+    .replace(/^(は|が|を|と|に|へ|で|の)+/g, '')
+    .replace(/(を|が|は|です|ください|お願いします)$/g, '')
+    .replace(/[、。,.，・]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeJapaneseQuantity(value: string) {
+  return normalizeQuantity(
+    value
+      .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+      .replace(/\s+/g, ''),
+  );
+}
+
+function isJapaneseShoppingNoise(value: string) {
+  const normalized = normalizeShoppingDisplayName(value).replace(/\s+/g, '');
+  if (!normalized) return true;
+  if (/^(今日|もの|買うもの|買い物|買い物リスト|リスト|お願いします|ください)$/.test(normalized)) return true;
+  if (/^(の)?お?買い物(は|です)?$/.test(normalized)) return true;
+  if (normalized.length >= 16 && countJapaneseQuantityTokens(normalized) >= 2) return true;
+  return false;
+}
+
+function countJapaneseQuantityTokens(value: string) {
+  return (value.match(/[0-9０-９一二三四五六七八九十百]+(?:パック|個|本|袋|箱|枚|束|玉|丁|缶|瓶|杯|粒|ロール|グラム|g|G|kg|KG|キロ|ml|mL|ML|L|l|リットル|つ)/g) ?? []).length;
 }
 
 function extractShoppingItems(text: string): ParsedShoppingInput[] {
