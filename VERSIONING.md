@@ -5,8 +5,18 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.8.3 is based on v3.8.2 plus Home Digital Motion Background.
+6. v3.8.3a is based on v3.8.3 plus Digital Motion Strong Visual Update.
 
+
+## Version 3.8.3a Digital Motion Strong Visual Update - 2026-06-07
+
+- Screen display: v3.8.3a
+- ZIP: morning-flow-ai-v3.8.3a.zip
+- Next planned version: Version 3.8.4
+- Strengthened the home motion layer with more visible neon fiber lines, particle dots, moving grid texture, and colorful cyber light accents.
+- The home visual now uses cyan, green, blue, violet, and morning-orange motion to create a stronger AI dashboard impression.
+- `prefers-reduced-motion` remains supported so animation is disabled and softened for reduced-motion users.
+- AI organize logic, AI Review Flow, Review Card Editing, Schedule Parser, Deduplication Engine, Calendar Export, Shopping List, Supabase, and PWA icon settings remain unchanged.
 
 ## Version 3.8.3 Home Digital Motion Background - 2026-06-07
 

@@ -139,6 +139,12 @@ button {
 
 .home-motion-panel {
   isolation: isolate;
+  background:
+    radial-gradient(circle at 52% 0%, rgba(255, 183, 92, 0.2), transparent 25%),
+    radial-gradient(circle at 8% 16%, rgba(102, 82, 255, 0.24), transparent 30%),
+    radial-gradient(circle at 92% 22%, rgba(30, 255, 197, 0.22), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(141, 229, 255, 0.035)),
+    rgba(3, 8, 18, 0.78);
 }
 
 .home-motion-panel > * {
@@ -157,48 +163,78 @@ button {
 }
 
 .home-motion-panel::before {
-  opacity: 0.42;
+  opacity: 0.78;
   background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.62) 0 1px, transparent 1.8px),
     linear-gradient(
       112deg,
       transparent 0%,
-      transparent 26%,
-      rgba(81, 246, 255, 0.18) 27%,
-      rgba(81, 246, 255, 0.02) 31%,
-      transparent 36%,
-      transparent 55%,
-      rgba(70, 255, 190, 0.13) 56%,
-      rgba(70, 255, 190, 0.02) 60%,
-      transparent 64%
+      transparent 12%,
+      rgba(106, 74, 255, 0.25) 13%,
+      rgba(106, 74, 255, 0.02) 16%,
+      transparent 20%,
+      transparent 27%,
+      rgba(81, 246, 255, 0.38) 28%,
+      rgba(81, 246, 255, 0.04) 33%,
+      transparent 38%,
+      transparent 50%,
+      rgba(70, 255, 190, 0.28) 51%,
+      rgba(70, 255, 190, 0.03) 56%,
+      transparent 61%,
+      transparent 74%,
+      rgba(255, 173, 83, 0.27) 75%,
+      rgba(255, 173, 83, 0.03) 80%,
+      transparent 86%
     ),
     repeating-linear-gradient(
       102deg,
-      rgba(141, 229, 255, 0.055) 0 1px,
-      transparent 1px 28px
+      rgba(141, 229, 255, 0.11) 0 1px,
+      transparent 1px 24px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      rgba(106, 74, 255, 0.07) 0 1px,
+      transparent 1px 34px
     );
-  filter: blur(0.2px);
-  transform: translate3d(-8%, 0, 0);
-  animation: digitalStreamDrift 18s linear infinite;
+  background-size: 22px 22px, 210% 100%, 150% 100%, 100% 100%;
+  filter: blur(0.1px) saturate(145%);
+  mix-blend-mode: screen;
+  transform: translate3d(-12%, 0, 0);
+  animation: digitalStreamDrift 10s linear infinite;
 }
 
 .home-motion-panel::after {
-  opacity: 0.54;
+  opacity: 0.86;
   background:
-    radial-gradient(circle at 16% 16%, rgba(255, 183, 92, 0.13), transparent 22%),
-    radial-gradient(circle at 84% 18%, rgba(110, 246, 255, 0.12), transparent 24%),
-    radial-gradient(circle at 42% 64%, rgba(75, 255, 196, 0.08), transparent 28%),
+    radial-gradient(ellipse at 50% 10%, rgba(255, 185, 90, 0.2), transparent 28%),
+    radial-gradient(ellipse at 24% 74%, rgba(102, 82, 255, 0.22), transparent 32%),
+    radial-gradient(ellipse at 88% 60%, rgba(30, 255, 197, 0.18), transparent 30%),
+    linear-gradient(100deg, transparent 8%, rgba(255, 183, 92, 0.18) 12%, transparent 18%),
+    linear-gradient(78deg, transparent 18%, rgba(81, 246, 255, 0.2) 23%, transparent 30%),
+    linear-gradient(118deg, transparent 52%, rgba(179, 82, 255, 0.17) 58%, transparent 66%),
     linear-gradient(
-      88deg,
-      transparent 8%,
-      rgba(141, 229, 255, 0.06) 16%,
-      transparent 26%,
-      transparent 68%,
-      rgba(255, 194, 112, 0.055) 76%,
-      transparent 88%
+      90deg,
+      transparent 0%,
+      rgba(141, 229, 255, 0.08) 9%,
+      transparent 18%,
+      transparent 38%,
+      rgba(70, 255, 190, 0.08) 48%,
+      transparent 58%,
+      transparent 76%,
+      rgba(255, 194, 112, 0.07) 84%,
+      transparent 94%
     );
-  background-size: 100% 100%, 100% 100%, 100% 100%, 180% 100%;
+  background-size:
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    170% 100%,
+    180% 100%,
+    160% 100%,
+    240% 100%;
   mix-blend-mode: screen;
-  animation: morningGlowPulse 14s ease-in-out infinite;
+  filter: saturate(138%);
+  animation: morningGlowPulse 8s ease-in-out infinite;
 }
 
 .top-bar {
@@ -280,11 +316,12 @@ h1 {
   border: 1px solid rgba(141, 229, 255, 0.22);
   border-radius: 22px;
   background:
-    linear-gradient(145deg, rgba(141, 229, 255, 0.12), rgba(255, 255, 255, 0.04)),
-    rgba(2, 8, 18, 0.7);
+    linear-gradient(145deg, rgba(141, 229, 255, 0.16), rgba(255, 255, 255, 0.035)),
+    rgba(2, 8, 18, 0.58);
   box-shadow:
     0 20px 54px rgba(0, 0, 0, 0.34),
-    0 0 34px rgba(0, 207, 255, 0.13),
+    0 0 42px rgba(0, 207, 255, 0.2),
+    0 0 28px rgba(111, 255, 190, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
@@ -3690,24 +3727,28 @@ h1 {
 
 @keyframes digitalStreamDrift {
   0% {
-    transform: translate3d(-10%, 0, 0);
-    background-position: 0 0, 0 0;
+    transform: translate3d(-14%, -1%, 0) skewX(-3deg);
+    background-position: 0 0, 0 0, 0 0, 0 0;
+  }
+  50% {
+    transform: translate3d(3%, 1%, 0) skewX(-3deg);
+    background-position: 42px 20px, 260px 0, 180px 0, 0 72px;
   }
   100% {
-    transform: translate3d(10%, 0, 0);
-    background-position: 280px 0, 180px 0;
+    transform: translate3d(14%, -1%, 0) skewX(-3deg);
+    background-position: 84px 42px, 520px 0, 360px 0, 0 144px;
   }
 }
 
 @keyframes morningGlowPulse {
   0%,
   100% {
-    opacity: 0.44;
-    background-position: center, center, center, 0 0;
+    opacity: 0.74;
+    background-position: center, center, center, 0 0, 0 0, 0 0, 0 0;
   }
   50% {
-    opacity: 0.64;
-    background-position: center, center, center, 100% 0;
+    opacity: 0.96;
+    background-position: center, center, center, 100% 0, 92% 0, 76% 0, 100% 0;
   }
 }
 
@@ -3715,7 +3756,7 @@ h1 {
   .home-motion-panel::before,
   .home-motion-panel::after {
     animation: none !important;
-    opacity: 0.26;
+    opacity: 0.38;
   }
 
   *,

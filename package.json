@@ -1,6 +1,6 @@
 {
-  "version": "3.8.3",
-  "appVersion": "3.8.3",
+  "version": "3.8.3-a",
+  "appVersion": "3.8.3a",
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "tsc --noEmit && vite build",

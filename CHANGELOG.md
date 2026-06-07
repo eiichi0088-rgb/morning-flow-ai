@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## Version 3.8.3a - 2026-06-07
+
+- Strengthened the home digital motion background with more visible neon fiber lines, particle dots, and moving cyber grid texture.
+- Added brighter cyan, green, blue, violet, and morning-orange energy accents while keeping cards and buttons readable.
+- Increased the motion visibility using faster CSS background-position and glow animations.
+- Kept AI organize logic, AI Review Flow, Review Card Editing, Schedule Parser, Deduplication Engine, Calendar Export, Shopping List, Supabase, and PWA icon settings unchanged.
+
 ## Version 3.8.3 - 2026-06-07
 
 - Added a subtle CSS-only digital motion background to the home panel.
