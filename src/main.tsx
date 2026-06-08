@@ -197,6 +197,13 @@ type MorningReviewDraft = {
   sourceText: string;
 };
 
+type AiConversationMessage = {
+  id: string;
+  role: 'assistant' | 'user';
+  title?: string;
+  lines: string[];
+};
+
 type AiInboxItem = {
   id: string;
   text: string;
@@ -1007,6 +1014,17 @@ function App() {
     () => createMorningDashboardData(plan, shoppingItems, followUps, aiInboxItems),
     [aiInboxItems, followUps, plan, shoppingItems],
   );
+  const conversationMessages = React.useMemo(
+    () =>
+      createAiConversationMessages({
+        draft: morningReviewDraft,
+        isListening,
+        isOrganizing,
+        plan,
+        sourceText: resultText,
+      }),
+    [isListening, isOrganizing, morningReviewDraft, plan, resultText],
+  );
 
   const getFreshAuthSession = React.useCallback(async (): Promise<{ session: SupabaseAuthSession; tokenStatus: string }> => {
     const currentSession = authSession ?? getStoredSupabaseAuthSession();
@@ -1440,7 +1458,7 @@ function App() {
         return;
       }
 
-      if (sourceView === 'morning' && !shouldRouteMorningVoiceToAiInbox(normalized)) {
+      if (sourceView === 'morning') {
         setTranscript((current) => appendVoiceText(current, normalized));
         setOriginalTranscript((current) => appendVoiceText(current, normalized));
         setPlan(null);
@@ -2711,20 +2729,70 @@ function App() {
           ))}
         </div>
 
-        <div className="top-bar">
+        <div className="top-bar v4-home-topbar">
           <div>
             <p className="eyebrow">MORNING FLOW AI <span>{appVersion}</span></p>
-            <p className="hero-subtitle">Your Day. Optimized.</p>
-            <p className="hero-kicker">Speak. Organize. Move.</p>
+            <p className="hero-subtitle">AI Conversation Core</p>
           </div>
           <div className="brand-mark" aria-hidden="true">
             <Sparkles size={21} />
           </div>
         </div>
 
-        <section className="home-brand-hero" aria-label="MORNING FLOW AI brand visual">
+        <section className="home-brand-hero v4-brand-hero" aria-label="MORNING FLOW AI brand visual">
           <img src="./assets/morning-flow-hero.png" alt="MORNING FLOW AI" />
         </section>
+
+        <section className="conversation-hero" aria-label="AI conversation start">
+          <span>おはようございます</span>
+          <h1>今日のことを話してください</h1>
+          <p>予定、買い物、連絡、未来の予定まで、まとめて自然に話せます。</p>
+        </section>
+
+        {morningReviewDraft && (
+          <MorningReviewCard
+            aiInboxCount={unprocessedInboxCount}
+            draft={morningReviewDraft}
+            onCancel={cancelMorningReview}
+            onConfirm={confirmMorningReview}
+            onDraftChange={setMorningReviewDraft}
+          />
+        )}
+
+        <div className="focus-area v4-focus-area">
+          <div className={`voice-stage ${isListening ? 'is-listening' : ''}`}>
+            <div className="waveform" aria-hidden="true">
+              {Array.from({ length: 17 }).map((_, index) => (
+                <span key={index} style={{ animationDelay: `${index * 72}ms` }} />
+              ))}
+            </div>
+
+            <button
+              className={`mic-button v4-mic-button ${isListening ? 'is-listening' : ''}`}
+              type="button"
+              onClick={isListening ? stopListening : startListening}
+              disabled={!isSupported}
+              aria-label={isListening ? '音声認識を停止' : '音声認識を開始'}
+            >
+              <span className="pulse-ring ring-one" aria-hidden="true" />
+              <span className="pulse-ring ring-two" aria-hidden="true" />
+              <span className="mic-glass" aria-hidden="true" />
+              {isListening ? <Square size={42} fill="currentColor" /> : <Mic size={64} />}
+            </button>
+          </div>
+
+          <button className="conversation-start-button" type="button" onClick={isListening ? stopListening : startListening} disabled={!isSupported}>
+            <Mic size={19} />
+            {isListening ? '聞き取りを終了' : '今日のことを話す'}
+          </button>
+
+          <div className="status-row" role="status" aria-live="polite">
+            <span className={`status-dot ${isListening ? 'active' : ''}`} />
+            {getStatusLabel(isSupported, isListening, transcript, plan)}
+          </div>
+        </div>
+
+        <AiConversationPanel messages={conversationMessages} />
 
         <MorningDashboard
           data={morningDashboard}
@@ -2741,54 +2809,6 @@ function App() {
             const target = planAnchorRef.current ?? document.querySelector('.focus-area');
             target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }}
-        />
-
-        {morningReviewDraft && (
-          <MorningReviewCard
-            aiInboxCount={unprocessedInboxCount}
-            draft={morningReviewDraft}
-            onCancel={cancelMorningReview}
-            onConfirm={confirmMorningReview}
-            onDraftChange={setMorningReviewDraft}
-          />
-        )}
-
-        <MorningStepGuide />
-
-        <div className="focus-area">
-          <div className={`voice-stage ${isListening ? 'is-listening' : ''}`}>
-            <div className="waveform" aria-hidden="true">
-              {Array.from({ length: 17 }).map((_, index) => (
-                <span key={index} style={{ animationDelay: `${index * 72}ms` }} />
-              ))}
-            </div>
-
-            <button
-              className={`mic-button ${isListening ? 'is-listening' : ''}`}
-              type="button"
-              onClick={isListening ? stopListening : startListening}
-              disabled={!isSupported}
-              aria-label={isListening ? '音声認識を停止' : '音声認識を開始'}
-            >
-              <span className="pulse-ring ring-one" aria-hidden="true" />
-              <span className="pulse-ring ring-two" aria-hidden="true" />
-              <span className="mic-glass" aria-hidden="true" />
-              {isListening ? <Square size={38} fill="currentColor" /> : <Mic size={56} />}
-            </button>
-          </div>
-
-          <div className="status-row" role="status" aria-live="polite">
-            <span className={`status-dot ${isListening ? 'active' : ''}`} />
-            {getStatusLabel(isSupported, isListening, transcript, plan)}
-          </div>
-        </div>
-
-        <VoiceInputGuide
-          examples={[
-            '16時半からラーメンを食べる',
-            '19時にジムへ行く',
-            '妻に電話する',
-          ]}
         />
 
         {hasEditableTranscript && (
@@ -3124,7 +3144,6 @@ function MorningDashboard({
         <MorningDashboardCard title="今日のやること・予定" count={data.today.count} items={data.today.items} onOpen={onOpenToday} />
         <MorningDashboardCard title="買い物" count={data.shopping.count} items={data.shopping.items} onOpen={onOpenShopping} />
         <MorningDashboardCard title="Follow Up" count={data.followUp.count} items={data.followUp.items} onOpen={onOpenFollowUp} />
-        <MorningDashboardCard title="AI Inbox" count={data.aiInbox.count} items={data.aiInbox.items} onOpen={onOpenInbox} />
       </div>
     </section>
   );
@@ -3168,6 +3187,162 @@ function MorningDashboardCard({
   );
 }
 
+function AiConversationPanel({ messages }: { messages: AiConversationMessage[] }) {
+  return (
+    <section className="ai-conversation-panel" aria-label="AI conversation">
+      <div className="ai-conversation-header">
+        <div>
+          <span>AI Secretary</span>
+          <strong>会話しながら朝を整理します</strong>
+        </div>
+        <MessageCircle size={20} />
+      </div>
+      <div className="ai-conversation-thread">
+        {messages.map((message) => (
+          <article className={`ai-chat-bubble is-${message.role}`} key={message.id}>
+            {message.title && <strong>{message.title}</strong>}
+            {message.lines.map((line, index) => (
+              <p key={`${message.id}-${index}`}>{line}</p>
+            ))}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function createAiConversationMessages({
+  draft,
+  isListening,
+  isOrganizing,
+  plan,
+  sourceText,
+}: {
+  draft: MorningReviewDraft | null;
+  isListening: boolean;
+  isOrganizing: boolean;
+  plan: MorningPlan | null;
+  sourceText: string;
+}): AiConversationMessage[] {
+  const messages: AiConversationMessage[] = [
+    {
+      id: 'assistant-welcome',
+      role: 'assistant',
+      title: 'おはようございます',
+      lines: ['今日の予定、買い物、連絡、未来の予定をまとめて話してください。', '不足があれば、保存前に確認します。'],
+    },
+  ];
+
+  if (sourceText) {
+    messages.push({
+      id: 'user-source',
+      role: 'user',
+      title: 'あなた',
+      lines: [sourceText],
+    });
+  }
+
+  if (isListening) {
+    messages.push({
+      id: 'assistant-listening',
+      role: 'assistant',
+      title: '聞き取り中',
+      lines: ['そのまま自然に話してください。カテゴリは選ばなくて大丈夫です。'],
+    });
+  } else if (isOrganizing) {
+    messages.push({
+      id: 'assistant-organizing',
+      role: 'assistant',
+      title: '整理中',
+      lines: ['予定、買い物、Follow Up、Googleカレンダー候補に分けています。'],
+    });
+  } else if (draft) {
+    messages.push(createConversationReviewMessage(draft));
+    const questions = createConversationQuestions(draft);
+    if (questions.length) {
+      messages.push({
+        id: 'assistant-questions',
+        role: 'assistant',
+        title: '確認したいこと',
+        lines: questions,
+      });
+    }
+  } else if (plan) {
+    const scheduleCount = cleanScheduleItems(plan.schedule).length;
+    const todoCount = dedupeTodos(plan.todos).length;
+    messages.push({
+      id: 'assistant-saved',
+      role: 'assistant',
+      title: '保存済み',
+      lines: [`今日のやること ${todoCount}件、予定 ${scheduleCount}件として整理済みです。`],
+    });
+  }
+
+  return messages;
+}
+
+function createConversationReviewMessage(draft: MorningReviewDraft): AiConversationMessage {
+  const calendarEvents = createCalendarEvents(draft.plan);
+  const futureEvents = calendarEvents.filter((event) => !isSameLocalDate(event.start, new Date()));
+  const scheduleLines = cleanScheduleItems(draft.plan.schedule).slice(0, 5).map((item) => `・${item.time} ${item.task}`);
+  const shoppingLines = draft.shoppingItems.slice(0, 5).map((item) => `・${formatShoppingItemLabel(item)}`);
+  const followUpLines = draft.followUpCandidates.slice(0, 4).map((item) => `・${item.name} ${item.content}`.trim());
+  const calendarLines = calendarEvents
+    .slice(0, 4)
+    .map((event) => `・${event.start.toLocaleDateString('ja-JP')} ${formatScheduleDisplayTime(event.sourceTime, event.start)} ${event.title}`);
+  return {
+    id: 'assistant-review',
+    role: 'assistant',
+    title: 'AIがこう整理しました',
+    lines: [
+      `今日のやること: ${dedupeTodos(draft.plan.todos).length}件`,
+      `今日の予定: ${cleanScheduleItems(draft.plan.schedule).length}件`,
+      ...scheduleLines,
+      `買い物: ${draft.shoppingItems.length}件`,
+      ...shoppingLines,
+      `Follow Up候補: ${draft.followUpCandidates.length}件`,
+      ...followUpLines,
+      `Googleカレンダー候補: ${calendarEvents.length}件${futureEvents.length ? `（未来予定 ${futureEvents.length}件）` : ''}`,
+      ...calendarLines,
+      '下の確認カードで内容を見てから保存できます。',
+    ],
+  };
+}
+
+function createConversationQuestions(draft: MorningReviewDraft): string[] {
+  const questions: string[] = [];
+  const todos = dedupeTodos(draft.plan.todos);
+  const scheduleTitles = cleanScheduleItems(draft.plan.schedule).map((item) => normalizeTaskText(item.task));
+  const unscheduled = todos
+    .filter((todo) => !scheduleTitles.includes(normalizeTaskText(todo)))
+    .filter((todo) => /銀行|会議|会合|病院|打合せ|打ち合わせ|面談|予約|店|仕入れ|電話|連絡|確認/.test(todo))
+    .slice(0, 2);
+
+  unscheduled.forEach((todo) => {
+    questions.push(`「${todo}」は時間が未定です。必要なら何時頃か追加で話してください。`);
+  });
+
+  draft.followUpCandidates.slice(0, 2).forEach((item) => {
+    const followLabel = `${item.name} ${item.content}`.trim();
+    if (/連絡|確認/.test(item.content) && !/電話|LINE|返信|折り返し|メール/.test(item.content)) {
+      questions.push(`「${followLabel}」は電話、LINE、返信のどれで対応しますか？`);
+    } else {
+      questions.push(`「${followLabel}」をFollow Upに追加しますか？保存前に確認できます。`);
+    }
+  });
+
+  if ((hasShoppingItemIntent(draft.sourceText) || hasShoppingActionIntent(draft.sourceText)) && draft.shoppingItems.length === 0) {
+    questions.push('買い物内容がまだ分かりません。買うものを追加で話してください。');
+  }
+
+  const futureEvents = createCalendarEvents(draft.plan).filter((event) => !isSameLocalDate(event.start, new Date()));
+  if (futureEvents.length) {
+    questions.push(`未来予定 ${futureEvents.length}件をGoogleカレンダー登録候補にしました。`);
+  }
+
+  return Array.from(new Set(questions)).slice(0, 4);
+}
+
 function MorningReviewCard({
   aiInboxCount,
   draft,
@@ -3186,6 +3361,7 @@ function MorningReviewCard({
   const todoItems = dedupeTodos(draft.plan.todos);
   const shoppingPreview = draft.shoppingItems.slice(0, 8);
   const followUpPreview = draft.followUpCandidates.slice(0, 5);
+  const googleCalendarPreview = createCalendarEvents(draft.plan).slice(0, 6);
   const updateDraft = (updater: (current: MorningReviewDraft) => MorningReviewDraft) => {
     onDraftChange((current) => (current ? updater(current) : current));
   };
@@ -3284,7 +3460,10 @@ function MorningReviewCard({
             }))
           }
         />
-        <MorningReviewList title="AI Inbox" items={[`未整理 ${aiInboxCount}件`]} />
+        <MorningReviewList
+          title="Googleカレンダー候補"
+          items={googleCalendarPreview.map((event) => `${event.start.toLocaleDateString('ja-JP')} ${formatScheduleDisplayTime(event.sourceTime, event.start)} ${event.title}`)}
+        />
       </div>
 
       <div className="morning-review-actions">

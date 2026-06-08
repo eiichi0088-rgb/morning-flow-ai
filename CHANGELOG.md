@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## Version 4.0.0 - 2026-06-08
+
+- Reframed the home screen around AI Conversation Core with a simplified greeting, large central microphone, and chat-style AI secretary panel.
+- Home voice input now stays in the morning conversation instead of being routed away to AI Inbox.
+- AI Review draft results now surface as conversation summaries with follow-up questions, Follow Up candidates, shopping candidates, and Google Calendar candidate counts before save.
+- AI Inbox and category-specific buttons are no longer primary home actions; existing underlying pages and storage are preserved.
+- Google Calendar candidates are shown in the save-before-confirm review card.
+- Existing Schedule Parser, Deduplication Engine, Shopping Post Processor, Supabase sync, User Data Isolation Fix, and calendar export foundations remain in place.
+
 ## Version 3.8.5 - 2026-06-07
 
 - Added a Shopping Post Processor so shopping results are cleaned before review, save, local load, and Supabase sync.

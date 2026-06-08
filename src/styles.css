@@ -1579,6 +1579,176 @@ h1 {
   background: rgba(4, 15, 30, 0.48);
 }
 
+.v4-home-topbar {
+  margin-bottom: -2px;
+}
+
+.v4-brand-hero {
+  max-height: 190px;
+  opacity: 0.72;
+}
+
+.v4-brand-hero img {
+  object-position: center 34%;
+}
+
+.conversation-hero {
+  display: grid;
+  gap: 8px;
+  text-align: center;
+  padding: 6px 8px 0;
+}
+
+.conversation-hero span {
+  color: rgba(141, 229, 255, 0.82);
+  font-size: 0.82rem;
+  font-weight: 840;
+}
+
+.conversation-hero h1 {
+  margin: 0;
+  color: rgba(248, 252, 255, 0.98);
+  font-size: clamp(1.7rem, 7vw, 2.8rem);
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.conversation-hero p {
+  max-width: 520px;
+  margin: 0 auto;
+  color: rgba(208, 232, 244, 0.74);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.v4-focus-area {
+  padding: 6px 0 2px;
+}
+
+.v4-mic-button {
+  width: min(48vw, 190px);
+  height: min(48vw, 190px);
+  min-width: 142px;
+  min-height: 142px;
+}
+
+.conversation-start-button {
+  min-height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  justify-self: center;
+  margin-top: 8px;
+  border: 1px solid rgba(141, 229, 255, 0.32);
+  border-radius: 999px;
+  color: #03121e;
+  background: linear-gradient(135deg, #ffffff, #dff7ff 48%, #8de5ff);
+  box-shadow:
+    0 16px 40px rgba(0, 207, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  padding: 0 22px;
+  font-size: 1rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.conversation-start-button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.ai-conversation-panel {
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid rgba(141, 229, 255, 0.2);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(141, 229, 255, 0.16), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.035)),
+    rgba(3, 12, 26, 0.58);
+  box-shadow:
+    0 22px 54px rgba(0, 0, 0, 0.23),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(22px);
+}
+
+.ai-conversation-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  color: rgba(223, 247, 255, 0.9);
+}
+
+.ai-conversation-header div {
+  display: grid;
+  gap: 3px;
+}
+
+.ai-conversation-header span {
+  color: rgba(141, 229, 255, 0.8);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.ai-conversation-header strong {
+  font-size: 1rem;
+}
+
+.ai-conversation-thread {
+  display: grid;
+  gap: 10px;
+}
+
+.ai-chat-bubble {
+  width: min(92%, 620px);
+  display: grid;
+  gap: 5px;
+  padding: 12px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  color: rgba(248, 252, 255, 0.92);
+  background: rgba(255, 255, 255, 0.055);
+  line-height: 1.55;
+}
+
+.ai-chat-bubble.is-user {
+  justify-self: end;
+  border-color: rgba(247, 231, 190, 0.22);
+  background: rgba(247, 231, 190, 0.09);
+}
+
+.ai-chat-bubble strong {
+  color: #8de5ff;
+  font-size: 0.84rem;
+}
+
+.ai-chat-bubble.is-user strong {
+  color: #f7e7be;
+}
+
+.ai-chat-bubble p {
+  margin: 0;
+  color: inherit;
+  white-space: pre-wrap;
+}
+
+.home-motion-panel > .flow-switcher,
+.floating-next-bar {
+  display: none;
+}
+
+.home-motion-panel .morning-dashboard {
+  opacity: 0.94;
+}
+
+.home-motion-panel .morning-dashboard-grid {
+  grid-template-columns: 1fr;
+}
+
 .auth-mode-tabs button {
   min-height: 44px;
   border: 0;

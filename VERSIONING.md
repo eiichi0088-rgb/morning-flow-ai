@@ -5,8 +5,20 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v3.8.5 is based on v3.8.4 plus Shopping Intelligence Upgrade.
+6. v4.0.0 is based on v3.8.5 plus AI Conversation Core.
 
+
+## Version 4.0.0 AI Conversation Core - 2026-06-08
+
+- Screen display: v4.0.0
+- ZIP: morning-flow-ai-v4.0.0.zip
+- Next planned version: Version 4.0.1
+- Home screen is simplified around "今日のことを話してください", a large central microphone, and an AI secretary chat panel.
+- Home voice input remains in the morning conversation flow instead of routing unclear input to AI Inbox.
+- AI can present review summaries, missing-information prompts, Follow Up candidate prompts, and Google Calendar candidate counts before formal save.
+- Category-specific buttons and AI Inbox are no longer primary home actions, while existing data structures and pages remain available behind the scenes.
+- Google Calendar candidates are visible in the save-before-confirm review card.
+- Schedule Parser, Deduplication Engine, Shopping Post Processor, Supabase sync, User Data Isolation Fix, and existing calendar export foundations remain preserved.
 
 ## Version 3.8.5 Shopping Intelligence Upgrade - 2026-06-07
 
