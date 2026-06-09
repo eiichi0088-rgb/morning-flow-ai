@@ -2918,22 +2918,6 @@ function App() {
           </button>
         </div>
 
-        {previousSnapshot && (
-          <ReflectionView
-            carriedTodos={carriedTodos}
-            onDeleteAll={() => deleteReflectionTodos(previousSnapshot.plan.todos)}
-            onDeleteTask={(task) => deleteReflectionTodos([task])}
-            onCarryOver={carryOverTodos}
-            onStatusChange={(task, status) => {
-              const nextStatuses = { ...reviewStatuses, [task]: status };
-              setReviewStatuses(nextStatuses);
-              saveReview(previousSnapshot.id, nextStatuses, privateSessionKeys.snapshots);
-            }}
-            snapshot={previousSnapshot}
-            statuses={reviewStatuses}
-          />
-        )}
-
         <div ref={planAnchorRef} />
         {plan && (
           <PlanView
@@ -3261,9 +3245,21 @@ function processConversationTurn(
   text: string,
   pendingFollowUp: FollowUpDraftItem | null,
 ): ConversationTurnResult {
+  if (isMorningAssistantQuestion(text)) {
+    return {
+      assistantLines: createAssistantPrioritySuggestionLines(currentDraft),
+      draft: {
+        ...currentDraft,
+        sourceText: appendVoiceText(currentDraft.sourceText, text),
+      },
+      pendingFollowUp,
+      shouldOpenReview: false,
+    };
+  }
+
   if (isConversationSaveCommand(text)) {
     return {
-      assistantLines: ['保存前確認です。予定、買い物、Follow Up、Googleカレンダー候補を確認してください。'],
+      assistantLines: createAssistantSaveLines(currentDraft),
       draft: currentDraft,
       pendingFollowUp: null,
       shouldOpenReview: true,
@@ -3271,10 +3267,32 @@ function processConversationTurn(
   }
 
   if (pendingFollowUp && isConversationAffirmative(text)) {
-    const draft = appendConversationFollowUp(currentDraft, pendingFollowUp, text);
+    const nextPendingFollowUp = applyFollowUpDueFromReply(pendingFollowUp, text);
+    const draft = appendConversationFollowUp(currentDraft, nextPendingFollowUp, text);
     return {
-      assistantLines: [`${pendingFollowUp.name}への${pendingFollowUp.content}をFollow Up候補に追加しました。`],
+      assistantLines: [
+        `${nextPendingFollowUp.name}への${nextPendingFollowUp.content}をFollow Up候補に追加しました。`,
+        ...createFollowUpDueQuestionLines(nextPendingFollowUp),
+        ...createShortPrioritySuggestionLines(draft),
+      ],
       draft,
+      pendingFollowUp: null,
+      shouldOpenReview: false,
+    };
+  }
+
+  if (isFollowUpDueReply(text) && currentDraft.followUpCandidates.length) {
+    const draft = updateLatestFollowUpDue(currentDraft, text);
+    const latest = draft.followUpCandidates[draft.followUpCandidates.length - 1];
+    return {
+      assistantLines: [
+        latest ? `${latest.name}への${latest.content}の期限を更新しました。` : 'Follow Upの期限を更新しました。',
+        ...createShortPrioritySuggestionLines(draft),
+      ],
+      draft: {
+        ...draft,
+        sourceText: appendVoiceText(draft.sourceText, text),
+      },
       pendingFollowUp: null,
       shouldOpenReview: false,
     };
@@ -3283,6 +3301,7 @@ function processConversationTurn(
   const schedules = parseConversationScheduleItems(text);
   const shoppingItems = extractConversationShoppingItems(text);
   const followUpItem = createConversationFollowUpCandidate(text);
+  const hasFutureSchedule = schedules.some((item) => isFutureConversationTime(item.time)) || isFutureConversationText(text);
   const unscheduledTodo = !schedules.length ? createConversationTodo(text) : '';
   let draft = appendConversationSchedules(currentDraft, schedules, text);
   if (unscheduledTodo) {
@@ -3303,6 +3322,9 @@ function processConversationTurn(
   }
 
   const assistantLines: string[] = [];
+  if (hasFutureSchedule && schedules.length) {
+    assistantLines.push('未来予定としてGoogleカレンダー候補にも追加しました。登録しますか？');
+  }
   if (schedules.length) {
     assistantLines.push(`予定候補に追加しました: ${schedules.map((item) => `${item.time} ${item.task}`).join('、')}`);
   }
@@ -3325,6 +3347,10 @@ function processConversationTurn(
 
   const questions = createImmediateConversationQuestions(text, schedules, shoppingItems);
   assistantLines.push(...questions);
+  assistantLines.push(...createSecretaryQuestionLines(text, schedules, shoppingItems, followUpItem));
+  if (schedules.length || shoppingItems.length || followUpItem) {
+    assistantLines.push(...createShortPrioritySuggestionLines(draft));
+  }
   if (!assistantLines.length) {
     assistantLines.push('内容を受け取りました。時間や相手、買うものがあれば続けて話してください。');
   }
@@ -3485,6 +3511,148 @@ function isConversationAffirmative(text: string) {
 
 function isVagueContactText(text: string) {
   return /連絡|確認/.test(text) && !/電話|LINE|ライン|返信|折り返し|メール/.test(text);
+}
+
+function isMorningAssistantQuestion(text: string) {
+  return /(?:\u4f55\u304b\u3089|\u306a\u306b\u304b\u3089|\u512a\u5148|\u304a\u3059\u3059\u3081|\u30aa\u30b9\u30b9\u30e1|\u3069\u3046\u9032\u3081|\u9806\u756a|\u6700\u521d)/.test(text);
+}
+
+function isFutureConversationText(text: string) {
+  return /(?:\u660e\u65e5|\u3042\u3057\u305f|\u660e\u5f8c\u65e5|\u6765\u9031|\u6765\u6708|\d{1,2}\u6708\d{1,2}\u65e5?|\u6708\u66dc|\u706b\u66dc|\u6c34\u66dc|\u6728\u66dc|\u91d1\u66dc|\u571f\u66dc|\u65e5\u66dc)/.test(text);
+}
+
+function isFutureConversationTime(time: string) {
+  return isFutureConversationText(time);
+}
+
+function createAssistantSaveLines(draft: MorningReviewDraft) {
+  return [
+    '\u4fdd\u5b58\u524d\u78ba\u8a8d\u3067\u3059\u3002\u4e88\u5b9a\u3001\u8cb7\u3044\u7269\u3001Follow Up\u3001Google\u30ab\u30ec\u30f3\u30c0\u30fc\u5019\u88dc\u3092\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
+    ...createAssistantSummaryLines(draft),
+  ];
+}
+
+function createAssistantSummaryLines(draft: MorningReviewDraft) {
+  const scheduleCount = cleanScheduleItems(draft.plan.schedule).length;
+  const shoppingCount = draft.shoppingItems.length;
+  const followUpCount = draft.followUpCandidates.length;
+  const googleCount = createCalendarEvents(draft.plan).length;
+  const priorities = createAssistantPriorityItems(draft);
+  const comment = priorities.length
+    ? `AI\u30b3\u30e1\u30f3\u30c8: \u4eca\u65e5\u306f${priorities.join('\u3001')}\u306e\u9806\u3067\u9032\u3081\u308b\u3068\u52b9\u7387\u7684\u3067\u3059\u3002`
+    : 'AI\u30b3\u30e1\u30f3\u30c8: \u4eca\u65e5\u306e\u5019\u88dc\u3092\u4f1a\u8a71\u3067\u5c11\u3057\u305a\u3064\u6574\u3048\u307e\u3057\u3087\u3046\u3002';
+  return [
+    `AI\u30b5\u30de\u30ea\u30fc: \u4eca\u65e5\u306e\u4e88\u5b9a ${scheduleCount}\u4ef6 / \u8cb7\u3044\u7269 ${shoppingCount}\u4ef6 / Follow Up ${followUpCount}\u4ef6 / Google\u30ab\u30ec\u30f3\u30c0\u30fc ${googleCount}\u4ef6`,
+    comment,
+  ];
+}
+
+function createAssistantPrioritySuggestionLines(draft: MorningReviewDraft) {
+  const priorities = createAssistantPriorityItems(draft);
+  if (!priorities.length) {
+    return ['\u307e\u3060\u512a\u5148\u9806\u4f4d\u3092\u4f5c\u308c\u308b\u5019\u88dc\u304c\u5c11\u306a\u3044\u3067\u3059\u3002\u6642\u9593\u306e\u3042\u308b\u4e88\u5b9a\u3084\u9023\u7d61\u4e8b\u9805\u3092\u8a71\u3057\u3066\u304f\u3060\u3055\u3044\u3002'];
+  }
+  return [
+    '\u73fe\u5728\u306e\u5019\u88dc\u3092\u898b\u308b\u3068\u3001\u3053\u306e3\u4ef6\u304b\u3089\u59cb\u3081\u308b\u306e\u304c\u304a\u3059\u3059\u3081\u3067\u3059\u3002',
+    ...priorities.map((item, index) => `${index + 1}. ${item}`),
+  ];
+}
+
+function createShortPrioritySuggestionLines(draft: MorningReviewDraft) {
+  const priorities = createAssistantPriorityItems(draft);
+  return priorities.length ? [`\u6b21\u306b\u3084\u308b\u306a\u3089\u300c${priorities[0]}\u300d\u304b\u3089\u59cb\u3081\u308b\u306e\u304c\u304a\u3059\u3059\u3081\u3067\u3059\u3002`] : [];
+}
+
+function createAssistantPriorityItems(draft: MorningReviewDraft) {
+  const candidates = [
+    ...cleanScheduleItems(draft.plan.schedule).map((item) => item.task),
+    ...dedupeTodos(draft.plan.todos),
+    ...draft.followUpCandidates.map((item) => `${item.name}\u3078${item.content}`.trim()),
+    ...(draft.shoppingItems.length ? ['\u8cb7\u3044\u7269'] : []),
+  ]
+    .map((item) => item.replace(/^\d{1,2}:\d{2}\s*/, '').trim())
+    .filter((item) => item && item.length <= 24);
+  const seen = new Set<string>();
+  return candidates
+    .sort((a, b) => getAssistantPriorityWeight(b) - getAssistantPriorityWeight(a))
+    .filter((item) => {
+      const key = normalizeTaskText(item);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 3);
+}
+
+function getAssistantPriorityWeight(text: string) {
+  if (/(?:\u6e96\u5099|\u9280\u884c|\u96fb\u8a71|\u9023\u7d61|\u78ba\u8a8d|\u4f1a\u8b70|\u4f1a\u5408|\u6253\u3061\u5408\u308f\u305b|\u4ed5\u8fbc\u307f|\u958b\u5e97)/.test(text)) return 5;
+  if (/(?:LINE|\u8fd4\u4fe1|Follow Up)/i.test(text)) return 4;
+  if (/(?:\u8cb7\u3044\u7269|\u8cfc\u5165)/.test(text)) return 2;
+  if (/(?:\u8d77\u5e8a|\u9589\u5e97)/.test(text)) return 1;
+  return 3;
+}
+
+function createSecretaryQuestionLines(
+  text: string,
+  schedules: MorningPlan['schedule'],
+  shoppingItems: ShoppingItem[],
+  followUpItem: FollowUpDraftItem | null,
+) {
+  const questions = new Set<string>();
+  if (!schedules.length && /(?:\u9280\u884c).*(?:\u884c\u304f|\u884c\u304d)/.test(text)) {
+    questions.add('\u9280\u884c\u3078\u306f\u4f55\u6642\u9803\u884c\u304d\u307e\u3059\u304b\uff1f');
+  }
+  if (/(?:\u8cb7\u3044\u7269|\u8cfc\u5165).*(?:\u884c\u304f|\u884c\u304d)?/.test(text) && shoppingItems.length === 0) {
+    questions.add('\u8cb7\u3044\u7269\u306f\u4f55\u3092\u8cb7\u3044\u307e\u3059\u304b\uff1f');
+  }
+  if (/(?:\u4f1a\u5408|\u4f1a\u8b70|\u6253\u3061\u5408\u308f\u305b|\u6253\u5408\u305b)/.test(text) && !schedules.length) {
+    questions.add('\u4f1a\u5408\u306f\u3044\u3064\u306e\u4f55\u6642\u3067\u3059\u304b\uff1f Google\u30ab\u30ec\u30f3\u30c0\u30fc\u306b\u767b\u9332\u3057\u307e\u3059\u304b\uff1f');
+  }
+  if (isFutureConversationText(text) && !schedules.length) {
+    questions.add('\u672a\u6765\u4e88\u5b9a\u306e\u65e5\u4ed8\u3068\u6642\u9593\u3092\u78ba\u8a8d\u3057\u305f\u3044\u3067\u3059\u3002\u4f55\u65e5\u306e\u4f55\u6642\u3067\u3059\u304b\uff1f');
+  }
+  if (followUpItem && isVagueContactText(text)) {
+    questions.add(`${followUpItem.name}\u3078\u306e\u9023\u7d61\u306f\u3001\u96fb\u8a71\u30fbLINE\u30fb\u30e1\u30fc\u30eb\u306e\u3069\u308c\u3067\u3059\u304b\uff1f`);
+  }
+  return Array.from(questions);
+}
+
+function createFollowUpDueQuestionLines(item: FollowUpDraftItem) {
+  if (item.duePreset === 'today' || item.duePreset === 'tomorrow') return [];
+  return [`${item.name}\u3078\u306e${item.content}\u306f\u4eca\u65e5\u4e2d\u3067\u3059\u304b\uff1f \u660e\u65e5\u3067\u3082\u5927\u4e08\u592b\u3067\u3059\u304b\uff1f`];
+}
+
+function applyFollowUpDueFromReply(item: FollowUpDraftItem, text: string): FollowUpDraftItem {
+  if (/\u660e\u65e5|\u3042\u3057\u305f/.test(text)) {
+    return {
+      ...item,
+      dueDate: formatDateInput(addDays(startOfLocalDay(new Date()), 1)),
+      duePreset: 'tomorrow',
+    };
+  }
+  if (/\u4eca\u65e5|\u304d\u3087\u3046|\u4e2d/.test(text)) {
+    return {
+      ...item,
+      dueDate: formatDateInput(startOfLocalDay(new Date())),
+      duePreset: 'today',
+    };
+  }
+  return item;
+}
+
+function isFollowUpDueReply(text: string) {
+  return /(?:\u4eca\u65e5\u4e2d|\u4eca\u65e5|\u304d\u3087\u3046|\u660e\u65e5|\u3042\u3057\u305f)/.test(text);
+}
+
+function updateLatestFollowUpDue(draft: MorningReviewDraft, text: string): MorningReviewDraft {
+  const latestIndex = draft.followUpCandidates.length - 1;
+  if (latestIndex < 0) return draft;
+  return {
+    ...draft,
+    followUpCandidates: draft.followUpCandidates.map((item, index) =>
+      index === latestIndex ? applyFollowUpDueFromReply(item, text) : item,
+    ),
+  };
 }
 
 function AiConversationPanel({ messages }: { messages: AiConversationMessage[] }) {
@@ -3674,6 +3842,13 @@ function MorningReviewCard({
           <strong>AIがこう整理しました</strong>
         </div>
         <small>保存前に内容を確認できます</small>
+      </div>
+
+      <div className="morning-review-section">
+        <span>AIサマリー</span>
+        {createAssistantSummaryLines(draft).map((line) => (
+          <p key={line}>{line}</p>
+        ))}
       </div>
 
       <div className="morning-review-section">
@@ -8559,7 +8734,7 @@ function getStatusLabel(
   if (!isSupported) return 'このブラウザは音声入力に対応していません';
   if (isListening) return '音声認識中';
   if (plan) return '今日の流れを整理しました';
-  if (transcript) return 'AI整理を押すと今日の計画を生成します';
+  if (transcript) return '会話として受け取りました。続けて話すか、保存してと言ってください。';
   return 'タップして話しはじめる';
 }
 

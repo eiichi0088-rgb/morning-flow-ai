@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## Version 4.2.0 - 2026-06-09
+
+- Added Conversation Intelligence so the AI secretary asks follow-up questions for unclear contact, bank, shopping, and meeting inputs.
+- Future-dated conversation turns are surfaced as Google Calendar candidates with a registration prompt.
+- Added Morning Assistant priority suggestions for prompts such as "what should I do first?"
+- Follow Up confirmation now asks about due timing when a deadline is unclear.
+- Review Card now includes an AI summary and comment with schedule, shopping, Follow Up, and Google Calendar candidate counts.
+- Removed the yesterday reflection card from the home-first conversation experience and replaced the old AI-organize status text.
+
 ## Version 4.1.0 - 2026-06-08
 
 - Added True Conversation Engine for home voice turns.

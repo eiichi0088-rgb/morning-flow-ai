@@ -5,8 +5,20 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v4.1.0 is based on v4.0.0 plus True Conversation Engine.
+6. v4.2.0 is based on v4.1.0 plus Conversation Intelligence.
 
+
+## Version 4.2.0 Conversation Intelligence - 2026-06-09
+
+- Screen display: v4.2.0
+- ZIP: morning-flow-ai-v4.2.0.zip
+- Next planned version: Version 4.2.1
+- AI secretary asks clarifying questions for unclear contact method, bank timing, shopping contents, and meeting timing.
+- Future schedule language such as tomorrow, day after tomorrow, next week, weekdays, and month/day is treated as Google Calendar candidate context.
+- Morning Assistant Mode can answer priority questions with a recommended top-three order from current draft candidates.
+- Follow Up confirmations can request due timing when the deadline is unclear.
+- Review Card includes AI summary counts and an AI comment before formal save.
+- Home keeps conversation, microphone, AI response, and save confirmation as the main experience; yesterday reflection is no longer shown on the home-first flow.
 
 ## Version 4.1.0 True Conversation Engine - 2026-06-08
 
