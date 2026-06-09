@@ -240,6 +240,9 @@ type LlmAssistantResult = {
 
 type AssistantRuntimeDebug = {
   error: string;
+  fallbackError: string;
+  lastAssistantAction: string;
+  lastUserIntent: string;
   mode: 'not checked' | 'llm-native' | 'fallback';
   model: string;
   toolCalls: string[];
@@ -1025,6 +1028,9 @@ function App() {
   const [morningReviewDraft, setMorningReviewDraft] = React.useState<MorningReviewDraft | null>(null);
   const [assistantRuntimeDebug, setAssistantRuntimeDebug] = React.useState<AssistantRuntimeDebug>(() => ({
     error: '',
+    fallbackError: '',
+    lastAssistantAction: '',
+    lastUserIntent: '',
     mode: 'not checked',
     model: '',
     toolCalls: [],
@@ -1534,6 +1540,9 @@ function App() {
         nextPendingFollowUp = null;
         setAssistantRuntimeDebug({
           error: '',
+          fallbackError: '',
+          lastAssistantAction: describeAssistantAction(llmResult.toolCalls, llmResult.shouldOpenReview),
+          lastUserIntent: detectNaturalUserIntent(normalized),
           mode: 'llm-native',
           model: llmResult.model,
           toolCalls: llmResult.toolCalls,
@@ -1541,14 +1550,23 @@ function App() {
         });
       } catch (error) {
         console.warn('[MORNING FLOW AI] LLM assistant fallback', error);
-        const result = processConversationTurn(conversationDraft, normalized, pendingConversationIntent, pendingConversationFollowUp);
-        nextDraft = result.draft;
-        assistantLines = result.assistantLines;
-        shouldOpenReview = result.shouldOpenReview;
-        nextPendingIntent = result.pendingIntent;
-        nextPendingFollowUp = result.pendingFollowUp;
+        nextDraft = {
+          ...conversationDraft,
+          sourceText: appendVoiceText(conversationDraft.sourceText, normalized),
+        };
+        assistantLines = [
+          'AI接続に失敗しました。',
+          '少し時間をおいてもう一度お試しください。',
+          '入力内容は保存せず、この会話内に保持しています。',
+        ];
+        shouldOpenReview = false;
+        nextPendingIntent = null;
+        nextPendingFollowUp = null;
         setAssistantRuntimeDebug({
           error: error instanceof Error ? error.message : String(error),
+          fallbackError: error instanceof Error ? error.message : String(error),
+          lastAssistantAction: 'fallback-message-only',
+          lastUserIntent: detectNaturalUserIntent(normalized),
           mode: 'fallback',
           model: '',
           toolCalls: [],
@@ -2667,7 +2685,7 @@ function App() {
         ? shoppingItems
         : [];
     if (!itemsToShare.length) {
-      setShoppingShareMessage('共有する項目を選択してください。');
+      setShoppingShareMessage('共有する項目を選んでください。');
       return;
     }
 
@@ -3498,11 +3516,17 @@ async function processLlmAssistantTurn({
     ? '内容を理解して候補へ反映しました。保存するときは「保存して」と話してください。'
     : '内容を受け取りました。必要な確認があれば続けて質問します。';
   return {
-    assistantLines: dedupeConversationLines(safeStringArray(payload?.assistantLines).length ? safeStringArray(payload.assistantLines) : [fallbackLine]),
+    assistantLines: dedupeConversationLines(
+      sanitizeAssistantLines(
+        safeStringArray(payload?.assistantLines).length
+          ? safeStringArray(payload.assistantLines)
+          : [createLlmFallbackLine(actions.length)],
+      ),
+    ),
     draft: applied.draft,
     mode: payload?.mode === 'llm-native' ? 'llm-native' : 'llm-native',
     model: String(payload?.model ?? ''),
-    shouldOpenReview: applied.shouldOpenReview,
+    shouldOpenReview: applied.shouldOpenReview || isConversationSaveCommand(text),
     toolCalls: actions.map((action) => action.name),
   };
 }
@@ -3521,6 +3545,45 @@ function normalizeLlmAssistantActions(value: unknown): LlmAssistantAction[] {
 
 function safeStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map(String).map((item) => item.trim()).filter(Boolean) : [];
+}
+
+function createLlmFallbackLine(actionCount: number) {
+  return actionCount
+    ? '内容を理解して候補に反映しました。保存するときは「保存して」と話してください。'
+    : '内容を受け取りました。必要な確認があれば続けて質問します。';
+}
+
+function sanitizeAssistantLines(lines: string[]) {
+  const replacements: Array<[RegExp, string]> = [
+    [/^\s*[ABC]\s*[:：]\s*/i, ''],
+    [/該当番号を?教えてください/g, '必要なものを自然な言葉で話してください'],
+    [/番号を教えてください/g, '必要なものを自然な言葉で話してください'],
+    [/選択してください/g, '必要なものを自然な言葉で話してください'],
+  ];
+  return lines
+    .map((line) =>
+      replacements
+        .reduce((current, [pattern, replacement]) => current.replace(pattern, replacement), line)
+        .trim(),
+    )
+    .filter((line) => line && !/^(?:[ABC]\s*[:：]?|該当番号|番号を教えてください|選択してください)$/i.test(line));
+}
+
+function detectNaturalUserIntent(text: string) {
+  if (/全部|すべて|まとめて/.test(text)) return 'add-all';
+  if (/買い物.*(?:だけ|入れて|追加)|(?:だけ|入れて|追加).*買い物/.test(text)) return 'shopping-only';
+  if (/(?:LINE|ライン|フォロー|Follow Up|連絡).*?(?:入れて|追加|登録)/i.test(text)) return 'follow-up';
+  if (/(?:カレンダー|Google).*?(?:入れて|追加|登録)/.test(text)) return 'calendar';
+  if (/保存|OK|オーケー|これで/.test(text)) return 'review';
+  if (/お願い|それで|それも/.test(text)) return 'approval';
+  if (/順番|優先|どう.*動|何から/.test(text)) return 'priority';
+  return 'freeform';
+}
+
+function describeAssistantAction(toolCalls: string[], shouldOpenReview: boolean) {
+  if (shouldOpenReview) return 'show-review-card';
+  if (!toolCalls.length) return 'reply-only';
+  return toolCalls.join(', ');
 }
 
 function applyLlmAssistantActions(draft: MorningReviewDraft, actions: LlmAssistantAction[], sourceText: string) {
@@ -3962,10 +4025,36 @@ function createAssistantSummaryLines(draft: MorningReviewDraft) {
     ? `AI\u30b3\u30e1\u30f3\u30c8: \u4eca\u65e5\u306f${priorities.join('\u3001')}\u306e\u9806\u3067\u9032\u3081\u308b\u3068\u52b9\u7387\u7684\u3067\u3059\u3002`
     : 'AI\u30b3\u30e1\u30f3\u30c8: \u4eca\u65e5\u306e\u5019\u88dc\u3092\u4f1a\u8a71\u3067\u5c11\u3057\u305a\u3064\u6574\u3048\u307e\u3057\u3087\u3046\u3002';
   return [
+    `AI要約: ${createNaturalReviewSummary(draft)}`,
     ...(llmSummary ? [`AI\u8981\u7d04: ${llmSummary}`] : []),
     `AI\u30b5\u30de\u30ea\u30fc: \u4eca\u65e5\u306e\u4e88\u5b9a ${scheduleCount}\u4ef6 / \u8cb7\u3044\u7269 ${shoppingCount}\u4ef6 / Follow Up ${followUpCount}\u4ef6 / Google\u30ab\u30ec\u30f3\u30c0\u30fc ${googleCount}\u4ef6`,
     comment,
   ];
+}
+
+function createNaturalReviewSummary(draft: MorningReviewDraft) {
+  const flowItems = [
+    ...cleanScheduleItems(draft.plan.schedule)
+      .slice(0, 4)
+      .map((item) => `${item.time ? `${item.time}に` : ''}${item.task}`.trim()),
+    ...draft.shoppingItems.slice(0, 3).map((item) => `${formatShoppingItemLabel(item)}を買い物リストに入れる`),
+    ...draft.followUpCandidates.slice(0, 3).map((item) => `${item.name}さんへ${formatFollowUpActionLabel(item)}する`),
+  ].filter(Boolean);
+  if (!flowItems.length) return '今日の流れは、まだ保存対象が少ない状態です。予定、買い物、連絡事項を話すとここにまとまります。';
+  return `今日の流れは、${joinJapaneseList(flowItems)}流れです。`;
+}
+
+function formatFollowUpActionLabel(item: FollowUpDraftItem) {
+  if (item.kind === 'line') return 'LINE';
+  if (item.kind === 'phone') return '電話';
+  if (item.kind === 'email') return 'メール';
+  if (item.kind === 'sms') return 'SMS';
+  return item.content || '連絡';
+}
+
+function joinJapaneseList(items: string[]) {
+  if (items.length <= 1) return items[0] ?? '';
+  return `${items.slice(0, -1).join('、')}、最後に${items[items.length - 1]}という`;
 }
 
 function createAssistantPrioritySuggestionLines(draft: MorningReviewDraft) {
@@ -4369,6 +4458,9 @@ function AssistantRuntimeDebugPanel({ debug }: { debug: AssistantRuntimeDebug })
       <small>Assistant Mode: {debug.mode}</small>
       <small>OpenAI Model: {debug.model || 'not checked'}</small>
       <small>Tool Calls: {debug.toolCalls.length ? debug.toolCalls.join(', ') : 'none'}</small>
+      <small>Last User Intent: {debug.lastUserIntent || 'none'}</small>
+      <small>Last Assistant Action: {debug.lastAssistantAction || 'none'}</small>
+      <small>Fallback Error: {debug.fallbackError || 'none'}</small>
       <small>Updated: {debug.updatedAt || 'not checked'}</small>
       <small>Error: {debug.error || 'none'}</small>
     </details>

@@ -228,11 +228,26 @@ function extractOutputText(response) {
 }
 
 function splitAssistantText(text) {
-  return String(text || '')
+  return sanitizeAssistantText(text)
     .split(/\n+/)
     .map((line) => line.trim())
     .filter(Boolean)
     .slice(0, 8);
+}
+
+function sanitizeAssistantText(text) {
+  return String(text || '')
+    .split(/\n+/)
+    .map((line) =>
+      line
+        .replace(/^\s*[ABC]\s*[:：]\s*/i, '')
+        .replace(/該当番号を?教えてください/g, '必要なものを自然な言葉で話してください')
+        .replace(/番号を教えてください/g, '必要なものを自然な言葉で話してください')
+        .replace(/選択してください/g, '必要なものを自然な言葉で話してください')
+        .trim(),
+    )
+    .filter((line) => !/^(?:[ABC]\s*[:：]?|該当番号|番号を教えてください|選択してください)$/i.test(line))
+    .join('\n');
 }
 
 function safeJsonParse(value) {
@@ -252,6 +267,14 @@ Your job:
 - Use function tools for app actions. Do not rely on fixed keyword logic.
 - Keep replies short, clear, action-centered, and in Japanese.
 - Do not chat at length.
+- Act like a natural voice-first AI secretary, not a numbered-choice chatbot.
+
+Hard conversation rules:
+- Never present action choices as A:, B:, C:, or any lettered menu.
+- Never ask for a number, an option number, or "該当番号".
+- Never say "番号を教えてください", "該当番号を教えてください", or "選択してください".
+- The user should be able to answer naturally: "お願い", "それで", "全部追加して", "買い物だけ追加して", "カレンダーに入れて", "LINEも登録して", "保存して", "これでOK".
+- When suggesting next actions, describe them in natural Japanese and invite natural phrases such as "全部追加して" or "カレンダーだけ追加して".
 
 Tool policy:
 - Use add_schedule for today's or time-based plans.
@@ -260,8 +283,18 @@ Tool policy:
 - Use add_google_calendar_candidate for future or calendar-worthy events.
 - Use update_priority when the user asks what to do first, or after multiple candidates exist.
 - Use show_review_card when the user says to save, confirm, OK, or asks to start the day.
+- If the user says "全部追加して", call every needed tool from the current utterance and currentDraft: calendar candidates, shopping items, Follow Up items, priority if useful, then summarize what was added.
+- If the user says "買い物だけ", "買い物も入れて", or equivalent, call only add_shopping_item for shopping items.
+- If the user says "カレンダーに入れて" or equivalent, call only add_google_calendar_candidate for calendar-worthy events.
+- If the user says "LINEも登録して", "フォローに入れて", or equivalent, call add_follow_up for the relevant contact item.
+- If the user excludes something, such as "カレンダーはまだいい" or "やっぱり買い物だけ", honor that exclusion and do not call tools for the excluded category.
 
 Clarify instead of guessing when an important date, time, item, or contact method is missing.
 For future events, ask whether to register in Google Calendar when appropriate.
-For review, include a short AI summary and recommended order with reasons.
+For review, include a short natural AI summary of the day flow and recommended order with reasons.
+
+Example style:
+User asks what order to move in.
+Reply: "おすすめはこの順番です。" then a numbered order is OK for explanation only. Then say which candidates can be added, and invite "全部追加して" or "カレンダーだけ追加して".
+Do not use A/B/C labels for those actions.
 `;

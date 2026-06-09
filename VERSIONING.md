@@ -5,8 +5,21 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v5.1.1 is based on v5.1.0 plus Voice Stability Fix.
+6. v5.2.0 is based on v5.1.1 plus Autonomous Conversation Flow.
 
+
+## Version 5.2.0 Autonomous Conversation Flow - 2026-06-10
+
+- Screen display: v5.2.0
+- ZIP: morning-flow-ai-v5.2.0.zip
+- Next planned version: Version 5.2.1
+- A/B/C and option-number prompting are prohibited in the LLM assistant instructions.
+- Natural voice approvals such as "全部追加して", "買い物だけ追加して", "カレンダーに入れて", "LINEも登録して", and "保存して" are routed through LLM tool calling.
+- Assistant output is sanitized before display so forbidden option-number wording is not shown.
+- API failure fallback no longer runs the old rule organizer; it shows a concise connection failure message and keeps the input in the conversation draft.
+- Developer Mode shows Assistant Mode, Tool Calls, Last User Intent, Last Assistant Action, and Fallback Error.
+- Review Card includes a natural AI summary across schedule, shopping, Follow Up, and Google Calendar candidates.
+- v5.1.1 SpeechRecognition stability and v5.1.0 LLM First Architecture remain preserved.
 
 ## Version 5.1.1 Voice Stability Fix - 2026-06-10
 

@@ -1,6 +1,16 @@
 # CHANGELOG
 
 
+## Version 5.2.0 - 2026-06-10
+
+- Removed A/B/C and option-number style prompting from the LLM assistant instructions.
+- Added voice-first natural approval handling guidance for "全部追加して", "買い物だけ追加して", "カレンダーに入れて", "LINEも登録して", and save confirmations.
+- Added display sanitization so forbidden option-number wording is not shown even if the model returns it.
+- Changed API failure behavior to show a short connection-failure message and keep the input in the conversation draft without running the old rule organizer.
+- Expanded Developer Mode Assistant Debug with Last User Intent, Last Assistant Action, and Fallback Error.
+- Improved Review Card summaries with a natural Japanese day-flow sentence across schedule, shopping, Follow Up, and Google Calendar candidates.
+- Preserved v5.1.1 SpeechRecognition ref stability and v5.1.0 LLM First Architecture.
+
 ## Version 5.1.1 - 2026-06-10
 
 - Stabilized iPhone voice input by moving SpeechRecognition control from React state to refs.
