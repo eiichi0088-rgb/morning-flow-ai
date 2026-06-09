@@ -5,8 +5,20 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v4.0.0 is based on v3.8.5 plus AI Conversation Core.
+6. v4.1.0 is based on v4.0.0 plus True Conversation Engine.
 
+
+## Version 4.1.0 True Conversation Engine - 2026-06-08
+
+- Screen display: v4.1.0
+- ZIP: morning-flow-ai-v4.1.0.zip
+- Next planned version: Version 4.1.1
+- Home voice turns are processed immediately as conversation turns without requiring the AI整理 button.
+- The conversation keeps AI/user chat history and updates draft schedule, shopping, Follow Up, and Google Calendar candidates after each utterance.
+- Follow Up confirmation supports a conversational "追加して" / "登録して" response.
+- "保存して" opens the existing save-before-confirm Review Card with the accumulated conversation draft.
+- AI Inbox, STEP guidance, Today Focus, and category cards are no longer the main home experience.
+- Review Card, Schedule Parser, Deduplication Engine, Shopping Post Processor, Supabase sync, and Google Calendar export remain preserved.
 
 ## Version 4.0.0 AI Conversation Core - 2026-06-08
 

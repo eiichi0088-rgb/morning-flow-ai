@@ -204,6 +204,13 @@ type AiConversationMessage = {
   lines: string[];
 };
 
+type ConversationTurnResult = {
+  assistantLines: string[];
+  draft: MorningReviewDraft;
+  pendingFollowUp: FollowUpDraftItem | null;
+  shouldOpenReview: boolean;
+};
+
 type AiInboxItem = {
   id: string;
   text: string;
@@ -974,6 +981,9 @@ function App() {
   const [reviewStatuses, setReviewStatuses] = React.useState<Record<string, ReviewStatus>>({});
   const [carriedTodos, setCarriedTodos] = React.useState<string[]>([]);
   const [morningReviewDraft, setMorningReviewDraft] = React.useState<MorningReviewDraft | null>(null);
+  const [conversationDraft, setConversationDraft] = React.useState<MorningReviewDraft>(createEmptyConversationDraft);
+  const [conversationMessages, setConversationMessages] = React.useState<AiConversationMessage[]>(createInitialConversationMessages);
+  const [pendingConversationFollowUp, setPendingConversationFollowUp] = React.useState<FollowUpDraftItem | null>(null);
   const planAnchorRef = React.useRef<HTMLDivElement | null>(null);
 
   const isSupported = Boolean(SpeechRecognition);
@@ -991,7 +1001,7 @@ function App() {
   const shoppingResultText = [activeShoppingText, isShoppingView ? interimTranscript : ''].filter(Boolean).join('\n');
   const feedbackResultText = [feedbackText, isFeedbackView ? interimTranscript : ''].filter(Boolean).join('\n');
   const followUpResultText = [followUpCaptureText, isFollowUpView ? interimTranscript : ''].filter(Boolean).join('\n');
-  const canOrganize = Boolean(resultText.trim()) && !isListening && captureMode === 'create' && !morningReviewDraft;
+  const canOrganize = false;
   const canUpdatePlan = false;
   const canOrganizeShopping = Boolean(activeShoppingText.trim()) && !isListening;
   const canUseNext = canOrganize || canUpdatePlan || Boolean(plan);
@@ -1013,17 +1023,6 @@ function App() {
   const morningDashboard = React.useMemo(
     () => createMorningDashboardData(plan, shoppingItems, followUps, aiInboxItems),
     [aiInboxItems, followUps, plan, shoppingItems],
-  );
-  const conversationMessages = React.useMemo(
-    () =>
-      createAiConversationMessages({
-        draft: morningReviewDraft,
-        isListening,
-        isOrganizing,
-        plan,
-        sourceText: resultText,
-      }),
-    [isListening, isOrganizing, morningReviewDraft, plan, resultText],
   );
 
   const getFreshAuthSession = React.useCallback(async (): Promise<{ session: SupabaseAuthSession; tokenStatus: string }> => {
@@ -1431,6 +1430,45 @@ function App() {
     setActiveView('inbox');
   }, []);
 
+  const processMorningConversationTurn = React.useCallback(
+    (text: string) => {
+      const normalized = text.trim();
+      if (!normalized) return;
+
+      setTranscript((current) => appendVoiceText(current, normalized));
+      setOriginalTranscript((current) => appendVoiceText(current, normalized));
+      setPlan(null);
+      setMorningReviewDraft(null);
+      setMorningFollowUpCandidates([]);
+      setMorningFollowUpMessage('');
+      setInterimTranscript('');
+
+      const result = processConversationTurn(conversationDraft, normalized, pendingConversationFollowUp);
+      setConversationDraft(result.draft);
+      setPendingConversationFollowUp(result.pendingFollowUp);
+      setConversationMessages((current) => [
+        ...current,
+        {
+          id: createLocalId('conversation-user'),
+          role: 'user',
+          title: 'あなた',
+          lines: [normalized],
+        },
+        {
+          id: createLocalId('conversation-ai'),
+          role: 'assistant',
+          title: result.shouldOpenReview ? '保存前確認です' : 'AI秘書',
+          lines: result.assistantLines,
+        },
+      ]);
+
+      if (result.shouldOpenReview) {
+        setMorningReviewDraft(result.draft);
+      }
+    },
+    [conversationDraft, pendingConversationFollowUp],
+  );
+
   const routeFinalVoiceText = React.useCallback(
     (text: string, sourceView: AppView) => {
       const normalized = text.trim();
@@ -1459,19 +1497,13 @@ function App() {
       }
 
       if (sourceView === 'morning') {
-        setTranscript((current) => appendVoiceText(current, normalized));
-        setOriginalTranscript((current) => appendVoiceText(current, normalized));
-        setPlan(null);
-        setMorningReviewDraft(null);
-        setMorningFollowUpCandidates([]);
-        setMorningFollowUpMessage('');
-        setInterimTranscript('');
+        processMorningConversationTurn(normalized);
         return;
       }
 
       saveVoiceTextToAiInbox(normalized, sourceView);
     },
-    [saveVoiceTextToAiInbox, shoppingCaptureMode],
+    [processMorningConversationTurn, saveVoiceTextToAiInbox, shoppingCaptureMode],
   );
 
   React.useEffect(() => {
@@ -1575,6 +1607,9 @@ function App() {
     setHighlightedScheduleKeys([]);
     setMorningFollowUpCandidates([]);
     setMorningFollowUpMessage('');
+    setConversationDraft(createEmptyConversationDraft());
+    setConversationMessages(createInitialConversationMessages());
+    setPendingConversationFollowUp(null);
   };
 
   const useSample = () => {
@@ -1592,6 +1627,9 @@ function App() {
     setHighlightedScheduleKeys([]);
     setMorningFollowUpCandidates([]);
     setMorningFollowUpMessage('');
+    setConversationDraft(createEmptyConversationDraft());
+    setConversationMessages(createInitialConversationMessages());
+    setPendingConversationFollowUp(null);
   };
 
   const organizeMorning = () => {
@@ -2794,24 +2832,7 @@ function App() {
 
         <AiConversationPanel messages={conversationMessages} />
 
-        <MorningDashboard
-          data={morningDashboard}
-          onOpenFollowUp={() => {
-            trackAnalyticsFeature(analyticsUserId, 'follow_up');
-            setActiveView('followUp');
-          }}
-          onOpenInbox={() => setActiveView('inbox')}
-          onOpenShopping={() => {
-            trackAnalyticsFeature(analyticsUserId, 'shopping_list');
-            setActiveView('shopping');
-          }}
-          onOpenToday={() => {
-            const target = planAnchorRef.current ?? document.querySelector('.focus-area');
-            target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }}
-        />
-
-        {hasEditableTranscript && (
+        {false && hasEditableTranscript && (
           <TranscriptEditor
             isClearConfirmOpen={isTranscriptClearConfirmOpen}
             onCancel={restoreOriginalTranscript}
@@ -3185,6 +3206,285 @@ function MorningDashboardCard({
       )}
     </article>
   );
+}
+
+function createInitialConversationMessages(): AiConversationMessage[] {
+  return [
+    {
+      id: createLocalId('conversation-ai'),
+      role: 'assistant',
+      title: 'AI秘書',
+      lines: ['おはようございます。今日の予定、買い物、連絡、未来の予定をそのまま話してください。'],
+    },
+  ];
+}
+
+function createEmptyConversationDraft(): MorningReviewDraft {
+  return {
+    followUpCandidates: [],
+    plan: {
+      advice: [],
+      categories: {
+        family: [],
+        health: [],
+        learning: [],
+        work: [],
+      },
+      coach: {
+        focusItems: {
+          highest: '',
+          important: '',
+          optional: '',
+        },
+        mission: '',
+        morningAdvice: '',
+        successConditions: [],
+      },
+      goals: [],
+      priorities: {
+        highest: [],
+        important: [],
+        optional: [],
+      },
+      purpose: 'AI会話で今日を整理する',
+      schedule: [],
+      todos: [],
+    },
+    shoppingItems: [],
+    shoppingUpdatedAt: new Date().toISOString(),
+    sourceText: '',
+  };
+}
+
+function processConversationTurn(
+  currentDraft: MorningReviewDraft,
+  text: string,
+  pendingFollowUp: FollowUpDraftItem | null,
+): ConversationTurnResult {
+  if (isConversationSaveCommand(text)) {
+    return {
+      assistantLines: ['保存前確認です。予定、買い物、Follow Up、Googleカレンダー候補を確認してください。'],
+      draft: currentDraft,
+      pendingFollowUp: null,
+      shouldOpenReview: true,
+    };
+  }
+
+  if (pendingFollowUp && isConversationAffirmative(text)) {
+    const draft = appendConversationFollowUp(currentDraft, pendingFollowUp, text);
+    return {
+      assistantLines: [`${pendingFollowUp.name}への${pendingFollowUp.content}をFollow Up候補に追加しました。`],
+      draft,
+      pendingFollowUp: null,
+      shouldOpenReview: false,
+    };
+  }
+
+  const schedules = parseConversationScheduleItems(text);
+  const shoppingItems = extractConversationShoppingItems(text);
+  const followUpItem = createConversationFollowUpCandidate(text);
+  const unscheduledTodo = !schedules.length ? createConversationTodo(text) : '';
+  let draft = appendConversationSchedules(currentDraft, schedules, text);
+  if (unscheduledTodo) {
+    draft = {
+      ...draft,
+      plan: {
+        ...draft.plan,
+        todos: dedupeTodos([...draft.plan.todos, unscheduledTodo]),
+      },
+    };
+  }
+  if (shoppingItems.length) {
+    draft = {
+      ...draft,
+      shoppingItems: postProcessShoppingItems([...draft.shoppingItems, ...shoppingItems]),
+      shoppingUpdatedAt: new Date().toISOString(),
+    };
+  }
+
+  const assistantLines: string[] = [];
+  if (schedules.length) {
+    assistantLines.push(`予定候補に追加しました: ${schedules.map((item) => `${item.time} ${item.task}`).join('、')}`);
+  }
+  if (unscheduledTodo) {
+    assistantLines.push(`やること候補に追加しました: ${unscheduledTodo}`);
+  }
+  if (shoppingItems.length) {
+    assistantLines.push(`買い物候補へ追加しました: ${shoppingItems.map(formatShoppingItemLabel).join('、')}`);
+  }
+
+  let nextPendingFollowUp: FollowUpDraftItem | null = null;
+  if (followUpItem) {
+    nextPendingFollowUp = followUpItem;
+    if (isVagueContactText(text)) {
+      assistantLines.push(`${followUpItem.name}への連絡は、電話ですか？LINEですか？メールですか？`);
+    } else {
+      assistantLines.push(`${followUpItem.name}への${followUpItem.content}はFollow Upにも登録しますか？`);
+    }
+  }
+
+  const questions = createImmediateConversationQuestions(text, schedules, shoppingItems);
+  assistantLines.push(...questions);
+  if (!assistantLines.length) {
+    assistantLines.push('内容を受け取りました。時間や相手、買うものがあれば続けて話してください。');
+  }
+
+  return {
+    assistantLines,
+    draft: {
+      ...draft,
+      sourceText: appendVoiceText(draft.sourceText, text),
+    },
+    pendingFollowUp: nextPendingFollowUp,
+    shouldOpenReview: false,
+  };
+}
+
+function appendConversationSchedules(draft: MorningReviewDraft, schedules: MorningPlan['schedule'], sourceText: string): MorningReviewDraft {
+  if (!schedules.length) {
+    return draft;
+  }
+  const nextSchedule = cleanScheduleItems([...draft.plan.schedule, ...schedules], schedules, schedules);
+  const nextTodos = dedupeTodos([...draft.plan.todos, ...schedules.map((item) => item.task)]);
+  return {
+    ...draft,
+    plan: {
+      ...draft.plan,
+      priorities: {
+        ...draft.plan.priorities,
+        highest: dedupeTodos([...draft.plan.priorities.highest, ...schedules.map((item) => item.task)]).slice(0, 3),
+      },
+      schedule: nextSchedule,
+      todos: nextTodos,
+    },
+  };
+}
+
+function appendConversationFollowUp(draft: MorningReviewDraft, item: FollowUpDraftItem, sourceText: string): MorningReviewDraft {
+  const existingKeys = new Set(draft.followUpCandidates.map((candidate) => `${candidate.name}-${candidate.content}`));
+  const nextItems = existingKeys.has(`${item.name}-${item.content}`)
+    ? draft.followUpCandidates
+    : [...draft.followUpCandidates, item];
+  return {
+    ...draft,
+    followUpCandidates: nextItems,
+    sourceText: appendVoiceText(draft.sourceText, sourceText),
+  };
+}
+
+function parseConversationScheduleItems(text: string): MorningPlan['schedule'] {
+  const normalized = text.normalize('NFKC');
+  const schedule: MorningPlan['schedule'] = [];
+  const timePattern =
+    /(?:(今日|明日|明後日|来週(?:月曜|火曜|水曜|木曜|金曜|土曜|日曜|月曜日|火曜日|水曜日|木曜日|金曜日|土曜日|日曜日)?|\d{1,2}月\d{1,2}日)\s*)?(午前|午後|朝|昼|夜)?\s*(\d{1,2})時(半|[0-5]?\d分?)?(?:から|に)?\s*([^、。\n]*)/g;
+  let match: RegExpExecArray | null;
+  while ((match = timePattern.exec(normalized))) {
+    const hour = normalizeConversationHour(Number(match[3]), match[2] ?? '');
+    const minute = normalizeConversationMinute(match[4] ?? '');
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) continue;
+    const datePrefix = match[1] ? `${match[1]} ` : '';
+    const time = `${datePrefix}${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    const task = createConversationScheduleTitle(match[5] || normalized);
+    if (task) schedule.push({ time, task });
+  }
+  return cleanScheduleItems(schedule, schedule, schedule);
+}
+
+function normalizeConversationHour(hour: number, period: string) {
+  if ((period === '午後' || period === '夜') && hour < 12) return hour + 12;
+  if (period === '朝' && hour === 12) return 0;
+  return hour;
+}
+
+function normalizeConversationMinute(value: string) {
+  if (!value) return 0;
+  if (value === '半') return 30;
+  return Number(value.replace('分', '') || 0);
+}
+
+function createConversationScheduleTitle(value: string) {
+  const cleaned = value
+    .replace(/^(に|へ|で|から|は)+/, '')
+    .replace(/(する|します|して)$/g, '')
+    .replace(/[、。]/g, '')
+    .trim();
+  if (!cleaned) return '';
+  if (/買い物|買う|購入/.test(cleaned)) return '買い物';
+  if (/開ける|オープン/.test(cleaned)) return cleaned.includes('準備') ? 'オープン準備' : '店を開ける';
+  if (/夜営業/.test(cleaned)) return '夜営業開始';
+  return cleaned;
+}
+
+function extractConversationShoppingItems(text: string): ShoppingItem[] {
+  if (!/買い物|買う|購入/.test(text)) return [];
+  const items: ShoppingItem[] = [];
+  const shoppingText = text
+    .normalize('NFKC')
+    .replace(/(?:(?:今日|明日|明後日|来週(?:月曜|火曜|水曜|木曜|金曜|土曜|日曜|月曜日|火曜日|水曜日|木曜日|金曜日|土曜日|日曜日)?|\d{1,2}月\d{1,2}日)\s*)?(?:午前|午後|朝|昼|夜)?\s*\d{1,2}時(?:半|[0-5]?\d分?)?(?:から|に)?/g, ' ')
+    .replace(/買い物で|買い物|購入|を買う|買う/g, ' ');
+  const quantityPattern = /([一-龥ぁ-んァ-ヶーA-Za-z]+)\s*([0-9０-９]+)\s*(本|個|袋|パック|箱|枚|束|玉|丁|g|kg|グラム)/g;
+  let match: RegExpExecArray | null;
+  while ((match = quantityPattern.exec(shoppingText))) {
+    const name = match[1].replace(/^(に|へ|で|と|、|。)+/, '').trim();
+    if (!name || /時|買い物|予定|店/.test(name)) continue;
+    items.push({
+      addedAt: new Date().toISOString(),
+      category: classifyShoppingItem(name),
+      completed: false,
+      id: createLocalShoppingItemId(name),
+      name,
+      quantity: `${match[2]}${match[3]}`,
+      source: 'voice',
+    });
+  }
+  return postProcessShoppingItems(items);
+}
+
+function createConversationFollowUpCandidate(text: string): FollowUpDraftItem | null {
+  if (!/電話|LINE|ライン|返信|折り返し|連絡|確認|メール/.test(text)) return null;
+  const item = createVoiceFollowUp(text);
+  if (!item) return null;
+  return {
+    company: item.company,
+    content: item.content,
+    dueDate: item.dueDate,
+    duePreset: item.duePreset,
+    dueTime: item.dueTime,
+    id: createLocalId('conversation-follow-up'),
+    kind: item.kind,
+    name: item.name,
+    originalPerson: item.name,
+    priority: item.priority,
+    source: 'voice',
+    status: item.status ?? 'pending',
+  };
+}
+
+function createConversationTodo(text: string) {
+  const cleaned = text.replace(/^(今日は|今日|明日は|明日)/, '').trim();
+  if (/銀行.*行く/.test(cleaned)) return '銀行へ行く';
+  if (/買い物.*行く/.test(cleaned)) return '買い物へ行く';
+  if (/(行く|確認|連絡|電話|返信)/.test(cleaned)) return cleaned;
+  return '';
+}
+
+function createImmediateConversationQuestions(text: string, schedules: MorningPlan['schedule'], shoppingItems: ShoppingItem[]) {
+  const questions: string[] = [];
+  if (!schedules.length && /銀行.*行く/.test(text)) questions.push('銀行は何時頃ですか？');
+  if (/買い物/.test(text) && shoppingItems.length === 0) questions.push('買い物内容は何ですか？');
+  return questions;
+}
+
+function isConversationSaveCommand(text: string) {
+  return /保存して|保存|これでOK|これでオーケー|OK|オーケー|完了/.test(text);
+}
+
+function isConversationAffirmative(text: string) {
+  return /追加して|登録して|お願い|はい|うん|OK|オーケー/.test(text);
+}
+
+function isVagueContactText(text: string) {
+  return /連絡|確認/.test(text) && !/電話|LINE|ライン|返信|折り返し|メール/.test(text);
 }
 
 function AiConversationPanel({ messages }: { messages: AiConversationMessage[] }) {

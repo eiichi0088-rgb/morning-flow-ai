@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## Version 4.1.0 - 2026-06-08
+
+- Added True Conversation Engine for home voice turns.
+- Each confirmed home utterance now creates a user chat message, updates draft candidates, and returns an AI secretary reply without requiring the AI整理 button.
+- Conversation turns can add schedule candidates, shopping candidates, pending Follow Up confirmations, and Google Calendar-ready future schedule candidates.
+- "追加して" / "登録して" confirms the pending Follow Up candidate, and "保存して" opens the save-before-confirm review card.
+- Home no longer routes voice turns to AI Inbox and no longer shows Today Focus/category dashboard as the main experience.
+- Existing Review Card, Schedule Parser, Deduplication Engine, Shopping Post Processor, Supabase sync, and Google Calendar export remain available behind the conversation flow.
+
 ## Version 4.0.0 - 2026-06-08
 
 - Reframed the home screen around AI Conversation Core with a simplified greeting, large central microphone, and chat-style AI secretary panel.
