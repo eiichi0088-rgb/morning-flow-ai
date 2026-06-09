@@ -5,8 +5,20 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v4.3.0 is based on v4.2.0 plus Memory & Context Engine.
+6. v4.4.0 is based on v4.3.0 plus Proactive Assistant Engine.
 
+
+## Version 4.4.0 Proactive Assistant Engine - 2026-06-09
+
+- Screen display: v4.4.0
+- ZIP: morning-flow-ai-v4.4.0.zip
+- Next planned version: Version 4.4.1
+- AI secretary now offers contextual suggestions after bank, shopping, Follow Up, due-date, and Google Calendar confirmations.
+- Generic repeated "next best action" prompts are reduced during ordinary conversation turns.
+- Morning Planning Mode includes recommendation reasons, not only ranked items.
+- Smart Priority considers schedule timing and Follow Up due timing.
+- Review Card includes "今日のおすすめ順" with reasons before save.
+- UI changes are minimal; AI Review Flow, Memory & Context Engine, Schedule Parser, Deduplication Engine, Supabase sync, Shopping, Follow Up, and Google Calendar foundations remain preserved.
 
 ## Version 4.3.0 Memory & Context Engine - 2026-06-09
 

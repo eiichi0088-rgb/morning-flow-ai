@@ -219,6 +219,8 @@ type ConversationTurnResult = {
   shouldOpenReview: boolean;
 };
 
+type ProactiveSuggestionKind = 'bank' | 'shopping' | 'follow_up' | 'follow_up_due' | 'google_calendar';
+
 type AiInboxItem = {
   id: string;
   text: string;
@@ -3291,7 +3293,7 @@ function processConversationTurn(
       assistantLines: [
         `${nextPendingFollowUp.name}への${nextPendingFollowUp.content}をFollow Up候補に追加しました。`,
         ...createFollowUpDueQuestionLines(nextPendingFollowUp),
-        ...createShortPrioritySuggestionLines(draft),
+        ...createProactiveSuggestionLines('follow_up', draft, nextPendingFollowUp),
       ],
       draft,
       pendingIntent: createFollowUpDueQuestionLines(nextPendingFollowUp).length ? { type: 'follow_up_due', item: nextPendingFollowUp } : null,
@@ -3306,7 +3308,7 @@ function processConversationTurn(
     return {
       assistantLines: [
         latest ? `${latest.name}への${latest.content}の期限を更新しました。` : 'Follow Upの期限を更新しました。',
-        ...createShortPrioritySuggestionLines(draft),
+        ...createProactiveSuggestionLines('follow_up_due', draft, latest),
       ],
       draft: {
         ...draft,
@@ -3376,15 +3378,12 @@ function processConversationTurn(
   const questions = createImmediateConversationQuestions(text, schedules, shoppingItems);
   assistantLines.push(...questions);
   assistantLines.push(...createSecretaryQuestionLines(text, schedules, shoppingItems, followUpItem));
-  if (schedules.length || shoppingItems.length || followUpItem) {
-    assistantLines.push(...createShortPrioritySuggestionLines(draft));
-  }
   if (!assistantLines.length) {
     assistantLines.push('内容を受け取りました。時間や相手、買うものがあれば続けて話してください。');
   }
 
   return {
-    assistantLines,
+    assistantLines: dedupeConversationLines(assistantLines),
     draft: {
       ...draft,
       sourceText: appendVoiceText(draft.sourceText, text),
@@ -3577,13 +3576,13 @@ function createAssistantSummaryLines(draft: MorningReviewDraft) {
 }
 
 function createAssistantPrioritySuggestionLines(draft: MorningReviewDraft) {
-  const priorities = createAssistantPriorityItems(draft);
-  if (!priorities.length) {
+  const recommendations = createAssistantPriorityRecommendations(draft);
+  if (!recommendations.length) {
     return ['\u307e\u3060\u512a\u5148\u9806\u4f4d\u3092\u4f5c\u308c\u308b\u5019\u88dc\u304c\u5c11\u306a\u3044\u3067\u3059\u3002\u6642\u9593\u306e\u3042\u308b\u4e88\u5b9a\u3084\u9023\u7d61\u4e8b\u9805\u3092\u8a71\u3057\u3066\u304f\u3060\u3055\u3044\u3002'];
   }
   return [
     '\u73fe\u5728\u306e\u5019\u88dc\u3092\u898b\u308b\u3068\u3001\u3053\u306e3\u4ef6\u304b\u3089\u59cb\u3081\u308b\u306e\u304c\u304a\u3059\u3059\u3081\u3067\u3059\u3002',
-    ...priorities.map((item, index) => `${index + 1}. ${item}`),
+    ...recommendations.map((item, index) => `${index + 1}. ${item.label} - ${item.reason}`),
   ];
 }
 
@@ -3592,24 +3591,86 @@ function createShortPrioritySuggestionLines(draft: MorningReviewDraft) {
   return priorities.length ? [`\u6b21\u306b\u3084\u308b\u306a\u3089\u300c${priorities[0]}\u300d\u304b\u3089\u59cb\u3081\u308b\u306e\u304c\u304a\u3059\u3059\u3081\u3067\u3059\u3002`] : [];
 }
 
+function createProactiveSuggestionLines(kind: ProactiveSuggestionKind, draft: MorningReviewDraft, context?: unknown) {
+  if (kind === 'bank') {
+    const time = typeof context === 'object' && context && 'time' in context ? String((context as { time?: string }).time ?? '') : '';
+    const minutes = getScheduleStartMinutes(time);
+    if (minutes >= 9 * 60 && minutes <= 11 * 60 + 30) {
+      return ['午前中に行くのは良い選択です。窓口や移動の余裕も取りやすい時間です。'];
+    }
+    return ['銀行は受付時間が限られるので、前後の予定に少し余裕を見ておくのがおすすめです。'];
+  }
+  if (kind === 'shopping') {
+    const count = Array.isArray(context) ? context.length : draft.shoppingItems.length;
+    return [`買い物候補が${count}件入りました。現在の買い物リストにまとめて確認できます。`];
+  }
+  if (kind === 'follow_up_due') {
+    return ['期限つきのFollow Upとして優先候補へ入れておきます。忘れやすい連絡なので、早めに片付けるのがおすすめです。'];
+  }
+  if (kind === 'follow_up') {
+    return ['期限が決まると優先順位を付けやすくなります。今日中か明日で教えてください。'];
+  }
+  if (kind === 'google_calendar') {
+    return ['Googleカレンダー候補へ入れました。忘れないように前日通知を設定しますか？'];
+  }
+  return [];
+}
+
+function dedupeConversationLines(lines: string[]) {
+  const seen = new Set<string>();
+  return lines.filter((line) => {
+    const key = normalizeTaskText(line);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function createAssistantPriorityRecommendations(draft: MorningReviewDraft) {
+  return createAssistantPriorityItems(draft).map((label) => ({
+    label,
+    reason: getAssistantPriorityReason(label),
+  }));
+}
+
+function getAssistantPriorityReason(text: string) {
+  if (/(?:\u9280\u884c)/.test(text)) return '営業時間の都合で早めに動くと安心です。';
+  if (/(?:\u96fb\u8a71|\u9023\u7d61|LINE|\u8fd4\u4fe1)/i.test(text)) return '相手待ちになる前に先に進めると流れが良くなります。';
+  if (/(?:\u6e96\u5099|\u958b\u5e97|\u4ed5\u8fbc\u307f)/.test(text)) return '後の予定へ影響しやすい準備タスクです。';
+  if (/(?:\u8cb7\u3044\u7269|\u8cfc\u5165)/.test(text)) return '時間調整しやすいので、予定の隙間にまとめると効率的です。';
+  if (/(?:\u4f1a\u8b70|\u4f1a\u5408|\u6253\u3061\u5408\u308f\u305b)/.test(text)) return '時間固定の予定なので先に把握しておくと安心です。';
+  return '今日の流れを作るうえで優先度が高い候補です。';
+}
+
 function createAssistantPriorityItems(draft: MorningReviewDraft) {
-  const candidates = [
-    ...cleanScheduleItems(draft.plan.schedule).map((item) => item.task),
-    ...dedupeTodos(draft.plan.todos),
-    ...draft.followUpCandidates.map((item) => `${item.name}\u3078${item.content}`.trim()),
-    ...(draft.shoppingItems.length ? ['\u8cb7\u3044\u7269'] : []),
-  ]
-    .map((item) => item.replace(/^\d{1,2}:\d{2}\s*/, '').trim())
-    .filter((item) => item && item.length <= 24);
+  const scheduleCandidates = cleanScheduleItems(draft.plan.schedule).map((item) => {
+    const minutes = getScheduleStartMinutes(item.time);
+    const timeWeight = Number.isFinite(minutes) && minutes < 12 * 60 ? 2 : 1;
+    return { label: item.task, weight: getAssistantPriorityWeight(item.task) + timeWeight };
+  });
+  const todoCandidates = dedupeTodos(draft.plan.todos).map((item) => ({
+    label: item,
+    weight: getAssistantPriorityWeight(item),
+  }));
+  const followUpCandidates = draft.followUpCandidates.map((item) => {
+    const label = `${item.name}\u3078${item.content}`.trim();
+    const dueWeight = item.duePreset === 'today' ? 4 : item.duePreset === 'tomorrow' ? 2 : 1;
+    return { label, weight: getAssistantPriorityWeight(label) + dueWeight };
+  });
+  const shoppingCandidates = draft.shoppingItems.length ? [{ label: '\u8cb7\u3044\u7269', weight: 2 }] : [];
+  const candidates = [...scheduleCandidates, ...todoCandidates, ...followUpCandidates, ...shoppingCandidates]
+    .map((item) => ({ ...item, label: item.label.replace(/^\d{1,2}:\d{2}\s*/, '').trim() }))
+    .filter((item) => item.label && item.label.length <= 24);
   const seen = new Set<string>();
   return candidates
-    .sort((a, b) => getAssistantPriorityWeight(b) - getAssistantPriorityWeight(a))
+    .sort((a, b) => b.weight - a.weight)
     .filter((item) => {
-      const key = normalizeTaskText(item);
+      const key = normalizeTaskText(item.label);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     })
+    .map((item) => item.label)
     .slice(0, 3);
 }
 
@@ -3698,7 +3759,7 @@ function processPendingConversationIntent(
       sourceText: appendVoiceText(currentDraft.sourceText, text),
     };
     return {
-      assistantLines: [`了解しました。${time}に${pendingIntent.title}予定として追加しました。`, ...createShortPrioritySuggestionLines(draft)],
+      assistantLines: [`了解しました。${time}に${pendingIntent.title}予定として追加しました。`, ...createProactiveSuggestionLines('bank', draft, { time })],
       draft,
       pendingIntent: null,
       pendingFollowUp: null,
@@ -3718,7 +3779,7 @@ function processPendingConversationIntent(
     return {
       assistantLines: [
         `了解しました。買い物候補へ${shoppingItems.map(formatShoppingItemLabel).join('、')}を追加しました。`,
-        ...createShortPrioritySuggestionLines(draft),
+        ...createProactiveSuggestionLines('shopping', draft, shoppingItems),
       ],
       draft,
       pendingIntent: null,
@@ -3744,7 +3805,7 @@ function processPendingConversationIntent(
       assistantLines: [
         `了解しました。${pendingIntent.person}へ${content}予定として追加しました。`,
         `${pendingIntent.person}への${content}は今日中ですか？ 明日でも大丈夫ですか？`,
-        ...createShortPrioritySuggestionLines(draft),
+        ...createProactiveSuggestionLines('follow_up', draft, item),
       ],
       draft,
       pendingIntent: { type: 'follow_up_due', item },
@@ -3764,7 +3825,7 @@ function processPendingConversationIntent(
     return {
       assistantLines: [
         `了解しました。${pendingIntent.dateText}${time}の${pendingIntent.title}としてGoogleカレンダー候補へ追加しました。`,
-        ...createShortPrioritySuggestionLines(draft),
+        ...createProactiveSuggestionLines('google_calendar', draft, pendingIntent),
       ],
       draft,
       pendingIntent: null,
@@ -4059,6 +4120,7 @@ function MorningReviewCard({
   const shoppingPreview = draft.shoppingItems.slice(0, 8);
   const followUpPreview = draft.followUpCandidates.slice(0, 5);
   const googleCalendarPreview = createCalendarEvents(draft.plan).slice(0, 6);
+  const assistantRecommendations = createAssistantPriorityRecommendations(draft);
   const updateDraft = (updater: (current: MorningReviewDraft) => MorningReviewDraft) => {
     onDraftChange((current) => (current ? updater(current) : current));
   };
@@ -4078,6 +4140,22 @@ function MorningReviewCard({
         {createAssistantSummaryLines(draft).map((line) => (
           <p key={line}>{line}</p>
         ))}
+      </div>
+
+      <div className="morning-review-section">
+        <span>今日のおすすめ順</span>
+        {assistantRecommendations.length ? (
+          <ol>
+            {assistantRecommendations.map((item) => (
+              <li key={item.label}>
+                <strong>{item.label}</strong>
+                <small>{item.reason}</small>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p>まだおすすめ順を作れる候補がありません</p>
+        )}
       </div>
 
       <div className="morning-review-section">

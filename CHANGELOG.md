@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## Version 4.4.0 - 2026-06-09
+
+- Added Proactive Assistant Engine so the AI secretary offers contextual suggestions after important confirmations.
+- Bank visit, shopping, Follow Up, due-date, and Google Calendar confirmation turns now receive targeted advice instead of generic repeated priority prompts.
+- Morning Planning Mode now explains why each recommended item is prioritized.
+- Smart Priority now considers schedule timing and Follow Up due timing when ranking today's top recommendations.
+- Review Card now includes "今日のおすすめ順" with reasons before formal save.
+- Reduced repeated "next best action" prompts during ordinary conversation turns.
+
 ## Version 4.3.0 - 2026-06-09
 
 - Added Memory & Context Engine for multi-turn AI secretary conversations.
