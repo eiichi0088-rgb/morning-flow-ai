@@ -5,8 +5,19 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v4.2.0 is based on v4.1.0 plus Conversation Intelligence.
+6. v4.3.0 is based on v4.2.0 plus Memory & Context Engine.
 
+
+## Version 4.3.0 Memory & Context Engine - 2026-06-09
+
+- Screen display: v4.3.0
+- ZIP: morning-flow-ai-v4.3.0.zip
+- Next planned version: Version 4.3.1
+- Conversation Context Memory keeps the AI secretary's latest unanswered question and unresolved candidate.
+- Pending intent states cover bank visits, shopping details, contact method selection, future event time, and Follow Up due timing.
+- Short answers such as "10時", "LINE", "牛乳2本", "18時", and "今日中" are merged into the previous conversation context.
+- Future event context can turn "明後日会合" followed by "18時" into a Google Calendar-ready candidate.
+- UI changes are intentionally minimal; AI Review Flow, Schedule Parser, Deduplication Engine, Supabase sync, Shopping, Follow Up, and Google Calendar foundations remain preserved.
 
 ## Version 4.2.0 Conversation Intelligence - 2026-06-09
 

@@ -204,9 +204,17 @@ type AiConversationMessage = {
   lines: string[];
 };
 
+type PendingConversationIntent =
+  | { type: 'bank_visit'; title: string }
+  | { type: 'shopping' }
+  | { type: 'contact_method'; person: string; originalText: string }
+  | { type: 'future_event'; dateText: string; title: string }
+  | { type: 'follow_up_due'; item: FollowUpDraftItem };
+
 type ConversationTurnResult = {
   assistantLines: string[];
   draft: MorningReviewDraft;
+  pendingIntent: PendingConversationIntent | null;
   pendingFollowUp: FollowUpDraftItem | null;
   shouldOpenReview: boolean;
 };
@@ -983,6 +991,7 @@ function App() {
   const [morningReviewDraft, setMorningReviewDraft] = React.useState<MorningReviewDraft | null>(null);
   const [conversationDraft, setConversationDraft] = React.useState<MorningReviewDraft>(createEmptyConversationDraft);
   const [conversationMessages, setConversationMessages] = React.useState<AiConversationMessage[]>(createInitialConversationMessages);
+  const [pendingConversationIntent, setPendingConversationIntent] = React.useState<PendingConversationIntent | null>(null);
   const [pendingConversationFollowUp, setPendingConversationFollowUp] = React.useState<FollowUpDraftItem | null>(null);
   const planAnchorRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -1443,8 +1452,9 @@ function App() {
       setMorningFollowUpMessage('');
       setInterimTranscript('');
 
-      const result = processConversationTurn(conversationDraft, normalized, pendingConversationFollowUp);
+      const result = processConversationTurn(conversationDraft, normalized, pendingConversationIntent, pendingConversationFollowUp);
       setConversationDraft(result.draft);
+      setPendingConversationIntent(result.pendingIntent);
       setPendingConversationFollowUp(result.pendingFollowUp);
       setConversationMessages((current) => [
         ...current,
@@ -1466,7 +1476,7 @@ function App() {
         setMorningReviewDraft(result.draft);
       }
     },
-    [conversationDraft, pendingConversationFollowUp],
+    [conversationDraft, pendingConversationFollowUp, pendingConversationIntent],
   );
 
   const routeFinalVoiceText = React.useCallback(
@@ -3243,8 +3253,14 @@ function createEmptyConversationDraft(): MorningReviewDraft {
 function processConversationTurn(
   currentDraft: MorningReviewDraft,
   text: string,
+  pendingIntent: PendingConversationIntent | null,
   pendingFollowUp: FollowUpDraftItem | null,
 ): ConversationTurnResult {
+  if (pendingIntent) {
+    const memoryResult = processPendingConversationIntent(currentDraft, text, pendingIntent);
+    if (memoryResult) return memoryResult;
+  }
+
   if (isMorningAssistantQuestion(text)) {
     return {
       assistantLines: createAssistantPrioritySuggestionLines(currentDraft),
@@ -3252,6 +3268,7 @@ function processConversationTurn(
         ...currentDraft,
         sourceText: appendVoiceText(currentDraft.sourceText, text),
       },
+      pendingIntent,
       pendingFollowUp,
       shouldOpenReview: false,
     };
@@ -3261,6 +3278,7 @@ function processConversationTurn(
     return {
       assistantLines: createAssistantSaveLines(currentDraft),
       draft: currentDraft,
+      pendingIntent: null,
       pendingFollowUp: null,
       shouldOpenReview: true,
     };
@@ -3276,6 +3294,7 @@ function processConversationTurn(
         ...createShortPrioritySuggestionLines(draft),
       ],
       draft,
+      pendingIntent: createFollowUpDueQuestionLines(nextPendingFollowUp).length ? { type: 'follow_up_due', item: nextPendingFollowUp } : null,
       pendingFollowUp: null,
       shouldOpenReview: false,
     };
@@ -3293,6 +3312,7 @@ function processConversationTurn(
         ...draft,
         sourceText: appendVoiceText(draft.sourceText, text),
       },
+      pendingIntent: null,
       pendingFollowUp: null,
       shouldOpenReview: false,
     };
@@ -3336,13 +3356,21 @@ function processConversationTurn(
   }
 
   let nextPendingFollowUp: FollowUpDraftItem | null = null;
+  let nextPendingIntent = createPendingIntentFromTurn(text, schedules, shoppingItems, followUpItem);
   if (followUpItem) {
     nextPendingFollowUp = followUpItem;
     if (isVagueContactText(text)) {
+      nextPendingIntent = { type: 'contact_method', person: followUpItem.name, originalText: text };
       assistantLines.push(`${followUpItem.name}への連絡は、電話ですか？LINEですか？メールですか？`);
     } else {
       assistantLines.push(`${followUpItem.name}への${followUpItem.content}はFollow Upにも登録しますか？`);
     }
+  }
+
+  if (followUpItem && !isVagueContactText(text)) {
+    draft = appendConversationFollowUp(draft, followUpItem, text);
+    nextPendingFollowUp = null;
+    nextPendingIntent = { type: 'follow_up_due', item: followUpItem };
   }
 
   const questions = createImmediateConversationQuestions(text, schedules, shoppingItems);
@@ -3361,6 +3389,7 @@ function processConversationTurn(
       ...draft,
       sourceText: appendVoiceText(draft.sourceText, text),
     },
+    pendingIntent: nextPendingIntent,
     pendingFollowUp: nextPendingFollowUp,
     shouldOpenReview: false,
   };
@@ -3653,6 +3682,206 @@ function updateLatestFollowUpDue(draft: MorningReviewDraft, text: string): Morni
       index === latestIndex ? applyFollowUpDueFromReply(item, text) : item,
     ),
   };
+}
+
+function processPendingConversationIntent(
+  currentDraft: MorningReviewDraft,
+  text: string,
+  pendingIntent: PendingConversationIntent,
+): ConversationTurnResult | null {
+  if (pendingIntent.type === 'bank_visit') {
+    const time = parseMemoryTimeAnswer(text);
+    if (!time) return null;
+    const schedule = [{ time, task: pendingIntent.title }];
+    const draft = {
+      ...appendConversationSchedules(currentDraft, schedule, text),
+      sourceText: appendVoiceText(currentDraft.sourceText, text),
+    };
+    return {
+      assistantLines: [`了解しました。${time}に${pendingIntent.title}予定として追加しました。`, ...createShortPrioritySuggestionLines(draft)],
+      draft,
+      pendingIntent: null,
+      pendingFollowUp: null,
+      shouldOpenReview: false,
+    };
+  }
+
+  if (pendingIntent.type === 'shopping') {
+    const shoppingItems = extractMemoryShoppingItems(text);
+    if (!shoppingItems.length) return null;
+    const draft = {
+      ...currentDraft,
+      shoppingItems: postProcessShoppingItems([...currentDraft.shoppingItems, ...shoppingItems]),
+      shoppingUpdatedAt: new Date().toISOString(),
+      sourceText: appendVoiceText(currentDraft.sourceText, text),
+    };
+    return {
+      assistantLines: [
+        `了解しました。買い物候補へ${shoppingItems.map(formatShoppingItemLabel).join('、')}を追加しました。`,
+        ...createShortPrioritySuggestionLines(draft),
+      ],
+      draft,
+      pendingIntent: null,
+      pendingFollowUp: null,
+      shouldOpenReview: false,
+    };
+  }
+
+  if (pendingIntent.type === 'contact_method') {
+    const method = parseContactMethodAnswer(text);
+    if (!method) return null;
+    const content = method === 'line' ? 'LINEする' : method === 'email' ? 'メールする' : '電話する';
+    const item = createConversationFollowUpFromParts(pendingIntent.person, content, method);
+    const draft = {
+      ...appendConversationFollowUp(currentDraft, item, text),
+      plan: {
+        ...currentDraft.plan,
+        todos: dedupeTodos([...currentDraft.plan.todos, `${pendingIntent.person}へ${content}`]),
+      },
+      sourceText: appendVoiceText(currentDraft.sourceText, text),
+    };
+    return {
+      assistantLines: [
+        `了解しました。${pendingIntent.person}へ${content}予定として追加しました。`,
+        `${pendingIntent.person}への${content}は今日中ですか？ 明日でも大丈夫ですか？`,
+        ...createShortPrioritySuggestionLines(draft),
+      ],
+      draft,
+      pendingIntent: { type: 'follow_up_due', item },
+      pendingFollowUp: null,
+      shouldOpenReview: false,
+    };
+  }
+
+  if (pendingIntent.type === 'future_event') {
+    const time = parseMemoryTimeAnswer(text);
+    if (!time) return null;
+    const schedule = [{ time: `${pendingIntent.dateText} ${time}`, task: pendingIntent.title }];
+    const draft = {
+      ...appendConversationSchedules(currentDraft, schedule, text),
+      sourceText: appendVoiceText(currentDraft.sourceText, text),
+    };
+    return {
+      assistantLines: [
+        `了解しました。${pendingIntent.dateText}${time}の${pendingIntent.title}としてGoogleカレンダー候補へ追加しました。`,
+        ...createShortPrioritySuggestionLines(draft),
+      ],
+      draft,
+      pendingIntent: null,
+      pendingFollowUp: null,
+      shouldOpenReview: false,
+    };
+  }
+
+  if (pendingIntent.type === 'follow_up_due') {
+    const draft = {
+      ...updateFollowUpDueById(currentDraft, pendingIntent.item.id, text),
+      sourceText: appendVoiceText(currentDraft.sourceText, text),
+    };
+    const item = draft.followUpCandidates.find((candidate) => candidate.id === pendingIntent.item.id) ?? pendingIntent.item;
+    return {
+      assistantLines: [`了解しました。${item.name}への${item.content}を${formatFollowUpDueDraft(item)}のFollow Upとして登録しました。`],
+      draft,
+      pendingIntent: null,
+      pendingFollowUp: null,
+      shouldOpenReview: false,
+    };
+  }
+
+  return null;
+}
+
+function createPendingIntentFromTurn(
+  text: string,
+  schedules: MorningPlan['schedule'],
+  shoppingItems: ShoppingItem[],
+  followUpItem: FollowUpDraftItem | null,
+): PendingConversationIntent | null {
+  if (!schedules.length && /(?:\u9280\u884c).*(?:\u884c\u304f|\u884c\u304d)/.test(text)) {
+    return { type: 'bank_visit', title: '\u9280\u884c\u3078\u884c\u304f' };
+  }
+  if (/(?:\u8cb7\u3044\u7269|\u8cfc\u5165).*(?:\u884c\u304f|\u884c\u304d)?/.test(text) && shoppingItems.length === 0) {
+    return { type: 'shopping' };
+  }
+  if (!schedules.length && isFutureConversationText(text)) {
+    const title = extractFutureEventTitle(text);
+    const dateText = extractFutureEventDateText(text);
+    return { type: 'future_event', dateText, title };
+  }
+  if (followUpItem && isVagueContactText(text)) {
+    return { type: 'contact_method', person: followUpItem.name, originalText: text };
+  }
+  return null;
+}
+
+function parseMemoryTimeAnswer(text: string) {
+  const normalized = text.normalize('NFKC');
+  const match = normalized.match(/(?:(午前|午後|朝|昼|夜)\s*)?(\d{1,2})時(?:\s*(半|[0-5]?\d分))?|^(\d{1,2})(?::([0-5]\d))?$/);
+  if (!match) return '';
+  const period = match[1] ?? '';
+  let hour = Number(match[2] ?? match[4]);
+  const minute = match[3] === '半' ? 30 : Number((match[3] ?? '').replace('分', '') || match[5] || 0);
+  if ((period === '午後' || period === '夜') && hour < 12) hour += 12;
+  if (period === '朝' && hour === 12) hour = 0;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return '';
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+function extractMemoryShoppingItems(text: string) {
+  return extractConversationShoppingItems(`買い物 ${text}`);
+}
+
+function parseContactMethodAnswer(text: string): FollowUpKind | '' {
+  if (/LINE|ライン/i.test(text)) return 'line';
+  if (/メール|mail/i.test(text)) return 'email';
+  if (/電話|TEL|tel/i.test(text)) return 'phone';
+  return '';
+}
+
+function createConversationFollowUpFromParts(name: string, content: string, kind: FollowUpKind): FollowUpDraftItem {
+  return {
+    company: '',
+    content,
+    dueDate: formatDateInput(startOfLocalDay(new Date())),
+    duePreset: 'today',
+    id: createLocalId('conversation-follow-up'),
+    kind,
+    name,
+    originalPerson: name,
+    priority: 'medium',
+    source: 'voice',
+    status: 'pending',
+  };
+}
+
+function extractFutureEventDateText(text: string) {
+  const normalized = text.normalize('NFKC');
+  const match = normalized.match(/(?:明後日|明日|あした|来週(?:月曜|火曜|水曜|木曜|金曜|土曜|日曜|月曜日|火曜日|水曜日|木曜日|金曜日|土曜日|日曜日)?|来月|\d{1,2}月\d{1,2}日?)/);
+  return match?.[0] ?? '未来予定';
+}
+
+function extractFutureEventTitle(text: string) {
+  const compact = text
+    .normalize('NFKC')
+    .replace(/(?:明後日|明日|あした|来週(?:月曜|火曜|水曜|木曜|金曜|土曜|日曜|月曜日|火曜日|水曜日|木曜日|金曜日|土曜日|日曜日)?|来月|\d{1,2}月\d{1,2}日?)/g, '')
+    .replace(/(?:(午前|午後|朝|昼|夜)\s*)?\d{1,2}時(?:半|[0-5]?\d分)?/g, '')
+    .replace(/[、。,\s]/g, '')
+    .replace(/がある|ある|する|です/g, '')
+    .trim();
+  return compact || '予定';
+}
+
+function updateFollowUpDueById(draft: MorningReviewDraft, id: string, text: string): MorningReviewDraft {
+  return {
+    ...draft,
+    followUpCandidates: draft.followUpCandidates.map((item) =>
+      item.id === id ? applyFollowUpDueFromReply(item, text) : item,
+    ),
+  };
+}
+
+function formatFollowUpDueDraft(item: FollowUpDraftItem) {
+  return item.duePreset === 'tomorrow' ? '明日' : '今日中';
 }
 
 function AiConversationPanel({ messages }: { messages: AiConversationMessage[] }) {

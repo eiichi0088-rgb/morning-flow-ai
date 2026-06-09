@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## Version 4.3.0 - 2026-06-09
+
+- Added Memory & Context Engine for multi-turn AI secretary conversations.
+- Added pending intent memory for bank visits, shopping details, contact method selection, future event time, and Follow Up due timing.
+- Short replies such as "10時", "LINE", "牛乳2本", "18時", and "今日中" now connect back to the AI's previous question.
+- Context-aware replies now confirm the full interpreted action, such as "10:00に銀行へ行く予定" or "田中さんへLINEする予定".
+- Future event follow-up answers are added as Google Calendar-ready candidates.
+- Kept UI changes minimal and preserved AI Review Flow, Schedule Parser, Deduplication Engine, Supabase sync, Shopping, Follow Up, and Google Calendar foundations.
+
 ## Version 4.2.0 - 2026-06-09
 
 - Added Conversation Intelligence so the AI secretary asks follow-up questions for unclear contact, bank, shopping, and meeting inputs.
