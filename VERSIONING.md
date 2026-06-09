@@ -5,8 +5,20 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v5.1.0 is based on v5.0.0 plus LLM First Architecture.
+6. v5.1.1 is based on v5.1.0 plus Voice Stability Fix.
 
+
+## Version 5.1.1 Voice Stability Fix - 2026-06-10
+
+- Screen display: v5.1.1
+- ZIP: morning-flow-ai-v5.1.1.zip
+- Next planned version: Version 5.1.2
+- SpeechRecognition instance and internal listening controls are managed with refs instead of React state.
+- Unexpected SpeechRecognition `onend` auto-restarts when the user has not manually stopped.
+- Final and interim transcript buffers are retained during transient recognition endings.
+- LLM processing starts after explicit stop/flush, not while interim speech is still being captured.
+- Developer Mode shows Voice Recognition Debug with status, last event, restart count, timestamp, and error.
+- LLM First Architecture, Tool Calling, Review Card, Supabase sync, Shopping, Follow Up, and Calendar foundations remain preserved.
 
 ## Version 5.1.0 LLM First Architecture - 2026-06-09
 

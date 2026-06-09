@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## Version 5.1.1 - 2026-06-10
+
+- Stabilized iPhone voice input by moving SpeechRecognition control from React state to refs.
+- Added internal listening refs, manual stop tracking, transcript buffering, interim buffering, and auto-restart after unexpected `onend`.
+- LLM processing now runs after explicit stop/flush, not during interim speech recognition.
+- Preserved transcript buffer across transient `onend` and `onerror` events.
+- Added Developer Mode Voice Recognition Debug for status, last event, restart count, timestamp, and recognition errors.
+- Added user-facing auto-restart status text while the microphone is recovering.
+
 ## Version 5.1.0 - 2026-06-09
 
 - Strengthened LLM First Architecture so the OpenAI Responses API path is the standard home conversation flow.

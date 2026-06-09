@@ -246,6 +246,14 @@ type AssistantRuntimeDebug = {
   updatedAt: string;
 };
 
+type VoiceRecognitionDebug = {
+  error: string;
+  lastEvent: string;
+  restartCount: number;
+  status: 'idle' | 'listening' | 'auto-restarting' | 'stopped' | 'error';
+  updatedAt: string;
+};
+
 type AiInboxItem = {
   id: string;
   text: string;
@@ -957,7 +965,6 @@ function App() {
   const [onboardingSettings, setOnboardingSettings] = React.useState<OnboardingSettings>(createDefaultOnboardingSettings);
   const [isOnboardingGuideOpen, setIsOnboardingGuideOpen] = React.useState(false);
   const [isAuthLoading, setIsAuthLoading] = React.useState(false);
-  const [recognition, setRecognition] = React.useState<SpeechRecognitionLike | null>(null);
   const [isListening, setIsListening] = React.useState(false);
   const [transcript, setTranscript] = React.useState('');
   const [originalTranscript, setOriginalTranscript] = React.useState('');
@@ -1023,11 +1030,26 @@ function App() {
     toolCalls: [],
     updatedAt: '',
   }));
+  const [voiceRecognitionDebug, setVoiceRecognitionDebug] = React.useState<VoiceRecognitionDebug>(() => ({
+    error: '',
+    lastEvent: 'init',
+    restartCount: 0,
+    status: 'idle',
+    updatedAt: '',
+  }));
   const [conversationDraft, setConversationDraft] = React.useState<MorningReviewDraft>(createEmptyConversationDraft);
   const [conversationMessages, setConversationMessages] = React.useState<AiConversationMessage[]>(createInitialConversationMessages);
   const [pendingConversationIntent, setPendingConversationIntent] = React.useState<PendingConversationIntent | null>(null);
   const [pendingConversationFollowUp, setPendingConversationFollowUp] = React.useState<FollowUpDraftItem | null>(null);
   const planAnchorRef = React.useRef<HTMLDivElement | null>(null);
+  const recognitionRef = React.useRef<SpeechRecognitionLike | null>(null);
+  const isListeningRef = React.useRef(false);
+  const manualStopRef = React.useRef(false);
+  const transcriptBufferRef = React.useRef('');
+  const interimBufferRef = React.useRef('');
+  const recognitionRestartTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recognitionRestartCountRef = React.useRef(0);
+  const activeViewRef = React.useRef<AppView>('morning');
 
   const isSupported = Boolean(SpeechRecognition);
   const isShoppingView = activeView === 'shopping';
@@ -1067,6 +1089,10 @@ function App() {
     () => createMorningDashboardData(plan, shoppingItems, followUps, aiInboxItems),
     [aiInboxItems, followUps, plan, shoppingItems],
   );
+
+  React.useEffect(() => {
+    activeViewRef.current = activeView;
+  }, [activeView]);
 
   const getFreshAuthSession = React.useCallback(async (): Promise<{ session: SupabaseAuthSession; tokenStatus: string }> => {
     const currentSession = authSession ?? getStoredSupabaseAuthSession();
@@ -1597,16 +1623,48 @@ function App() {
   React.useEffect(() => {
     if (!SpeechRecognition) return;
 
+    const updateVoiceDebug = (next: Partial<VoiceRecognitionDebug>) => {
+      setVoiceRecognitionDebug((current) => ({
+        ...current,
+        ...next,
+        restartCount: recognitionRestartCountRef.current,
+        updatedAt: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      }));
+    };
+    const restartRecognition = () => {
+      if (!recognitionRef.current || manualStopRef.current || !isListeningRef.current) return;
+      if (recognitionRestartCountRef.current >= 8) {
+        isListeningRef.current = false;
+        setIsListening(false);
+        updateVoiceDebug({ lastEvent: 'restart-limit', status: 'stopped' });
+        return;
+      }
+      recognitionRestartCountRef.current += 1;
+      updateVoiceDebug({ lastEvent: 'onend:auto-restart', status: 'auto-restarting' });
+      recognitionRestartTimerRef.current = setTimeout(() => {
+        if (!recognitionRef.current || manualStopRef.current || !isListeningRef.current) return;
+        try {
+          recognitionRef.current.start();
+        } catch (error) {
+          console.warn('[MORNING FLOW AI] speech recognition restart failed', error);
+          updateVoiceDebug({ error: error instanceof Error ? error.message : String(error), lastEvent: 'restart:error', status: 'error' });
+        }
+      }, 350);
+    };
+
     const instance = new SpeechRecognition();
+    recognitionRef.current = instance;
     instance.lang = 'ja-JP';
     instance.continuous = true;
     instance.interimResults = true;
 
     instance.onstart = () => {
+      isListeningRef.current = true;
       setIsListening(true);
-      if (activeView === 'shopping') {
+      updateVoiceDebug({ error: '', lastEvent: 'onstart', status: 'listening' });
+      if (activeViewRef.current === 'shopping') {
         setShoppingError('');
-      } else if (activeView === 'followUp') {
+      } else if (activeViewRef.current === 'followUp') {
         setIsFollowUpClearConfirmOpen(false);
       } else {
         setError('');
@@ -1614,17 +1672,28 @@ function App() {
     };
 
     instance.onend = () => {
-      setIsListening(false);
-      setInterimTranscript('');
+      updateVoiceDebug({ lastEvent: 'onend', status: manualStopRef.current ? 'stopped' : 'auto-restarting' });
+      if (manualStopRef.current || !isListeningRef.current) {
+        isListeningRef.current = false;
+        setIsListening(false);
+        return;
+      }
+      restartRecognition();
     };
 
     instance.onerror = (event) => {
-      setIsListening(false);
-      setInterimTranscript('');
-      if (activeView === 'shopping') {
-        setShoppingError(getSpeechErrorMessage(event.error));
+      console.warn('[MORNING FLOW AI] speech recognition error', event.error);
+      const message = getSpeechErrorMessage(event.error);
+      updateVoiceDebug({ error: event.error, lastEvent: `onerror:${event.error}`, status: 'error' });
+      if (activeViewRef.current === 'shopping') {
+        setShoppingError(message);
       } else {
-        setError(getSpeechErrorMessage(event.error));
+        setError(message);
+      }
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed' || event.error === 'audio-capture') {
+        manualStopRef.current = true;
+        isListeningRef.current = false;
+        setIsListening(false);
       }
     };
 
@@ -1641,27 +1710,45 @@ function App() {
         }
       }
 
-      if (finalText) {
-        routeFinalVoiceText(finalText, activeView);
+      if (finalText.trim()) {
+        transcriptBufferRef.current = appendVoiceText(transcriptBufferRef.current, finalText.trim());
+        updateVoiceDebug({ lastEvent: 'onresult:final', status: 'listening' });
       }
-      setInterimTranscript(interimText.trim());
+      interimBufferRef.current = interimText.trim();
+      setInterimTranscript([transcriptBufferRef.current, interimBufferRef.current].filter(Boolean).join('\n'));
     };
-
-    setRecognition(instance);
 
     return () => {
+      manualStopRef.current = true;
+      isListeningRef.current = false;
+      if (recognitionRestartTimerRef.current) clearTimeout(recognitionRestartTimerRef.current);
       instance.abort();
+      recognitionRef.current = null;
     };
-  }, [activeView, routeFinalVoiceText]);
+  }, []);
 
   const startListening = () => {
-    if (!recognition || isListening) return;
+    const recognition = recognitionRef.current;
+    if (!recognition || isListeningRef.current) return;
 
     if (activeView === 'shopping') {
       setShoppingError('');
     } else {
       setError('');
     }
+    manualStopRef.current = false;
+    isListeningRef.current = true;
+    transcriptBufferRef.current = '';
+    interimBufferRef.current = '';
+    recognitionRestartCountRef.current = 0;
+    if (recognitionRestartTimerRef.current) clearTimeout(recognitionRestartTimerRef.current);
+    setVoiceRecognitionDebug({
+      error: '',
+      lastEvent: 'start:requested',
+      restartCount: 0,
+      status: 'listening',
+      updatedAt: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    });
     try {
       recognition.start();
     } catch {
@@ -1675,11 +1762,47 @@ function App() {
   };
 
   const stopListening = () => {
+    const recognition = recognitionRef.current;
+    manualStopRef.current = true;
+    isListeningRef.current = false;
+    setIsListening(false);
+    if (recognitionRestartTimerRef.current) clearTimeout(recognitionRestartTimerRef.current);
+    const bufferedText = [transcriptBufferRef.current, interimBufferRef.current].filter(Boolean).join('\n').trim();
+    transcriptBufferRef.current = '';
+    interimBufferRef.current = '';
+    setInterimTranscript('');
+    if (bufferedText) {
+      routeFinalVoiceText(bufferedText, activeViewRef.current);
+    }
+    setVoiceRecognitionDebug((current) => ({
+      ...current,
+      lastEvent: bufferedText ? 'manual-stop:flush' : 'manual-stop',
+      restartCount: recognitionRestartCountRef.current,
+      status: 'stopped',
+      updatedAt: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    }));
     recognition?.stop();
   };
 
+  const abortListening = React.useCallback(() => {
+    manualStopRef.current = true;
+    isListeningRef.current = false;
+    transcriptBufferRef.current = '';
+    interimBufferRef.current = '';
+    if (recognitionRestartTimerRef.current) clearTimeout(recognitionRestartTimerRef.current);
+    recognitionRef.current?.abort();
+    setIsListening(false);
+    setVoiceRecognitionDebug((current) => ({
+      ...current,
+      lastEvent: 'abort',
+      restartCount: recognitionRestartCountRef.current,
+      status: 'stopped',
+      updatedAt: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    }));
+  }, []);
+
   const resetTranscript = () => {
-    recognition?.abort();
+    abortListening();
     setIsResetDialogOpen(false);
     setTranscript('');
     setOriginalTranscript('');
@@ -1697,11 +1820,14 @@ function App() {
     setMorningFollowUpMessage('');
     setConversationDraft(createEmptyConversationDraft());
     setConversationMessages(createInitialConversationMessages());
+    setPendingConversationIntent(null);
     setPendingConversationFollowUp(null);
+    transcriptBufferRef.current = '';
+    interimBufferRef.current = '';
   };
 
   const useSample = () => {
-    recognition?.abort();
+    abortListening();
     setTranscript(sampleTranscript);
     setOriginalTranscript(sampleTranscript);
     setUpdateInstruction('');
@@ -1870,7 +1996,7 @@ function App() {
   };
 
   const clearEditableTranscript = () => {
-    recognition?.abort();
+    abortListening();
     setTranscript('');
     setOriginalTranscript('');
     setInterimTranscript('');
@@ -1924,7 +2050,7 @@ function App() {
   };
 
   const openMealPlanMode = () => {
-    recognition?.abort();
+    abortListening();
     setInterimTranscript('');
     setIsListening(false);
     setShoppingCaptureMode('meal');
@@ -1933,7 +2059,7 @@ function App() {
   };
 
   const openShoppingInputMode = () => {
-    recognition?.abort();
+    abortListening();
     setInterimTranscript('');
     setIsListening(false);
     setShoppingCaptureMode('shopping');
@@ -2006,7 +2132,7 @@ function App() {
   };
 
   const resetShoppingList = () => {
-    recognition?.abort();
+    abortListening();
     setShoppingText('');
     setOriginalShoppingText('');
     setMealPlanText('');
@@ -2029,7 +2155,7 @@ function App() {
   };
 
   const clearShoppingInput = () => {
-    recognition?.abort();
+    abortListening();
     setShoppingText('');
     setOriginalShoppingText('');
     setMealPlanText('');
@@ -2052,7 +2178,7 @@ function App() {
 
   const createNewShoppingList = () => {
     const shouldResetItems = !shoppingItems.length || window.confirm('現在の整理結果を削除して、新しく作り直しますか？');
-    recognition?.abort();
+    abortListening();
     setShoppingText('');
     setOriginalShoppingText('');
     setMealPlanText('');
@@ -2276,7 +2402,7 @@ function App() {
   };
 
   const clearFollowUpCapture = () => {
-    recognition?.abort();
+    abortListening();
     setFollowUpCaptureText('');
     setInterimTranscript('');
     setIsListening(false);
@@ -2669,7 +2795,7 @@ function App() {
 
   const logout = async () => {
     const accessToken = authSession?.access_token;
-    recognition?.abort();
+    abortListening();
     resetLocalWorkspaceState();
     clearStoredSupabaseAuthSession();
     currentUserIdRef.current = null;
@@ -2726,7 +2852,7 @@ function App() {
           mode="shopping"
           onAddMealCandidates={addMealCandidatesToShoppingList}
           onBack={() => {
-            recognition?.abort();
+            abortListening();
             setInterimTranscript('');
             setIsListening(false);
             setActiveView('morning');
@@ -2827,7 +2953,7 @@ function App() {
           isListening={isListening}
           isSupported={isSupported}
           onBack={() => {
-            recognition?.abort();
+            abortListening();
             setInterimTranscript('');
             setIsListening(false);
             setActiveView('morning');
@@ -2914,12 +3040,17 @@ function App() {
 
           <div className="status-row" role="status" aria-live="polite">
             <span className={`status-dot ${isListening ? 'active' : ''}`} />
-            {getStatusLabel(isSupported, isListening, transcript, plan)}
+            {getStatusLabel(isSupported, isListening, transcript, plan, voiceRecognitionDebug.status)}
           </div>
         </div>
 
         <AiConversationPanel messages={conversationMessages} />
-        {isDeveloperModeEnabled() && <AssistantRuntimeDebugPanel debug={assistantRuntimeDebug} />}
+        {isDeveloperModeEnabled() && (
+          <>
+            <AssistantRuntimeDebugPanel debug={assistantRuntimeDebug} />
+            <VoiceRecognitionDebugPanel debug={voiceRecognitionDebug} />
+          </>
+        )}
 
         {false && hasEditableTranscript && (
           <TranscriptEditor
@@ -4238,6 +4369,19 @@ function AssistantRuntimeDebugPanel({ debug }: { debug: AssistantRuntimeDebug })
       <small>Assistant Mode: {debug.mode}</small>
       <small>OpenAI Model: {debug.model || 'not checked'}</small>
       <small>Tool Calls: {debug.toolCalls.length ? debug.toolCalls.join(', ') : 'none'}</small>
+      <small>Updated: {debug.updatedAt || 'not checked'}</small>
+      <small>Error: {debug.error || 'none'}</small>
+    </details>
+  );
+}
+
+function VoiceRecognitionDebugPanel({ debug }: { debug: VoiceRecognitionDebug }) {
+  return (
+    <details className="follow-up-debug-details">
+      <summary>Voice Recognition Debug</summary>
+      <small>Status: {debug.status}</small>
+      <small>Last Event: {debug.lastEvent}</small>
+      <small>Restart Count: {debug.restartCount}</small>
       <small>Updated: {debug.updatedAt || 'not checked'}</small>
       <small>Error: {debug.error || 'none'}</small>
     </details>
@@ -9312,8 +9456,10 @@ function getStatusLabel(
   isListening: boolean,
   transcript: string,
   plan: MorningPlan | null,
+  voiceStatus: VoiceRecognitionDebug['status'] = 'idle',
 ) {
   if (!isSupported) return 'このブラウザは音声入力に対応していません';
+  if (voiceStatus === 'auto-restarting') return '一時停止しました。自動再開中です';
   if (isListening) return '音声認識中';
   if (plan) return '今日の流れを整理しました';
   if (transcript) return '会話として受け取りました。続けて話すか、保存してと言ってください。';
