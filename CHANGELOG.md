@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## Version 5.2.1 - 2026-06-10
+
+- Repaired the LLM tool-calling bridge between `/api/assistant` and the home conversation Review Draft.
+- `/api/assistant` now returns normalized `actions` with `type` and `payload`, while preserving legacy `name` and `arguments` for compatibility.
+- Added API debug output for Assistant Mode, model, Tool Calls, Raw Tool Calls Count, and Actions Count.
+- Client action handling now accepts both new `type/payload` actions and legacy `name/arguments` actions.
+- All assistant actions are applied to the Review Draft: schedule, shopping item, Follow Up, Google Calendar candidate, priority update, and review card.
+- Added context repair actions so natural replies like "全部追加して" or "保存して" can act on candidates already held in the conversation draft when the API returns no tool calls.
+- Strengthened prompt instructions so actionable candidates are tool-called immediately, even when the user is asking for a recommended order.
+- Developer Mode Assistant Debug now shows Raw Tool Calls Count, Actions Count, and Last Actions.
+- Preserved v5.2.0 natural conversation rules and v5.1.1 voice stability.
+
 ## Version 5.2.0 - 2026-06-10
 
 - Removed A/B/C and option-number style prompting from the LLM assistant instructions.

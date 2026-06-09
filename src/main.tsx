@@ -222,29 +222,41 @@ type ConversationTurnResult = {
 type ProactiveSuggestionKind = 'bank' | 'shopping' | 'follow_up' | 'follow_up_due' | 'google_calendar';
 
 type LlmAssistantAction =
-  | { name: 'add_schedule'; arguments: { date_text?: string; time?: string; title?: string; memo?: string } }
-  | { name: 'add_shopping_item'; arguments: { name?: string; quantity?: string; category?: string } }
-  | { name: 'add_follow_up'; arguments: { person_name?: string; action?: string; method?: FollowUpKind; due_text?: string; memo?: string } }
-  | { name: 'add_google_calendar_candidate'; arguments: { date_text?: string; time?: string; title?: string; memo?: string } }
-  | { name: 'update_priority'; arguments: { items?: { title?: string; reason?: string }[] } }
-  | { name: 'show_review_card'; arguments: { summary?: string } };
+  | { type: 'add_schedule'; payload: { date_text?: string; date?: string; time?: string; title?: string; memo?: string } }
+  | { type: 'add_shopping_item'; payload: { name?: string; quantity?: string; category?: string } }
+  | { type: 'add_follow_up'; payload: { person_name?: string; title?: string; action?: string; method?: FollowUpKind; due_text?: string; due?: string; memo?: string } }
+  | { type: 'add_google_calendar_candidate'; payload: { date_text?: string; date?: string; time?: string; title?: string; memo?: string } }
+  | { type: 'update_priority'; payload: { items?: { title?: string; reason?: string }[] } }
+  | { type: 'show_review_card'; payload: { summary?: string } };
+
+type LlmAssistantDebug = {
+  actionsCount: number;
+  rawToolCallsCount: number;
+  toolCalls: string[];
+};
 
 type LlmAssistantResult = {
+  actionsCount: number;
   assistantLines: string[];
   draft: MorningReviewDraft;
   mode: 'llm-native' | 'fallback';
   model: string;
+  rawToolCallsCount: number;
   shouldOpenReview: boolean;
+  lastActions: string[];
   toolCalls: string[];
 };
 
 type AssistantRuntimeDebug = {
+  actionsCount: number;
   error: string;
   fallbackError: string;
+  lastActions: string[];
   lastAssistantAction: string;
   lastUserIntent: string;
   mode: 'not checked' | 'llm-native' | 'fallback';
   model: string;
+  rawToolCallsCount: number;
   toolCalls: string[];
   updatedAt: string;
 };
@@ -1027,12 +1039,15 @@ function App() {
   const [carriedTodos, setCarriedTodos] = React.useState<string[]>([]);
   const [morningReviewDraft, setMorningReviewDraft] = React.useState<MorningReviewDraft | null>(null);
   const [assistantRuntimeDebug, setAssistantRuntimeDebug] = React.useState<AssistantRuntimeDebug>(() => ({
+    actionsCount: 0,
     error: '',
     fallbackError: '',
+    lastActions: [],
     lastAssistantAction: '',
     lastUserIntent: '',
     mode: 'not checked',
     model: '',
+    rawToolCallsCount: 0,
     toolCalls: [],
     updatedAt: '',
   }));
@@ -1539,12 +1554,15 @@ function App() {
         nextPendingIntent = null;
         nextPendingFollowUp = null;
         setAssistantRuntimeDebug({
+          actionsCount: llmResult.actionsCount,
           error: '',
           fallbackError: '',
+          lastActions: llmResult.lastActions,
           lastAssistantAction: describeAssistantAction(llmResult.toolCalls, llmResult.shouldOpenReview),
           lastUserIntent: detectNaturalUserIntent(normalized),
           mode: 'llm-native',
           model: llmResult.model,
+          rawToolCallsCount: llmResult.rawToolCallsCount,
           toolCalls: llmResult.toolCalls,
           updatedAt: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         });
@@ -1563,12 +1581,15 @@ function App() {
         nextPendingIntent = null;
         nextPendingFollowUp = null;
         setAssistantRuntimeDebug({
+          actionsCount: 0,
           error: error instanceof Error ? error.message : String(error),
           fallbackError: error instanceof Error ? error.message : String(error),
+          lastActions: [],
           lastAssistantAction: 'fallback-message-only',
           lastUserIntent: detectNaturalUserIntent(normalized),
           mode: 'fallback',
           model: '',
+          rawToolCallsCount: 0,
           toolCalls: [],
           updatedAt: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         });
@@ -3510,12 +3531,16 @@ async function processLlmAssistantTurn({
     throw new Error(payload?.message ?? 'LLM assistant request failed.');
   }
 
-  const actions = normalizeLlmAssistantActions(payload?.actions);
+  const apiActions = normalizeLlmAssistantActions(payload?.actions);
+  const repairedActions = apiActions.length ? [] : createContextRepairActions(conversationDraft, text);
+  const actions = apiActions.length ? apiActions : repairedActions;
+  const debug = normalizeLlmAssistantDebug(payload?.debug, actions);
   const applied = applyLlmAssistantActions(conversationDraft, actions, text);
   const fallbackLine = actions.length
     ? '内容を理解して候補へ反映しました。保存するときは「保存して」と話してください。'
     : '内容を受け取りました。必要な確認があれば続けて質問します。';
   return {
+    actionsCount: actions.length,
     assistantLines: dedupeConversationLines(
       sanitizeAssistantLines(
         safeStringArray(payload?.assistantLines).length
@@ -3526,8 +3551,10 @@ async function processLlmAssistantTurn({
     draft: applied.draft,
     mode: payload?.mode === 'llm-native' ? 'llm-native' : 'llm-native',
     model: String(payload?.model ?? ''),
+    rawToolCallsCount: debug.rawToolCallsCount,
     shouldOpenReview: applied.shouldOpenReview || isConversationSaveCommand(text),
-    toolCalls: actions.map((action) => action.name),
+    lastActions: actions.map((action) => action.type),
+    toolCalls: debug.toolCalls.length ? debug.toolCalls : actions.map((action) => action.type),
   };
 }
 
@@ -3536,11 +3563,176 @@ function normalizeLlmAssistantActions(value: unknown): LlmAssistantAction[] {
   return value
     .map((item) => {
       if (!item || typeof item !== 'object') return null;
-      const action = item as { name?: unknown; arguments?: unknown };
-      if (typeof action.name !== 'string' || !action.arguments || typeof action.arguments !== 'object') return null;
-      return { name: action.name, arguments: action.arguments } as LlmAssistantAction;
+      const action = item as { name?: unknown; type?: unknown; arguments?: unknown; payload?: unknown };
+      const type = typeof action.type === 'string' ? action.type : typeof action.name === 'string' ? action.name : '';
+      const payloadSource = action.payload && typeof action.payload === 'object' ? action.payload : action.arguments;
+      if (!isLlmAssistantActionType(type) || !payloadSource || typeof payloadSource !== 'object') return null;
+      return { type, payload: normalizeLlmActionPayload(type, payloadSource as Record<string, unknown>) } as LlmAssistantAction;
     })
     .filter((item): item is LlmAssistantAction => Boolean(item));
+}
+
+function isLlmAssistantActionType(value: string): value is LlmAssistantAction['type'] {
+  return (
+    value === 'add_schedule' ||
+    value === 'add_shopping_item' ||
+    value === 'add_follow_up' ||
+    value === 'add_google_calendar_candidate' ||
+    value === 'update_priority' ||
+    value === 'show_review_card'
+  );
+}
+
+function normalizeLlmActionPayload(type: LlmAssistantAction['type'], payload: Record<string, unknown>): LlmAssistantAction['payload'] {
+  if (type === 'add_schedule' || type === 'add_google_calendar_candidate') {
+    return {
+      date: stringPayload(payload.date),
+      date_text: stringPayload(payload.date_text),
+      memo: stringPayload(payload.memo),
+      time: stringPayload(payload.time),
+      title: stringPayload(payload.title),
+    };
+  }
+  if (type === 'add_shopping_item') {
+    return {
+      category: stringPayload(payload.category),
+      name: stringPayload(payload.name),
+      quantity: stringPayload(payload.quantity),
+    };
+  }
+  if (type === 'add_follow_up') {
+    return {
+      action: stringPayload(payload.action),
+      due: stringPayload(payload.due),
+      due_text: stringPayload(payload.due_text),
+      memo: stringPayload(payload.memo),
+      method: normalizeLlmFollowUpKind(payload.method),
+      person_name: stringPayload(payload.person_name),
+      title: stringPayload(payload.title),
+    };
+  }
+  if (type === 'update_priority') {
+    return {
+      items: Array.isArray(payload.items)
+        ? payload.items.map((item) => (item && typeof item === 'object' ? item : {})) as { title?: string; reason?: string }[]
+        : [],
+    };
+  }
+  return {
+    summary: stringPayload(payload.summary),
+  };
+}
+
+function normalizeLlmAssistantDebug(value: unknown, actions: LlmAssistantAction[]): LlmAssistantDebug {
+  const debug = value && typeof value === 'object' ? (value as { actionsCount?: unknown; rawToolCallsCount?: unknown; toolCalls?: unknown }) : {};
+  return {
+    actionsCount: numberPayload(debug.actionsCount, actions.length),
+    rawToolCallsCount: numberPayload(debug.rawToolCallsCount, actions.length),
+    toolCalls: safeStringArray(debug.toolCalls),
+  };
+}
+
+function createContextRepairActions(draft: MorningReviewDraft, text: string): LlmAssistantAction[] {
+  const intent = detectNaturalUserIntent(text);
+  const actions: LlmAssistantAction[] = [];
+  const scheduleItems = cleanScheduleItems(draft.plan.schedule);
+  const shoppingDraftItems = draft.shoppingItems.filter((item) => item.name.trim());
+  const followUpItems = draft.followUpCandidates.filter((item) => item.name.trim() && item.content.trim());
+
+  if (intent === 'shopping-only' || intent === 'add-all') {
+    shoppingDraftItems.forEach((item) => {
+      actions.push({
+        payload: {
+          category: item.category,
+          name: item.name,
+          quantity: item.quantity,
+        },
+        type: 'add_shopping_item',
+      });
+    });
+  }
+
+  if (intent === 'follow-up' || intent === 'add-all') {
+    followUpItems.forEach((item) => {
+      actions.push({
+        payload: {
+          action: item.content,
+          due_text: item.duePreset,
+          method: item.kind,
+          person_name: item.name,
+          title: `${item.name}へ${item.content}`,
+        },
+        type: 'add_follow_up',
+      });
+    });
+  }
+
+  if (intent === 'calendar' || intent === 'add-all') {
+    scheduleItems
+      .filter((item) => isFutureConversationTime(item.time) || isFutureConversationText(`${item.time} ${item.task}`))
+      .forEach((item) => {
+        actions.push({
+          payload: {
+            date_text: extractDateTextFromLlmTime(item.time),
+            time: extractClockTextFromLlmTime(item.time),
+            title: item.task,
+          },
+          type: 'add_google_calendar_candidate',
+        });
+      });
+  }
+
+  if (intent === 'add-all') {
+    scheduleItems.forEach((item) => {
+      actions.push({
+        payload: {
+          date_text: extractDateTextFromLlmTime(item.time),
+          time: extractClockTextFromLlmTime(item.time),
+          title: item.task,
+        },
+        type: 'add_schedule',
+      });
+    });
+  }
+
+  if (intent === 'review' && hasConversationDraftContent(draft)) {
+    actions.push({
+      payload: { summary: createNaturalReviewSummary(draft) },
+      type: 'show_review_card',
+    });
+  }
+
+  return dedupeLlmAssistantActions(actions);
+}
+
+function hasConversationDraftContent(draft: MorningReviewDraft) {
+  return Boolean(cleanScheduleItems(draft.plan.schedule).length || draft.shoppingItems.length || draft.followUpCandidates.length || draft.plan.todos.length);
+}
+
+function extractDateTextFromLlmTime(value: string) {
+  return value.replace(/\b\d{1,2}:\d{2}\b/g, '').trim();
+}
+
+function extractClockTextFromLlmTime(value: string) {
+  return value.match(/\b\d{1,2}:\d{2}\b/)?.[0] ?? value;
+}
+
+function dedupeLlmAssistantActions(actions: LlmAssistantAction[]) {
+  const seen = new Set<string>();
+  return actions.filter((action) => {
+    const key = `${action.type}:${JSON.stringify(action.payload)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function stringPayload(value: unknown) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function numberPayload(value: unknown, fallback: number) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
 function safeStringArray(value: unknown): string[] {
@@ -3590,24 +3782,24 @@ function applyLlmAssistantActions(draft: MorningReviewDraft, actions: LlmAssista
   let nextDraft = { ...draft, sourceText: appendVoiceText(draft.sourceText, sourceText) };
   let shouldOpenReview = false;
   for (const action of actions) {
-    if (action.name === 'add_schedule') {
-      nextDraft = applyLlmScheduleAction(nextDraft, action.arguments);
-    } else if (action.name === 'add_shopping_item') {
-      nextDraft = applyLlmShoppingAction(nextDraft, action.arguments);
-    } else if (action.name === 'add_follow_up') {
-      nextDraft = applyLlmFollowUpAction(nextDraft, action.arguments);
-    } else if (action.name === 'add_google_calendar_candidate') {
-      nextDraft = applyLlmGoogleCalendarAction(nextDraft, action.arguments);
-    } else if (action.name === 'update_priority') {
-      nextDraft = applyLlmPriorityAction(nextDraft, action.arguments);
-    } else if (action.name === 'show_review_card') {
+    if (action.type === 'add_schedule') {
+      nextDraft = applyLlmScheduleAction(nextDraft, action.payload);
+    } else if (action.type === 'add_shopping_item') {
+      nextDraft = applyLlmShoppingAction(nextDraft, action.payload);
+    } else if (action.type === 'add_follow_up') {
+      nextDraft = applyLlmFollowUpAction(nextDraft, action.payload);
+    } else if (action.type === 'add_google_calendar_candidate') {
+      nextDraft = applyLlmGoogleCalendarAction(nextDraft, action.payload);
+    } else if (action.type === 'update_priority') {
+      nextDraft = applyLlmPriorityAction(nextDraft, action.payload);
+    } else if (action.type === 'show_review_card') {
       shouldOpenReview = true;
-      if (action.arguments.summary) {
+      if (action.payload.summary) {
         nextDraft = {
           ...nextDraft,
           plan: {
             ...nextDraft.plan,
-            advice: dedupeTodos([String(action.arguments.summary), ...nextDraft.plan.advice]),
+            advice: dedupeTodos([String(action.payload.summary), ...nextDraft.plan.advice]),
           },
         };
       }
@@ -3616,10 +3808,10 @@ function applyLlmAssistantActions(draft: MorningReviewDraft, actions: LlmAssista
   return { draft: nextDraft, shouldOpenReview };
 }
 
-function applyLlmScheduleAction(draft: MorningReviewDraft, action: { date_text?: string; time?: string; title?: string; memo?: string }) {
+function applyLlmScheduleAction(draft: MorningReviewDraft, action: { date_text?: string; date?: string; time?: string; title?: string; memo?: string }) {
   const title = String(action.title ?? '').trim();
   if (!title) return draft;
-  const time = createLlmScheduleTime(action.date_text, action.time);
+  const time = createLlmScheduleTime(action.date_text || action.date, action.time);
   return appendConversationSchedules(draft, [{ time, task: title }], title);
 }
 
@@ -3644,23 +3836,41 @@ function applyLlmShoppingAction(draft: MorningReviewDraft, action: { name?: stri
 
 function applyLlmFollowUpAction(
   draft: MorningReviewDraft,
-  action: { person_name?: string; action?: string; method?: FollowUpKind; due_text?: string; memo?: string },
+  action: { person_name?: string; title?: string; action?: string; method?: FollowUpKind; due_text?: string; due?: string; memo?: string },
 ) {
-  const name = String(action.person_name ?? '').trim();
-  const content = String(action.action ?? '').trim();
+  const parsed = parseLlmFollowUpPayload(action);
+  const name = parsed.name;
+  const content = parsed.content;
   if (!name || !content) return draft;
   const item = createConversationFollowUpFromParts(name, content, normalizeLlmFollowUpKind(action.method));
-  const dueItem = applyFollowUpDueFromReply(item, String(action.due_text ?? ''));
+  const dueItem = applyFollowUpDueFromReply(item, String(action.due_text || action.due || ''));
   return appendConversationFollowUp(draft, { ...dueItem, content: [content, action.memo].filter(Boolean).join(' ') }, content);
+}
+
+function parseLlmFollowUpPayload(action: { person_name?: string; title?: string; action?: string }) {
+  const title = String(action.title ?? '').trim();
+  let name = String(action.person_name ?? '').trim();
+  let content = String(action.action ?? '').trim();
+  if ((!name || !content) && title) {
+    const match = title.match(/^(.+?)(?:さん)?(?:へ|に)(.+)$/);
+    if (match) {
+      name = name || match[1].replace(/さん$/, '').trim();
+      content = content || match[2].trim();
+    } else {
+      content = content || title;
+    }
+  }
+  return { content, name };
 }
 
 function applyLlmGoogleCalendarAction(
   draft: MorningReviewDraft,
-  action: { date_text?: string; time?: string; title?: string; memo?: string },
+  action: { date_text?: string; date?: string; time?: string; title?: string; memo?: string },
 ) {
   const title = String(action.title ?? '').trim();
   if (!title) return draft;
   return applyLlmScheduleAction(draft, {
+    date: action.date,
     date_text: action.date_text,
     memo: action.memo,
     time: action.time,
@@ -4458,6 +4668,9 @@ function AssistantRuntimeDebugPanel({ debug }: { debug: AssistantRuntimeDebug })
       <small>Assistant Mode: {debug.mode}</small>
       <small>OpenAI Model: {debug.model || 'not checked'}</small>
       <small>Tool Calls: {debug.toolCalls.length ? debug.toolCalls.join(', ') : 'none'}</small>
+      <small>Raw Tool Calls Count: {debug.rawToolCallsCount}</small>
+      <small>Actions Count: {debug.actionsCount}</small>
+      <small>Last Actions: {debug.lastActions.length ? debug.lastActions.join(', ') : 'none'}</small>
       <small>Last User Intent: {debug.lastUserIntent || 'none'}</small>
       <small>Last Assistant Action: {debug.lastAssistantAction || 'none'}</small>
       <small>Fallback Error: {debug.fallbackError || 'none'}</small>

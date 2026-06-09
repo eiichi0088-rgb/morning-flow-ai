@@ -5,8 +5,22 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v5.2.0 is based on v5.1.1 plus Autonomous Conversation Flow.
+6. v5.2.1 is based on v5.2.0 plus Tool Calling Repair.
 
+
+## Version 5.2.1 Tool Calling Repair - 2026-06-10
+
+- Screen display: v5.2.1
+- ZIP: morning-flow-ai-v5.2.1.zip
+- Next planned version: Version 5.2.2
+- `/api/assistant` returns normalized `actions` using `type` and `payload`, with debug metadata for raw tool calls and action counts.
+- Client action handling accepts both normalized actions and legacy `name` / `arguments` actions.
+- Tool calls for schedule, shopping, Follow Up, Google Calendar candidates, priority updates, and review cards are applied into the Review Draft.
+- Context repair actions let "全部追加して" and "保存して" operate on candidates already held in the conversation draft when the API returns no tool calls.
+- The LLM prompt now requires actionable candidates to be tool-called immediately, including "what order should I do this in" turns.
+- "保存して", "これでOK", and "今日をスタート" open Review Card from the existing draft instead of an empty draft.
+- Developer Mode shows Tool Calls, Raw Tool Calls Count, Actions Count, Last Actions, Last User Intent, Last Assistant Action, and Fallback Error.
+- v5.2.0 natural conversation rules, no A/B selection, LLM First Architecture, and v5.1.1 voice stability remain preserved.
 
 ## Version 5.2.0 Autonomous Conversation Flow - 2026-06-10
 

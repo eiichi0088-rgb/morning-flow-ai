@@ -149,11 +149,12 @@ export default {
         ],
       });
 
-      const actions = extractToolCalls(first);
+      const rawToolCalls = extractToolCalls(first);
+      const actions = rawToolCalls.map(normalizeToolCallAction).filter(Boolean);
       let finalText = extractOutputText(first);
 
-      if (actions.length) {
-        const toolOutputs = actions.map((action) => ({
+      if (rawToolCalls.length) {
+        const toolOutputs = rawToolCalls.map((action) => ({
           type: 'function_call_output',
           call_id: action.call_id,
           output: JSON.stringify({ ok: true, action: action.name, received: action.arguments }),
@@ -166,8 +167,15 @@ export default {
       }
 
       return Response.json({
-        actions: actions.map(({ call_id, ...action }) => action),
+        actions,
         assistantLines: splitAssistantText(finalText),
+        debug: {
+          actionsCount: actions.length,
+          mode: 'llm-native',
+          model: process.env.OPENAI_ASSISTANT_MODEL || defaultModel,
+          rawToolCallsCount: rawToolCalls.length,
+          toolCalls: rawToolCalls.map((action) => action.name),
+        },
         model: process.env.OPENAI_ASSISTANT_MODEL || defaultModel,
         mode: 'llm-native',
       });
@@ -213,6 +221,69 @@ function extractToolCalls(response) {
       name: item.name,
     }))
     .filter((item) => item.name && item.call_id);
+}
+
+function normalizeToolCallAction(action) {
+  if (!action?.name || !action?.arguments) return null;
+  return {
+    arguments: action.arguments,
+    name: action.name,
+    payload: normalizeActionPayload(action.name, action.arguments),
+    type: action.name,
+  };
+}
+
+function normalizeActionPayload(type, args) {
+  if (type === 'add_schedule') {
+    return {
+      date: stringValue(args.date_text),
+      memo: stringValue(args.memo),
+      time: stringValue(args.time),
+      title: stringValue(args.title),
+    };
+  }
+  if (type === 'add_shopping_item') {
+    return {
+      category: stringValue(args.category),
+      name: stringValue(args.name),
+      quantity: stringValue(args.quantity),
+    };
+  }
+  if (type === 'add_follow_up') {
+    const person = stringValue(args.person_name);
+    const action = stringValue(args.action);
+    return {
+      action,
+      due: stringValue(args.due_text),
+      memo: stringValue(args.memo),
+      method: stringValue(args.method),
+      person_name: person,
+      title: [person, action].filter(Boolean).join('へ'),
+    };
+  }
+  if (type === 'add_google_calendar_candidate') {
+    return {
+      date: stringValue(args.date_text),
+      memo: stringValue(args.memo),
+      time: stringValue(args.time),
+      title: stringValue(args.title),
+    };
+  }
+  if (type === 'update_priority') {
+    return {
+      items: Array.isArray(args.items) ? args.items : [],
+    };
+  }
+  if (type === 'show_review_card') {
+    return {
+      summary: stringValue(args.summary),
+    };
+  }
+  return args;
+}
+
+function stringValue(value) {
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 function extractOutputText(response) {
@@ -283,11 +354,14 @@ Tool policy:
 - Use add_google_calendar_candidate for future or calendar-worthy events.
 - Use update_priority when the user asks what to do first, or after multiple candidates exist.
 - Use show_review_card when the user says to save, confirm, OK, or asks to start the day.
+- When the user mentions actionable schedule, shopping, follow-up, or calendar candidates, call the matching tools immediately to keep those candidates in currentDraft. This is required even when the user is only asking for a recommended order.
+- When the user asks "what order should I do this in", first call tools for every actionable candidate in the utterance, then call update_priority, then answer naturally.
 - If the user says "全部追加して", call every needed tool from the current utterance and currentDraft: calendar candidates, shopping items, Follow Up items, priority if useful, then summarize what was added.
 - If the user says "買い物だけ", "買い物も入れて", or equivalent, call only add_shopping_item for shopping items.
 - If the user says "カレンダーに入れて" or equivalent, call only add_google_calendar_candidate for calendar-worthy events.
 - If the user says "LINEも登録して", "フォローに入れて", or equivalent, call add_follow_up for the relevant contact item.
 - If the user excludes something, such as "カレンダーはまだいい" or "やっぱり買い物だけ", honor that exclusion and do not call tools for the excluded category.
+- If the user says "保存して", "これでOK", or "今日をスタート", call show_review_card using the existing currentDraft. Do not create an empty review card.
 
 Clarify instead of guessing when an important date, time, item, or contact method is missing.
 For future events, ask whether to register in Google Calendar when appropriate.
