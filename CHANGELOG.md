@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## Version 5.1.0 - 2026-06-09
+
+- Strengthened LLM First Architecture so the OpenAI Responses API path is the standard home conversation flow.
+- Kept the v4 rule engine as fallback-only behavior when the LLM endpoint is unavailable.
+- Added Developer Mode Assistant Debug showing Assistant Mode, OpenAI Model, Tool Calls, timestamp, and fallback error.
+- LLM-generated review summaries now appear before the fixed count summary when available.
+- Tool Calling remains the app reflection layer for schedule, shopping, Follow Up, Google Calendar candidate, priority update, and review card actions.
+
 ## Version 5.0.0 - 2026-06-09
 
 - Added LLM Native Assistant Core using a server-side OpenAI Responses API endpoint.

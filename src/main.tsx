@@ -232,7 +232,18 @@ type LlmAssistantAction =
 type LlmAssistantResult = {
   assistantLines: string[];
   draft: MorningReviewDraft;
+  mode: 'llm-native' | 'fallback';
+  model: string;
   shouldOpenReview: boolean;
+  toolCalls: string[];
+};
+
+type AssistantRuntimeDebug = {
+  error: string;
+  mode: 'not checked' | 'llm-native' | 'fallback';
+  model: string;
+  toolCalls: string[];
+  updatedAt: string;
 };
 
 type AiInboxItem = {
@@ -1005,6 +1016,13 @@ function App() {
   const [reviewStatuses, setReviewStatuses] = React.useState<Record<string, ReviewStatus>>({});
   const [carriedTodos, setCarriedTodos] = React.useState<string[]>([]);
   const [morningReviewDraft, setMorningReviewDraft] = React.useState<MorningReviewDraft | null>(null);
+  const [assistantRuntimeDebug, setAssistantRuntimeDebug] = React.useState<AssistantRuntimeDebug>(() => ({
+    error: '',
+    mode: 'not checked',
+    model: '',
+    toolCalls: [],
+    updatedAt: '',
+  }));
   const [conversationDraft, setConversationDraft] = React.useState<MorningReviewDraft>(createEmptyConversationDraft);
   const [conversationMessages, setConversationMessages] = React.useState<AiConversationMessage[]>(createInitialConversationMessages);
   const [pendingConversationIntent, setPendingConversationIntent] = React.useState<PendingConversationIntent | null>(null);
@@ -1488,6 +1506,13 @@ function App() {
         shouldOpenReview = llmResult.shouldOpenReview;
         nextPendingIntent = null;
         nextPendingFollowUp = null;
+        setAssistantRuntimeDebug({
+          error: '',
+          mode: 'llm-native',
+          model: llmResult.model,
+          toolCalls: llmResult.toolCalls,
+          updatedAt: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        });
       } catch (error) {
         console.warn('[MORNING FLOW AI] LLM assistant fallback', error);
         const result = processConversationTurn(conversationDraft, normalized, pendingConversationIntent, pendingConversationFollowUp);
@@ -1496,6 +1521,13 @@ function App() {
         shouldOpenReview = result.shouldOpenReview;
         nextPendingIntent = result.pendingIntent;
         nextPendingFollowUp = result.pendingFollowUp;
+        setAssistantRuntimeDebug({
+          error: error instanceof Error ? error.message : String(error),
+          mode: 'fallback',
+          model: '',
+          toolCalls: [],
+          updatedAt: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        });
       }
 
       setConversationDraft(nextDraft);
@@ -2887,6 +2919,7 @@ function App() {
         </div>
 
         <AiConversationPanel messages={conversationMessages} />
+        {isDeveloperModeEnabled() && <AssistantRuntimeDebugPanel debug={assistantRuntimeDebug} />}
 
         {false && hasEditableTranscript && (
           <TranscriptEditor
@@ -3336,7 +3369,10 @@ async function processLlmAssistantTurn({
   return {
     assistantLines: dedupeConversationLines(safeStringArray(payload?.assistantLines).length ? safeStringArray(payload.assistantLines) : [fallbackLine]),
     draft: applied.draft,
+    mode: payload?.mode === 'llm-native' ? 'llm-native' : 'llm-native',
+    model: String(payload?.model ?? ''),
     shouldOpenReview: applied.shouldOpenReview,
+    toolCalls: actions.map((action) => action.name),
   };
 }
 
@@ -3790,10 +3826,12 @@ function createAssistantSummaryLines(draft: MorningReviewDraft) {
   const followUpCount = draft.followUpCandidates.length;
   const googleCount = createCalendarEvents(draft.plan).length;
   const priorities = createAssistantPriorityItems(draft);
+  const llmSummary = draft.plan.advice.find((item) => item && item.length > 12);
   const comment = priorities.length
     ? `AI\u30b3\u30e1\u30f3\u30c8: \u4eca\u65e5\u306f${priorities.join('\u3001')}\u306e\u9806\u3067\u9032\u3081\u308b\u3068\u52b9\u7387\u7684\u3067\u3059\u3002`
     : 'AI\u30b3\u30e1\u30f3\u30c8: \u4eca\u65e5\u306e\u5019\u88dc\u3092\u4f1a\u8a71\u3067\u5c11\u3057\u305a\u3064\u6574\u3048\u307e\u3057\u3087\u3046\u3002';
   return [
+    ...(llmSummary ? [`AI\u8981\u7d04: ${llmSummary}`] : []),
     `AI\u30b5\u30de\u30ea\u30fc: \u4eca\u65e5\u306e\u4e88\u5b9a ${scheduleCount}\u4ef6 / \u8cb7\u3044\u7269 ${shoppingCount}\u4ef6 / Follow Up ${followUpCount}\u4ef6 / Google\u30ab\u30ec\u30f3\u30c0\u30fc ${googleCount}\u4ef6`,
     comment,
   ];
@@ -4190,6 +4228,19 @@ function AiConversationPanel({ messages }: { messages: AiConversationMessage[] }
         ))}
       </div>
     </section>
+  );
+}
+
+function AssistantRuntimeDebugPanel({ debug }: { debug: AssistantRuntimeDebug }) {
+  return (
+    <details className="follow-up-debug-details">
+      <summary>Assistant Debug</summary>
+      <small>Assistant Mode: {debug.mode}</small>
+      <small>OpenAI Model: {debug.model || 'not checked'}</small>
+      <small>Tool Calls: {debug.toolCalls.length ? debug.toolCalls.join(', ') : 'none'}</small>
+      <small>Updated: {debug.updatedAt || 'not checked'}</small>
+      <small>Error: {debug.error || 'none'}</small>
+    </details>
   );
 }
 

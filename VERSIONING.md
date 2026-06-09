@@ -5,8 +5,19 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v5.0.0 is based on v4.4.0 plus LLM Native Assistant Core.
+6. v5.1.0 is based on v5.0.0 plus LLM First Architecture.
 
+
+## Version 5.1.0 LLM First Architecture - 2026-06-09
+
+- Screen display: v5.1.0
+- ZIP: morning-flow-ai-v5.1.0.zip
+- Next planned version: Version 5.1.1
+- Home conversation standard path is OpenAI Responses API first.
+- Rule engine is retained as fallback-only behavior when the LLM assistant endpoint is unavailable.
+- Developer Mode shows Assistant Mode, OpenAI Model, Tool Calls, timestamp, and fallback error.
+- Review Card prefers LLM-generated summary text when the assistant provides it through show_review_card.
+- Tool Calling remains the app action boundary for schedule, shopping, Follow Up, Google Calendar candidate, priority update, and review card actions.
 
 ## Version 5.0.0 LLM Native Assistant Core - 2026-06-09
 
