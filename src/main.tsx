@@ -221,6 +221,20 @@ type ConversationTurnResult = {
 
 type ProactiveSuggestionKind = 'bank' | 'shopping' | 'follow_up' | 'follow_up_due' | 'google_calendar';
 
+type LlmAssistantAction =
+  | { name: 'add_schedule'; arguments: { date_text?: string; time?: string; title?: string; memo?: string } }
+  | { name: 'add_shopping_item'; arguments: { name?: string; quantity?: string; category?: string } }
+  | { name: 'add_follow_up'; arguments: { person_name?: string; action?: string; method?: FollowUpKind; due_text?: string; memo?: string } }
+  | { name: 'add_google_calendar_candidate'; arguments: { date_text?: string; time?: string; title?: string; memo?: string } }
+  | { name: 'update_priority'; arguments: { items?: { title?: string; reason?: string }[] } }
+  | { name: 'show_review_card'; arguments: { summary?: string } };
+
+type LlmAssistantResult = {
+  assistantLines: string[];
+  draft: MorningReviewDraft;
+  shouldOpenReview: boolean;
+};
+
 type AiInboxItem = {
   id: string;
   text: string;
@@ -1442,7 +1456,7 @@ function App() {
   }, []);
 
   const processMorningConversationTurn = React.useCallback(
-    (text: string) => {
+    async (text: string) => {
       const normalized = text.trim();
       if (!normalized) return;
 
@@ -1454,10 +1468,40 @@ function App() {
       setMorningFollowUpMessage('');
       setInterimTranscript('');
 
-      const result = processConversationTurn(conversationDraft, normalized, pendingConversationIntent, pendingConversationFollowUp);
-      setConversationDraft(result.draft);
-      setPendingConversationIntent(result.pendingIntent);
-      setPendingConversationFollowUp(result.pendingFollowUp);
+      let nextDraft = conversationDraft;
+      let assistantLines: string[] = [];
+      let shouldOpenReview = false;
+      let nextPendingIntent = pendingConversationIntent;
+      let nextPendingFollowUp = pendingConversationFollowUp;
+
+      try {
+        const llmResult = await processLlmAssistantTurn({
+          conversationDraft,
+          conversationMessages,
+          followUps,
+          plan,
+          shoppingItems,
+          text: normalized,
+        });
+        nextDraft = llmResult.draft;
+        assistantLines = llmResult.assistantLines;
+        shouldOpenReview = llmResult.shouldOpenReview;
+        nextPendingIntent = null;
+        nextPendingFollowUp = null;
+      } catch (error) {
+        console.warn('[MORNING FLOW AI] LLM assistant fallback', error);
+        const result = processConversationTurn(conversationDraft, normalized, pendingConversationIntent, pendingConversationFollowUp);
+        nextDraft = result.draft;
+        assistantLines = result.assistantLines;
+        shouldOpenReview = result.shouldOpenReview;
+        nextPendingIntent = result.pendingIntent;
+        nextPendingFollowUp = result.pendingFollowUp;
+      }
+
+      setConversationDraft(nextDraft);
+      setPendingConversationIntent(nextPendingIntent);
+      setPendingConversationFollowUp(nextPendingFollowUp);
+      const result = { assistantLines, draft: nextDraft, shouldOpenReview };
       setConversationMessages((current) => [
         ...current,
         {
@@ -1478,7 +1522,7 @@ function App() {
         setMorningReviewDraft(result.draft);
       }
     },
-    [conversationDraft, pendingConversationFollowUp, pendingConversationIntent],
+    [conversationDraft, conversationMessages, followUps, pendingConversationFollowUp, pendingConversationIntent, plan, shoppingItems],
   );
 
   const routeFinalVoiceText = React.useCallback(
@@ -3250,6 +3294,186 @@ function createEmptyConversationDraft(): MorningReviewDraft {
     shoppingUpdatedAt: new Date().toISOString(),
     sourceText: '',
   };
+}
+
+async function processLlmAssistantTurn({
+  conversationDraft,
+  conversationMessages,
+  followUps,
+  plan,
+  shoppingItems,
+  text,
+}: {
+  conversationDraft: MorningReviewDraft;
+  conversationMessages: AiConversationMessage[];
+  followUps: FollowUpItem[];
+  plan: MorningPlan | null;
+  shoppingItems: ShoppingItem[];
+  text: string;
+}): Promise<LlmAssistantResult> {
+  const response = await fetch('/api/assistant', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      conversationMessages,
+      currentDraft: conversationDraft,
+      savedFollowUps: followUps,
+      savedPlan: plan,
+      savedShoppingItems: shoppingItems,
+      userText: text,
+    }),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(payload?.message ?? 'LLM assistant request failed.');
+  }
+
+  const actions = normalizeLlmAssistantActions(payload?.actions);
+  const applied = applyLlmAssistantActions(conversationDraft, actions, text);
+  const fallbackLine = actions.length
+    ? '内容を理解して候補へ反映しました。保存するときは「保存して」と話してください。'
+    : '内容を受け取りました。必要な確認があれば続けて質問します。';
+  return {
+    assistantLines: dedupeConversationLines(safeStringArray(payload?.assistantLines).length ? safeStringArray(payload.assistantLines) : [fallbackLine]),
+    draft: applied.draft,
+    shouldOpenReview: applied.shouldOpenReview,
+  };
+}
+
+function normalizeLlmAssistantActions(value: unknown): LlmAssistantAction[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const action = item as { name?: unknown; arguments?: unknown };
+      if (typeof action.name !== 'string' || !action.arguments || typeof action.arguments !== 'object') return null;
+      return { name: action.name, arguments: action.arguments } as LlmAssistantAction;
+    })
+    .filter((item): item is LlmAssistantAction => Boolean(item));
+}
+
+function safeStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String).map((item) => item.trim()).filter(Boolean) : [];
+}
+
+function applyLlmAssistantActions(draft: MorningReviewDraft, actions: LlmAssistantAction[], sourceText: string) {
+  let nextDraft = { ...draft, sourceText: appendVoiceText(draft.sourceText, sourceText) };
+  let shouldOpenReview = false;
+  for (const action of actions) {
+    if (action.name === 'add_schedule') {
+      nextDraft = applyLlmScheduleAction(nextDraft, action.arguments);
+    } else if (action.name === 'add_shopping_item') {
+      nextDraft = applyLlmShoppingAction(nextDraft, action.arguments);
+    } else if (action.name === 'add_follow_up') {
+      nextDraft = applyLlmFollowUpAction(nextDraft, action.arguments);
+    } else if (action.name === 'add_google_calendar_candidate') {
+      nextDraft = applyLlmGoogleCalendarAction(nextDraft, action.arguments);
+    } else if (action.name === 'update_priority') {
+      nextDraft = applyLlmPriorityAction(nextDraft, action.arguments);
+    } else if (action.name === 'show_review_card') {
+      shouldOpenReview = true;
+      if (action.arguments.summary) {
+        nextDraft = {
+          ...nextDraft,
+          plan: {
+            ...nextDraft.plan,
+            advice: dedupeTodos([String(action.arguments.summary), ...nextDraft.plan.advice]),
+          },
+        };
+      }
+    }
+  }
+  return { draft: nextDraft, shouldOpenReview };
+}
+
+function applyLlmScheduleAction(draft: MorningReviewDraft, action: { date_text?: string; time?: string; title?: string; memo?: string }) {
+  const title = String(action.title ?? '').trim();
+  if (!title) return draft;
+  const time = createLlmScheduleTime(action.date_text, action.time);
+  return appendConversationSchedules(draft, [{ time, task: title }], title);
+}
+
+function applyLlmShoppingAction(draft: MorningReviewDraft, action: { name?: string; quantity?: string; category?: string }) {
+  const name = String(action.name ?? '').trim();
+  if (!name) return draft;
+  const item: ShoppingItem = {
+    addedAt: new Date().toISOString(),
+    category: classifyShoppingItem(name),
+    completed: false,
+    id: createLocalShoppingItemId(name),
+    name,
+    quantity: String(action.quantity ?? '').trim(),
+    source: 'voice',
+  };
+  return {
+    ...draft,
+    shoppingItems: postProcessShoppingItems([...draft.shoppingItems, item]),
+    shoppingUpdatedAt: new Date().toISOString(),
+  };
+}
+
+function applyLlmFollowUpAction(
+  draft: MorningReviewDraft,
+  action: { person_name?: string; action?: string; method?: FollowUpKind; due_text?: string; memo?: string },
+) {
+  const name = String(action.person_name ?? '').trim();
+  const content = String(action.action ?? '').trim();
+  if (!name || !content) return draft;
+  const item = createConversationFollowUpFromParts(name, content, normalizeLlmFollowUpKind(action.method));
+  const dueItem = applyFollowUpDueFromReply(item, String(action.due_text ?? ''));
+  return appendConversationFollowUp(draft, { ...dueItem, content: [content, action.memo].filter(Boolean).join(' ') }, content);
+}
+
+function applyLlmGoogleCalendarAction(
+  draft: MorningReviewDraft,
+  action: { date_text?: string; time?: string; title?: string; memo?: string },
+) {
+  const title = String(action.title ?? '').trim();
+  if (!title) return draft;
+  return applyLlmScheduleAction(draft, {
+    date_text: action.date_text,
+    memo: action.memo,
+    time: action.time,
+    title,
+  });
+}
+
+function applyLlmPriorityAction(draft: MorningReviewDraft, action: { items?: { title?: string; reason?: string }[] }) {
+  const items = Array.isArray(action.items) ? action.items : [];
+  const titles = items.map((item) => String(item.title ?? '').trim()).filter(Boolean).slice(0, 3);
+  const reasons = items
+    .map((item) => [item.title, item.reason].filter(Boolean).join(': '))
+    .filter(Boolean)
+    .slice(0, 3);
+  if (!titles.length && !reasons.length) return draft;
+  return {
+    ...draft,
+    plan: {
+      ...draft.plan,
+      advice: dedupeTodos([...reasons, ...draft.plan.advice]),
+      priorities: {
+        ...draft.plan.priorities,
+        highest: dedupeTodos([...titles, ...draft.plan.priorities.highest]).slice(0, 3),
+      },
+    },
+  };
+}
+
+function createLlmScheduleTime(dateText?: string, timeText?: string) {
+  const date = String(dateText ?? '').trim();
+  const time = String(timeText ?? '').trim();
+  return [date, normalizeLlmTimeText(time)].filter(Boolean).join(' ') || '時間調整';
+}
+
+function normalizeLlmTimeText(value: string) {
+  const time = parseMemoryTimeAnswer(value);
+  return time || value;
+}
+
+function normalizeLlmFollowUpKind(value: unknown): FollowUpKind {
+  return value === 'phone' || value === 'line' || value === 'email' || value === 'sms' || value === 'other'
+    ? value
+    : 'other';
 }
 
 function processConversationTurn(

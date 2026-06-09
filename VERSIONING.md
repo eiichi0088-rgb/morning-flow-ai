@@ -5,8 +5,19 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v4.4.0 is based on v4.3.0 plus Proactive Assistant Engine.
+6. v5.0.0 is based on v4.4.0 plus LLM Native Assistant Core.
 
+
+## Version 5.0.0 LLM Native Assistant Core - 2026-06-09
+
+- Screen display: v5.0.0
+- ZIP: morning-flow-ai-v5.0.0.zip
+- Next planned version: Version 5.0.1
+- Home conversation now routes first through a server-side OpenAI Responses API assistant endpoint.
+- Tool calling actions are supported for add_schedule, add_shopping_item, add_follow_up, add_google_calendar_candidate, update_priority, and show_review_card.
+- The browser receives only assistant output and tool actions; `OPENAI_API_KEY` remains server-side.
+- Existing v4 rule engines remain as a safety fallback when the LLM endpoint is unavailable.
+- LLM tool actions write into the existing Morning Review Draft, so Review Card, Shopping, Follow Up, Google Calendar, Supabase sync, and save flow foundations remain preserved.
 
 ## Version 4.4.0 Proactive Assistant Engine - 2026-06-09
 

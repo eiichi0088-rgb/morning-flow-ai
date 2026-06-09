@@ -6,6 +6,9 @@
     "api/plan.mjs": {
       "maxDuration": 30
     },
+    "api/assistant.mjs": {
+      "maxDuration": 30
+    },
     "api/shopping.mjs": {
       "maxDuration": 30
     },

@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## Version 5.0.0 - 2026-06-09
+
+- Added LLM Native Assistant Core using a server-side OpenAI Responses API endpoint.
+- Added tool calling support for schedule, shopping item, Follow Up, Google Calendar candidate, priority update, and review card actions.
+- Home conversation now tries the LLM assistant first and only falls back to the existing rule engine if the API is unavailable.
+- Added `/api/assistant` so `OPENAI_API_KEY` stays server-side and is never exposed to the Vite client.
+- LLM tool results are applied to the existing Morning Review Draft structure, preserving Review Card, Shopping, Follow Up, Google Calendar, Supabase sync, and existing save flow foundations.
+- Added Vercel function configuration for the assistant endpoint.
+
 ## Version 4.4.0 - 2026-06-09
 
 - Added Proactive Assistant Engine so the AI secretary offers contextual suggestions after important confirmations.
