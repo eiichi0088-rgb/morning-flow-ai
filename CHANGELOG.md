@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## Version 6.1.0 - 2026-06-10
+
+- Auto-generates the Review Draft as soon as OpenAI structured JSON returns schedule, shopping, Follow Up, or Google Calendar candidates.
+- Removes the need for a separate "全部追加して" step in the normal v6 flow.
+- Treats "お願いします", "保存して", "これでOK", "登録して", and "進めて" as save approval when a Review Draft is pending.
+- Prevents empty Review Cards by opening review only when the parsed JSON produced draft items.
+- Keeps OpenAI JSON as the source of truth without frontend reclassification or re-extraction.
+- Developer Debug now shows Draft Auto Generated, Draft Item Count, Pending Save, and Last Parsed JSON details.
+
 ## Version 6.0.0 - 2026-06-10
 
 - Reworked the normal assistant path into Pure LLM Secretary Core.

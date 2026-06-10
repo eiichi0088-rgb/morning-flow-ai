@@ -7,6 +7,17 @@
 5. ZIP should include `dist` after build.
 6. v5.3.2 is based on v5.3.1 plus Developer Debug Visibility Fix.
 
+## Version 6.1.0 Auto Review Draft - 2026-06-10
+
+- Screen display: v6.1.0
+- ZIP: morning-flow-ai-v6.1.0.zip
+- Next planned version: Version 6.1.1
+- Review Draft is generated automatically when OpenAI structured JSON contains actionable items.
+- Users no longer need to say "全部追加して" before reviewing the draft.
+- Save approval phrases such as "お願いします", "保存して", "これでOK", "登録して", and "進めて" confirm the pending Review Draft.
+- Empty Review Cards are avoided by opening review only when JSON produced draft items.
+- Developer Debug includes Draft Auto Generated, Draft Item Count, Pending Save, and Last Parsed JSON details.
+
 ## Version 6.0.0 Pure LLM Secretary Core - 2026-06-10
 
 - Screen display: v6.0.0
