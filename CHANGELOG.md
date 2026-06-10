@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## Version 5.3.2 - 2026-06-10
+
+- Made the top-right Sparkles button open Developer Debug when Developer Mode is enabled.
+- Added a Settings screen Developer Mode passcode toggle so the debug button can be enabled on real devices.
+- Added a screenshot-friendly Developer Debug dialog with a close button.
+- The dialog shows Assistant Mode, Assistant Lines Count, Raw Tool Calls Count, Actions Count, Extracted Count, Schedule Count, Shopping Count, Follow Up Count, Calendar Count, Lost Entity Count, Last Assistant Response, Last Actions, and Fallback Error.
+- Kept Developer Debug hidden from normal users by rendering the clickable debug button and dialog only when Developer Mode is on.
+- Preserved the existing inline Assistant Debug and Voice Recognition Debug panels for Developer Mode.
+
 ## Version 5.3.1 - 2026-06-10
 
 - Added Full Entity Coverage rules to the LLM instructions so extracted candidates must not be dropped before reply or tool calling.

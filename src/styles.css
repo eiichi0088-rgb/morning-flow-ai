@@ -423,6 +423,21 @@ h1 {
   backdrop-filter: blur(18px);
 }
 
+.debug-brand-button {
+  cursor: pointer;
+  appearance: none;
+}
+
+.debug-brand-button:focus-visible {
+  outline: 2px solid rgba(141, 229, 255, 0.86);
+  outline-offset: 3px;
+}
+
+.debug-brand-button:hover {
+  border-color: rgba(141, 229, 255, 0.58);
+  color: #ffffff;
+}
+
 .home-brand-hero {
   position: relative;
   width: 100%;
@@ -1879,6 +1894,13 @@ h1 {
   display: block;
   color: rgba(248, 252, 255, 0.94);
   font-size: 1rem;
+}
+
+.settings-help-text {
+  margin: 0;
+  color: rgba(226, 235, 245, 0.76);
+  font-size: 0.88rem;
+  line-height: 1.55;
 }
 
 .settings-label {
@@ -3896,6 +3918,77 @@ h1 {
   grid-template-columns: 1fr 1fr;
   gap: 11px;
   margin-top: 4px;
+}
+
+.developer-debug-backdrop {
+  place-items: center;
+  padding: 16px;
+}
+
+.developer-debug-dialog {
+  width: min(100%, 760px);
+  max-height: min(88vh, 760px);
+  overflow: auto;
+  border-radius: 18px;
+}
+
+.developer-debug-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.developer-debug-header span,
+.developer-debug-section span,
+.developer-debug-metric span {
+  color: rgba(141, 229, 255, 0.84);
+  font-size: 0.75rem;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.developer-debug-header h2 {
+  margin-top: 3px;
+}
+
+.developer-debug-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.developer-debug-metric {
+  min-height: 72px;
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid rgba(141, 229, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.developer-debug-metric strong {
+  color: #ffffff;
+  font-size: 1rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.developer-debug-section {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.developer-debug-section p {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .danger-button {

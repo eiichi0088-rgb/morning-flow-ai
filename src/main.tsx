@@ -26,6 +26,7 @@ import {
   Sparkles,
   Square,
   Trash2,
+  X,
 } from 'lucide-react';
 import { createAiMorningPlan, type MorningPlan } from './services/aiPlanner';
 import {
@@ -1074,6 +1075,7 @@ function App() {
   const [reviewStatuses, setReviewStatuses] = React.useState<Record<string, ReviewStatus>>({});
   const [carriedTodos, setCarriedTodos] = React.useState<string[]>([]);
   const [morningReviewDraft, setMorningReviewDraft] = React.useState<MorningReviewDraft | null>(null);
+  const [isDeveloperDebugOpen, setIsDeveloperDebugOpen] = React.useState(false);
   const [assistantRuntimeDebug, setAssistantRuntimeDebug] = React.useState<AssistantRuntimeDebug>(() => ({
     actionsCount: 0,
     assistantLinesCount: 0,
@@ -3097,9 +3099,20 @@ function App() {
             <p className="eyebrow">MORNING FLOW AI <span>{appVersion}</span></p>
             <p className="hero-subtitle">AI Conversation Core</p>
           </div>
-          <div className="brand-mark" aria-hidden="true">
-            <Sparkles size={21} />
-          </div>
+          {isDeveloperModeEnabled() ? (
+            <button
+              className="brand-mark debug-brand-button"
+              onClick={() => setIsDeveloperDebugOpen(true)}
+              type="button"
+              aria-label="Developer Debugを開く"
+            >
+              <Sparkles size={21} />
+            </button>
+          ) : (
+            <div className="brand-mark" aria-hidden="true">
+              <Sparkles size={21} />
+            </div>
+          )}
         </div>
 
         <section className="home-brand-hero v4-brand-hero" aria-label="MORNING FLOW AI brand visual">
@@ -3161,6 +3174,13 @@ function App() {
             <AssistantRuntimeDebugPanel debug={assistantRuntimeDebug} />
             <VoiceRecognitionDebugPanel debug={voiceRecognitionDebug} />
           </>
+        )}
+        {isDeveloperModeEnabled() && isDeveloperDebugOpen && (
+          <DeveloperDebugDialog
+            assistantDebug={assistantRuntimeDebug}
+            onClose={() => setIsDeveloperDebugOpen(false)}
+            voiceDebug={voiceRecognitionDebug}
+          />
         )}
 
         {false && hasEditableTranscript && (
@@ -5045,6 +5065,78 @@ function AssistantRuntimeDebugPanel({ debug }: { debug: AssistantRuntimeDebug })
   );
 }
 
+function DeveloperDebugDialog({
+  assistantDebug,
+  onClose,
+  voiceDebug,
+}: {
+  assistantDebug: AssistantRuntimeDebug;
+  onClose: () => void;
+  voiceDebug: VoiceRecognitionDebug;
+}) {
+  return (
+    <div className="confirm-dialog-backdrop developer-debug-backdrop" role="presentation">
+      <section className="confirm-dialog developer-debug-dialog" role="dialog" aria-modal="true" aria-label="Developer Debug">
+        <div className="developer-debug-header">
+          <div>
+            <span>Developer Debug</span>
+            <h2>Assistant Runtime</h2>
+          </div>
+          <button className="icon-ghost-button" onClick={onClose} type="button" aria-label="Developer Debugを閉じる">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="developer-debug-grid">
+          <DebugMetric label="Assistant Mode" value={assistantDebug.mode} />
+          <DebugMetric label="Assistant Lines Count" value={assistantDebug.assistantLinesCount} />
+          <DebugMetric label="Raw Tool Calls Count" value={assistantDebug.rawToolCallsCount} />
+          <DebugMetric label="Actions Count" value={assistantDebug.actionsCount} />
+          <DebugMetric label="Extracted Count" value={assistantDebug.extractedCount} />
+          <DebugMetric label="Schedule Count" value={assistantDebug.scheduleCount} />
+          <DebugMetric label="Shopping Count" value={assistantDebug.shoppingCount} />
+          <DebugMetric label="Follow Up Count" value={assistantDebug.followUpCount} />
+          <DebugMetric label="Calendar Count" value={assistantDebug.calendarCount} />
+          <DebugMetric label="Lost Entity Count" value={assistantDebug.lostEntityCount} />
+          <DebugMetric label="Fallback Error" value={assistantDebug.fallbackError || 'none'} />
+          <DebugMetric label="Voice Status" value={voiceDebug.status} />
+        </div>
+
+        <section className="developer-debug-section">
+          <span>Last Actions</span>
+          <p>{assistantDebug.lastActions.length ? assistantDebug.lastActions.join(', ') : 'none'}</p>
+        </section>
+
+        <section className="developer-debug-section">
+          <span>Last Assistant Response</span>
+          <p>{assistantDebug.lastAssistantResponse || 'none'}</p>
+        </section>
+
+        <section className="developer-debug-section">
+          <span>Extracted Entities</span>
+          <p>Schedule: {assistantDebug.extractedScheduleItems.length ? assistantDebug.extractedScheduleItems.join(', ') : 'none'}</p>
+          <p>Shopping: {assistantDebug.extractedShoppingItems.length ? assistantDebug.extractedShoppingItems.join(', ') : 'none'}</p>
+          <p>Follow Up: {assistantDebug.extractedFollowUpItems.length ? assistantDebug.extractedFollowUpItems.join(', ') : 'none'}</p>
+          <p>Calendar: {assistantDebug.extractedCalendarCandidates.length ? assistantDebug.extractedCalendarCandidates.join(', ') : 'none'}</p>
+        </section>
+
+        <button className="secondary-button" onClick={onClose} type="button">
+          閉じる
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function DebugMetric({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="developer-debug-metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
 function VoiceRecognitionDebugPanel({ debug }: { debug: VoiceRecognitionDebug }) {
   return (
     <details className="follow-up-debug-details">
@@ -5481,6 +5573,30 @@ function SettingsPage({
   onOpenGuide: () => void;
   onPreferenceChange: (preference: OnboardingPreference) => void;
 }) {
+  const [isDeveloperMode, setIsDeveloperMode] = React.useState(() => isDeveloperModeEnabled());
+  const [developerPasscode, setDeveloperPasscode] = React.useState('');
+  const [developerMessage, setDeveloperMessage] = React.useState('');
+
+  const unlockDeveloperMode = () => {
+    if (developerPasscode !== developerModePasscode) {
+      localStorage.removeItem(developerModeStorageKey);
+      setIsDeveloperMode(false);
+      setDeveloperMessage('パスコードが違います。');
+      return;
+    }
+    localStorage.setItem(developerModeStorageKey, 'true');
+    setIsDeveloperMode(true);
+    setDeveloperPasscode('');
+    setDeveloperMessage('Developer ModeをONにしました。ホーム右上のキラキラからDebugを開けます。');
+  };
+
+  const lockDeveloperMode = () => {
+    localStorage.removeItem(developerModeStorageKey);
+    setIsDeveloperMode(false);
+    setDeveloperPasscode('');
+    setDeveloperMessage('Developer ModeをOFFにしました。');
+  };
+
   return (
     <section className="hero-panel settings-page" aria-label="設定">
       <div className="top-bar">
@@ -5531,6 +5647,38 @@ function SettingsPage({
             初回ガイドを表示しない
           </label>
         </div>
+      </section>
+
+      <section className="settings-card">
+        <div>
+          <span className="settings-label">Developer Mode</span>
+          <strong>{isDeveloperMode ? 'ON' : 'OFF'}</strong>
+        </div>
+        {isDeveloperMode ? (
+          <button className="secondary-action-button" onClick={lockDeveloperMode} type="button">
+            Developer ModeをOFF
+          </button>
+        ) : (
+          <div className="developer-mode-form">
+            <label>
+              パスコード
+              <input
+                autoComplete="off"
+                inputMode="numeric"
+                onChange={(event) => {
+                  setDeveloperPasscode(event.target.value);
+                  setDeveloperMessage('');
+                }}
+                type="password"
+                value={developerPasscode}
+              />
+            </label>
+            <button className="organize-button" onClick={unlockDeveloperMode} type="button">
+              Developer ModeをON
+            </button>
+          </div>
+        )}
+        {developerMessage && <p className="settings-help-text">{developerMessage}</p>}
       </section>
 
       <button className="secondary-button" onClick={onBack} type="button">

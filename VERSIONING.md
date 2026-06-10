@@ -5,8 +5,21 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v5.3.1 is based on v5.3.0 plus Full Entity Coverage Fix.
+6. v5.3.2 is based on v5.3.1 plus Developer Debug Visibility Fix.
 
+
+## Version 5.3.2 Developer Debug Visibility Fix - 2026-06-10
+
+- Screen display: v5.3.2
+- ZIP: morning-flow-ai-v5.3.2.zip
+- Next planned version: Version 5.3.3
+- The top-right Sparkles button on the home screen opens Developer Debug when Developer Mode is enabled.
+- Settings includes a passcode-gated Developer Mode toggle for real-device access.
+- Developer Debug is hidden from normal users because the clickable debug button and dialog render only in Developer Mode.
+- The debug dialog shows Assistant Mode, Assistant Lines Count, Raw Tool Calls Count, Actions Count, Extracted Count, Schedule Count, Shopping Count, Follow Up Count, Calendar Count, Lost Entity Count, Last Assistant Response, Last Actions, and Fallback Error.
+- A close button is available in the dialog header and at the bottom of the panel.
+- Existing inline Assistant Debug and Voice Recognition Debug panels remain available in Developer Mode.
+- v5.3.1 Full Entity Coverage, v5.3.0 semantic boundaries, and v5.1.1 voice stability remain preserved.
 
 ## Version 5.3.1 Full Entity Coverage Fix - 2026-06-10
 
