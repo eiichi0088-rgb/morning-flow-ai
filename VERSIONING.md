@@ -5,8 +5,20 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v5.3.0 is based on v5.2.2 plus Semantic Entity Extraction.
+6. v5.3.1 is based on v5.3.0 plus Full Entity Coverage Fix.
 
+
+## Version 5.3.1 Full Entity Coverage Fix - 2026-06-10
+
+- Screen display: v5.3.1
+- ZIP: morning-flow-ai-v5.3.1.zip
+- Next planned version: Version 5.3.2
+- LLM instructions now require Full Entity Coverage and explicit count checks before and after assistant reply generation.
+- Full coverage actions are merged into the action pipeline so schedule, shopping, Follow Up, and calendar candidates found in the utterance are not dropped.
+- Entity coverage reporting compares expected extracted entities with final actions and warns when Lost Entity Count is nonzero.
+- Future exact-time events are counted as calendar candidates instead of duplicated as normal schedule items.
+- Developer Mode shows Extracted Count, Schedule Count, Shopping Count, Follow Up Count, Calendar Count, and Lost Entity Count.
+- v5.3.0 semantic boundaries, v5.2.2 LLM Response & Tool Recovery, no A/B selection, and v5.1.1 voice stability remain preserved.
 
 ## Version 5.3.0 Semantic Entity Extraction - 2026-06-10
 

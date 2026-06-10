@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## Version 5.3.1 - 2026-06-10
+
+- Added Full Entity Coverage rules to the LLM instructions so extracted candidates must not be dropped before reply or tool calling.
+- Full coverage actions are now merged with API, context repair, and text recovery actions to keep all detected entities through the pipeline.
+- Added entity coverage reporting and `Lost Entity Count`; the client logs a warning if expected entities are missing after action repair.
+- Future exact-time events are counted as calendar candidates rather than duplicated as ordinary schedule items.
+- Developer Debug now shows Extracted Count, Schedule Count, Shopping Count, Follow Up Count, Calendar Count, and Lost Entity Count.
+- Preserved v5.3.0 semantic classification boundaries, v5.2.2 response/tool recovery, and v5.1.1 voice stability.
+
 ## Version 5.3.0 - 2026-06-10
 
 - Reframed the LLM system instructions around Semantic Entity Extraction for schedule, shopping, Follow Up, Google Calendar candidates, priority suggestions, and assistant replies.

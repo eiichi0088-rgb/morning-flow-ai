@@ -232,12 +232,18 @@ type LlmAssistantAction =
 type LlmAssistantDebug = {
   actionsCount: number;
   assistantLinesCount: number;
+  calendarCount: number;
   extractedCalendarCandidates: string[];
   extractedFollowUpItems: string[];
   extractedScheduleItems: string[];
   extractedShoppingItems: string[];
+  extractedCount: number;
+  followUpCount: number;
   lastAssistantResponse: string;
+  lostEntityCount: number;
   rawToolCallsCount: number;
+  scheduleCount: number;
+  shoppingCount: number;
   toolCalls: string[];
 };
 
@@ -245,15 +251,21 @@ type LlmAssistantResult = {
   actionsCount: number;
   assistantLines: string[];
   assistantLinesCount: number;
+  calendarCount: number;
   draft: MorningReviewDraft;
   extractedCalendarCandidates: string[];
   extractedFollowUpItems: string[];
   extractedScheduleItems: string[];
   extractedShoppingItems: string[];
+  extractedCount: number;
+  followUpCount: number;
   lastAssistantResponse: string;
+  lostEntityCount: number;
   mode: 'llm-native' | 'fallback';
   model: string;
   rawToolCallsCount: number;
+  scheduleCount: number;
+  shoppingCount: number;
   shouldOpenReview: boolean;
   lastActions: string[];
   toolCalls: string[];
@@ -262,19 +274,25 @@ type LlmAssistantResult = {
 type AssistantRuntimeDebug = {
   actionsCount: number;
   assistantLinesCount: number;
+  calendarCount: number;
   error: string;
   extractedCalendarCandidates: string[];
   extractedFollowUpItems: string[];
   extractedScheduleItems: string[];
   extractedShoppingItems: string[];
+  extractedCount: number;
+  followUpCount: number;
   fallbackError: string;
   lastActions: string[];
   lastAssistantResponse: string;
   lastAssistantAction: string;
   lastUserIntent: string;
+  lostEntityCount: number;
   mode: 'not checked' | 'llm-native' | 'fallback';
   model: string;
   rawToolCallsCount: number;
+  scheduleCount: number;
+  shoppingCount: number;
   toolCalls: string[];
   updatedAt: string;
 };
@@ -1059,19 +1077,25 @@ function App() {
   const [assistantRuntimeDebug, setAssistantRuntimeDebug] = React.useState<AssistantRuntimeDebug>(() => ({
     actionsCount: 0,
     assistantLinesCount: 0,
+    calendarCount: 0,
     error: '',
     extractedCalendarCandidates: [],
     extractedFollowUpItems: [],
     extractedScheduleItems: [],
     extractedShoppingItems: [],
+    extractedCount: 0,
+    followUpCount: 0,
     fallbackError: '',
     lastActions: [],
     lastAssistantResponse: '',
     lastAssistantAction: '',
     lastUserIntent: '',
+    lostEntityCount: 0,
     mode: 'not checked',
     model: '',
     rawToolCallsCount: 0,
+    scheduleCount: 0,
+    shoppingCount: 0,
     toolCalls: [],
     updatedAt: '',
   }));
@@ -1580,19 +1604,25 @@ function App() {
         setAssistantRuntimeDebug({
           actionsCount: llmResult.actionsCount,
           assistantLinesCount: llmResult.assistantLinesCount,
+          calendarCount: llmResult.calendarCount,
           error: '',
           extractedCalendarCandidates: llmResult.extractedCalendarCandidates,
           extractedFollowUpItems: llmResult.extractedFollowUpItems,
           extractedScheduleItems: llmResult.extractedScheduleItems,
           extractedShoppingItems: llmResult.extractedShoppingItems,
+          extractedCount: llmResult.extractedCount,
+          followUpCount: llmResult.followUpCount,
           fallbackError: '',
           lastActions: llmResult.lastActions,
           lastAssistantResponse: llmResult.lastAssistantResponse,
           lastAssistantAction: describeAssistantAction(llmResult.toolCalls, llmResult.shouldOpenReview),
           lastUserIntent: detectNaturalUserIntent(normalized),
+          lostEntityCount: llmResult.lostEntityCount,
           mode: 'llm-native',
           model: llmResult.model,
           rawToolCallsCount: llmResult.rawToolCallsCount,
+          scheduleCount: llmResult.scheduleCount,
+          shoppingCount: llmResult.shoppingCount,
           toolCalls: llmResult.toolCalls,
           updatedAt: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         });
@@ -1613,19 +1643,25 @@ function App() {
         setAssistantRuntimeDebug({
           actionsCount: 0,
           assistantLinesCount: 0,
+          calendarCount: 0,
           error: error instanceof Error ? error.message : String(error),
           extractedCalendarCandidates: [],
           extractedFollowUpItems: [],
           extractedScheduleItems: [],
           extractedShoppingItems: [],
+          extractedCount: 0,
+          followUpCount: 0,
           fallbackError: error instanceof Error ? error.message : String(error),
           lastActions: [],
           lastAssistantResponse: '',
           lastAssistantAction: 'fallback-message-only',
           lastUserIntent: detectNaturalUserIntent(normalized),
+          lostEntityCount: 0,
           mode: 'fallback',
           model: '',
           rawToolCallsCount: 0,
+          scheduleCount: 0,
+          shoppingCount: 0,
           toolCalls: [],
           updatedAt: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         });
@@ -3571,16 +3607,21 @@ async function processLlmAssistantTurn({
   const repairedActions = apiActions.length ? [] : createContextRepairActions(conversationDraft, text);
   const textRecoveryActions = apiActions.length || repairedActions.length ? [] : createTextRecoveryActions(text);
   const semanticRecoveryActions = shouldApplySemanticRecovery(text) ? createTextRecoveryActions(text) : [];
+  const fullCoverageActions = createFullCoverageActions(text);
   const actions = repairSemanticActionBoundaries(
     apiActions.length
-      ? [...apiActions, ...semanticRecoveryActions]
+      ? [...apiActions, ...semanticRecoveryActions, ...fullCoverageActions]
       : repairedActions.length
-        ? repairedActions
-        : textRecoveryActions,
+        ? [...repairedActions, ...fullCoverageActions]
+        : [...textRecoveryActions, ...fullCoverageActions],
   );
   const debug = normalizeLlmAssistantDebug(payload?.debug, actions);
   const applied = applyLlmAssistantActions(conversationDraft, actions, text);
   const extracted = summarizeExtractedActions(actions);
+  const coverage = createEntityCoverageReport(fullCoverageActions, actions);
+  if (coverage.lostEntityCount > 0) {
+    console.warn('[MORNING FLOW AI] Lost semantic entities detected', coverage);
+  }
   const assistantLines = dedupeConversationLines(
     sanitizeAssistantLines(
       safeStringArray(payload?.assistantLines).length
@@ -3594,6 +3635,8 @@ async function processLlmAssistantTurn({
     assistantLinesCount: assistantLines.length,
     rawToolCallsCount: debug.rawToolCallsCount,
     repairedActionsCount: repairedActions.length,
+    fullCoverageActionsCount: fullCoverageActions.length,
+    lostEntityCount: coverage.lostEntityCount,
     semanticRecoveryActionsCount: semanticRecoveryActions.length,
     textRecoveryActionsCount: textRecoveryActions.length,
     toolCalls: debug.toolCalls,
@@ -3606,14 +3649,20 @@ async function processLlmAssistantTurn({
     assistantLines,
     assistantLinesCount: assistantLines.length,
     draft: applied.draft,
+    calendarCount: coverage.calendarCount,
     extractedCalendarCandidates: extracted.calendar,
     extractedFollowUpItems: extracted.followUp,
     extractedScheduleItems: extracted.schedule,
     extractedShoppingItems: extracted.shopping,
+    extractedCount: coverage.extractedCount,
+    followUpCount: coverage.followUpCount,
     lastAssistantResponse: debug.lastAssistantResponse,
+    lostEntityCount: coverage.lostEntityCount,
     mode: payload?.mode === 'llm-native' ? 'llm-native' : 'llm-native',
     model: String(payload?.model ?? ''),
     rawToolCallsCount: debug.rawToolCallsCount,
+    scheduleCount: coverage.scheduleCount,
+    shoppingCount: coverage.shoppingCount,
     shouldOpenReview: applied.shouldOpenReview || isConversationSaveCommand(text),
     lastActions: actions.map((action) => action.type),
     toolCalls: debug.toolCalls.length ? debug.toolCalls : actions.map((action) => action.type),
@@ -3693,12 +3742,18 @@ function normalizeLlmAssistantDebug(value: unknown, actions: LlmAssistantAction[
   return {
     actionsCount: numberPayload(debug.actionsCount, actions.length),
     assistantLinesCount: numberPayload(debug.assistantLinesCount, 0),
+    calendarCount: extracted.calendar.length,
     extractedCalendarCandidates: extracted.calendar,
     extractedFollowUpItems: extracted.followUp,
     extractedScheduleItems: extracted.schedule,
     extractedShoppingItems: extracted.shopping,
+    extractedCount: extracted.schedule.length + extracted.shopping.length + extracted.followUp.length + extracted.calendar.length,
+    followUpCount: extracted.followUp.length,
     lastAssistantResponse: stringPayload(debug.lastAssistantResponse),
+    lostEntityCount: 0,
     rawToolCallsCount: numberPayload(debug.rawToolCallsCount, actions.length),
+    scheduleCount: extracted.schedule.length,
+    shoppingCount: extracted.shopping.length,
     toolCalls: safeStringArray(debug.toolCalls),
   };
 }
@@ -3723,6 +3778,11 @@ function repairSemanticActionBoundaries(actions: LlmAssistantAction[]) {
       if (/銀行/.test(title) && !hasExplicitClock(time)) return false;
       return Boolean(title && date && hasExplicitClock(time));
     }
+    if (action.type === 'add_schedule') {
+      const time = action.payload.time ?? '';
+      const date = action.payload.date_text || action.payload.date || '';
+      if (date && hasExplicitClock(time) && isFutureConversationText(date)) return false;
+    }
     if (action.type === 'add_shopping_item') {
       return Boolean(action.payload.name && !/LINE|電話|メール|連絡|返信/.test(action.payload.name));
     }
@@ -3737,6 +3797,34 @@ function summarizeExtractedActions(actions: LlmAssistantAction[]) {
     schedule: actions.filter((action) => action.type === 'add_schedule').map(getRecoveredActionTitle).filter(Boolean),
     shopping: actions.filter((action) => action.type === 'add_shopping_item').map(getRecoveredActionTitle).filter(Boolean),
   };
+}
+
+function createFullCoverageActions(text: string) {
+  return createTextRecoveryActions(text);
+}
+
+function createEntityCoverageReport(expectedActions: LlmAssistantAction[], actualActions: LlmAssistantAction[]) {
+  const expected = summarizeExtractedActions(repairSemanticActionBoundaries(expectedActions));
+  const actual = summarizeExtractedActions(actualActions);
+  const lostEntityCount =
+    countMissingLabels(expected.schedule, actual.schedule) +
+    countMissingLabels(expected.shopping, actual.shopping) +
+    countMissingLabels(expected.followUp, actual.followUp) +
+    countMissingLabels(expected.calendar, actual.calendar);
+  return {
+    calendarCount: actual.calendar.length,
+    expectedCount: expected.schedule.length + expected.shopping.length + expected.followUp.length + expected.calendar.length,
+    extractedCount: actual.schedule.length + actual.shopping.length + actual.followUp.length + actual.calendar.length,
+    followUpCount: actual.followUp.length,
+    lostEntityCount,
+    scheduleCount: actual.schedule.length,
+    shoppingCount: actual.shopping.length,
+  };
+}
+
+function countMissingLabels(expected: string[], actual: string[]) {
+  const actualKeys = new Set(actual.map(normalizeTaskText));
+  return expected.filter((item) => !actualKeys.has(normalizeTaskText(item))).length;
 }
 
 function containsShoppingEntity(text: string) {
@@ -3858,15 +3946,18 @@ function createTextRecoveryActions(text: string): LlmAssistantAction[] {
   schedules.forEach((item) => {
     const dateText = extractDateTextFromLlmTime(item.time) || defaultDateText;
     const clockText = extractClockTextFromLlmTime(item.time);
-    actions.push({
-      payload: {
-        date_text: dateText,
-        time: clockText,
-        title: item.task,
-      },
-      type: 'add_schedule',
-    });
-    if ((isFutureConversationTime(item.time) || isFutureConversationText(`${dateText} ${item.time} ${item.task}`)) && hasExplicitClock(item.time)) {
+    const isCalendarCandidate = (isFutureConversationTime(item.time) || isFutureConversationText(`${dateText} ${item.time} ${item.task}`)) && hasExplicitClock(item.time);
+    if (!isCalendarCandidate) {
+      actions.push({
+        payload: {
+          date_text: dateText,
+          time: clockText,
+          title: item.task,
+        },
+        type: 'add_schedule',
+      });
+    }
+    if (isCalendarCandidate) {
       actions.push({
         payload: {
           date_text: dateText,
@@ -4933,6 +5024,12 @@ function AssistantRuntimeDebugPanel({ debug }: { debug: AssistantRuntimeDebug })
       <small>Raw Tool Calls Count: {debug.rawToolCallsCount}</small>
       <small>Actions Count: {debug.actionsCount}</small>
       <small>Assistant Lines Count: {debug.assistantLinesCount}</small>
+      <small>Extracted Count: {debug.extractedCount}</small>
+      <small>Schedule Count: {debug.scheduleCount}</small>
+      <small>Shopping Count: {debug.shoppingCount}</small>
+      <small>Follow Up Count: {debug.followUpCount}</small>
+      <small>Calendar Count: {debug.calendarCount}</small>
+      <small>Lost Entity Count: {debug.lostEntityCount}</small>
       <small>Last Actions: {debug.lastActions.length ? debug.lastActions.join(', ') : 'none'}</small>
       <small>Last Assistant Response: {debug.lastAssistantResponse || 'none'}</small>
       <small>Extracted Schedule Items: {debug.extractedScheduleItems.length ? debug.extractedScheduleItems.join(', ') : 'none'}</small>
