@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## Version 5.3.3 - 2026-06-10
+
+- Strengthened the OpenAI assistant system prompt so compound utterances must trigger multiple parallel tool calls instead of choosing one entity.
+- Clarified tool descriptions for schedule, shopping, Follow Up, and Google Calendar candidates.
+- Added compound-sentence recovery for bank visits, shopping items, Follow Up actions, and future timed calendar candidates when Raw Tool Calls Count is 0.
+- Improved assistant action deduplication so LLM tool calls and recovery actions do not duplicate the same candidate.
+- Added support for natural approval phrases such as "全部追加して", "お願い", "それで", "保存して", and "これでOK" as add-all intent.
+- Preserved v5.3.2 Semantic Entity Filter Fix and Developer Debug visibility.
+
 
 ## Version 5.3.2 - 2026-06-10
 

@@ -3888,7 +3888,10 @@ function summarizeExtractedActions(actions: LlmAssistantAction[]) {
 }
 
 function createFullCoverageActions(text: string) {
-  return createTextRecoveryActions(text);
+  return dedupeLlmAssistantActions([
+    ...createTextRecoveryActions(text),
+    ...createParallelToolRecoveryActions(text),
+  ]);
 }
 
 function createEntityCoverageReport(expectedActions: LlmAssistantAction[], actualActions: LlmAssistantAction[]) {
@@ -3913,6 +3916,118 @@ function createEntityCoverageReport(expectedActions: LlmAssistantAction[], actua
 function countMissingLabels(expected: string[], actual: string[]) {
   const actualKeys = new Set(actual.map(normalizeTaskText));
   return expected.filter((item) => !actualKeys.has(normalizeTaskText(item))).length;
+}
+
+function createParallelToolRecoveryActions(text: string): LlmAssistantAction[] {
+  const normalized = text.normalize('NFKC');
+  const actions: LlmAssistantAction[] = [];
+  const defaultDateText = extractDefaultDateText(normalized) || extractParallelDefaultDateText(normalized);
+
+  if (/銀行\s*(へ|に)?\s*行/.test(normalized)) {
+    actions.push({
+      payload: {
+        date_text: defaultDateText,
+        time: /午前中|午前/.test(normalized) ? '午前中' : '',
+        title: '銀行へ行く',
+      },
+      type: 'add_schedule',
+    });
+  }
+
+  extractParallelShoppingItems(normalized).forEach((item) => {
+    actions.push({
+      payload: {
+        category: item.category,
+        name: item.name,
+        quantity: item.quantity,
+      },
+      type: 'add_shopping_item',
+    });
+  });
+
+  const followUp = extractParallelFollowUpAction(normalized);
+  if (followUp) {
+    actions.push({
+      payload: {
+        action: followUp.action,
+        due_text: '',
+        method: followUp.method,
+        person_name: followUp.personName,
+        title: `${followUp.personName}へ${followUp.action}`,
+      },
+      type: 'add_follow_up',
+    });
+  }
+
+  const calendar = extractParallelCalendarCandidate(normalized, defaultDateText);
+  if (calendar) {
+    actions.push({
+      payload: calendar,
+      type: 'add_google_calendar_candidate',
+    });
+  }
+
+  if (detectNaturalUserIntent(text) === 'priority' && actions.length) {
+    actions.push({
+      payload: {
+        items: actions
+          .map((action) => ({ title: getRecoveredActionTitle(action), reason: getAssistantPriorityReason(getRecoveredActionTitle(action)) }))
+          .filter((item) => item.title)
+          .slice(0, 4),
+      },
+      type: 'update_priority',
+    });
+  }
+
+  return dedupeLlmAssistantActions(actions);
+}
+
+function extractParallelShoppingItems(text: string) {
+  const items: Array<{ category: string; name: string; quantity: string }> = [];
+  const pattern = /([一-龥ぁ-んァ-ヶーA-Za-z]+?)\s*(\d+(?:\.\d+)?)\s*(本|個|袋|パック|箱|枚|kg|キロ|g|グラム|L|リットル|ml|ミリリットル)/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text))) {
+    const name = match[1]
+      .replace(/.*(?:帰りに|ついでに|あと|と|、|,)/, '')
+      .replace(/(を|が|も|は)$/, '')
+      .trim();
+    if (!name || /時|銀行|会合|LINE|電話|メール|連絡|予定|午前|午後|夕方/.test(name)) continue;
+    items.push({
+      category: classifyShoppingItem(name),
+      name,
+      quantity: `${match[2]}${match[3]}`,
+    });
+  }
+  return items;
+}
+
+function extractParallelDefaultDateText(text: string) {
+  return text.match(/明日|あした|明後日|あさって|来週|来月|\d{1,2}月\d{1,2}日?/)?.[0] ?? '';
+}
+
+function extractParallelFollowUpAction(text: string) {
+  const match = text.match(/([一-龥ぁ-んァ-ヶーA-Za-z]+(?:さん|くん|君|ちゃん|様)?)\s*(?:へ|に)?\s*(LINE|ライン|電話|メール|返信|折り返し|連絡|確認)(?:する|して|をする)?/);
+  if (!match) return null;
+  const actionText = match[2].replace(/ライン/i, 'LINE');
+  return {
+    action: actionText === 'LINE' ? 'LINEする' : `${actionText}する`,
+    method: normalizeLlmFollowUpKind(actionText),
+    personName: match[1],
+  };
+}
+
+function extractParallelCalendarCandidate(text: string, defaultDateText: string): { date_text: string; time: string; title: string } | null {
+  const hasFutureDate = Boolean(defaultDateText) || isFutureConversationText(text);
+  if (!hasFutureDate) return null;
+  const match = text.match(/(?:午前|午後|夕方|夜)?\s*(\d{1,2})(?::([0-5]\d)|時(?:([0-5]?\d)分)?)\s*(?:から|に)?\s*([一-龥ぁ-んァ-ヶーA-Za-z]+(?:会合|会議|打ち合わせ|打合せ|面談|予約))/);
+  if (!match) return null;
+  const hour = match[1].padStart(2, '0');
+  const minute = (match[2] || match[3] || '00').padStart(2, '0');
+  return {
+    date_text: defaultDateText,
+    time: `${hour}:${minute}`,
+    title: match[4].replace(/があります|です|する$/, '').trim(),
+  };
 }
 
 function containsShoppingEntity(text: string) {
@@ -4016,11 +4131,30 @@ function extractClockTextFromLlmTime(value: string) {
 function dedupeLlmAssistantActions(actions: LlmAssistantAction[]) {
   const seen = new Set<string>();
   return actions.filter((action) => {
-    const key = `${action.type}:${JSON.stringify(action.payload)}`;
+    const key = getLlmAssistantActionDedupeKey(action);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+}
+
+function getLlmAssistantActionDedupeKey(action: LlmAssistantAction) {
+  if (action.type === 'add_schedule' || action.type === 'add_google_calendar_candidate') {
+    const date = 'date_text' in action.payload ? action.payload.date_text || action.payload.date || '' : '';
+    const time = 'time' in action.payload ? action.payload.time || '' : '';
+    return `${action.type}:${normalizeTaskText(action.payload.title ?? '')}:${normalizeTaskText(date)}:${normalizeTaskText(time)}`;
+  }
+  if (action.type === 'add_shopping_item') {
+    return `${action.type}:${normalizeTaskText(action.payload.name ?? '')}:${normalizeTaskText(action.payload.quantity ?? '')}`;
+  }
+  if (action.type === 'add_follow_up') {
+    return `${action.type}:${normalizeTaskText(getRecoveredActionTitle(action))}`;
+  }
+  if (action.type === 'update_priority') {
+    const items = action.payload.items?.map((item) => normalizeTaskText(item.title ?? '')).join('|') ?? '';
+    return `${action.type}:${items}`;
+  }
+  return `${action.type}:${normalizeTaskText(action.payload.summary ?? '')}`;
 }
 
 function createTextRecoveryActions(text: string): LlmAssistantAction[] {
@@ -4178,6 +4312,7 @@ function sanitizeAssistantLines(lines: string[]) {
 }
 
 function detectNaturalUserIntent(text: string) {
+  if (/全部追加して|すべて追加|全部入れて|全部登録|お願い|それで|保存して|これでOK|これでオーケー/i.test(text)) return 'add-all';
   if (/全部|すべて|まとめて/.test(text)) return 'add-all';
   if (/買い物.*(?:だけ|入れて|追加)|(?:だけ|入れて|追加).*買い物/.test(text)) return 'shopping-only';
   if (/(?:LINE|ライン|フォロー|Follow Up|連絡).*?(?:入れて|追加|登録)/i.test(text)) return 'follow-up';

@@ -7,6 +7,17 @@
 5. ZIP should include `dist` after build.
 6. v5.3.2 is based on v5.3.1 plus Developer Debug Visibility Fix.
 
+## Version 5.3.3 Parallel Tool Calling Fix - 2026-06-10
+
+- Screen display: v5.3.3
+- ZIP: morning-flow-ai-v5.3.3.zip
+- Next planned version: Version 5.3.4
+- The assistant prompt now explicitly requires parallel tool calls for compound utterances containing schedules, shopping items, Follow Up, and future timed events.
+- Tool descriptions were strengthened so each function has a clearer extraction boundary.
+- Client recovery now reconstructs bank, shopping, Follow Up, and Google Calendar candidates when Raw Tool Calls Count is 0.
+- Natural approval phrases such as "全部追加して", "お願い", "それで", "保存して", and "これでOK" are treated as add-all intent.
+- Semantic dedupe prevents duplicate candidates when LLM tool calls and recovery detect the same entity.
+
 ## Version 5.3.2 Semantic Entity Filter Fix - 2026-06-10
 
 - Screen display: v5.3.2

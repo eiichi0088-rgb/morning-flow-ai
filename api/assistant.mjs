@@ -4,7 +4,7 @@ const tools = [
   {
     type: 'function',
     name: 'add_schedule',
-    description: 'Add a today or dated schedule candidate.',
+    description: 'Extract one user schedule/action/task. Call for bank visits, hospital visits, store visits, work, meetings, gatherings, errands, or other planned actions. Register as a schedule even when the time is vague.',
     strict: true,
     parameters: {
       type: 'object',
@@ -21,7 +21,7 @@ const tools = [
   {
     type: 'function',
     name: 'add_shopping_item',
-    description: 'Add one shopping item. Use only product name and quantity, never a whole sentence.',
+    description: 'Extract one product the user will buy. Call once per product, such as milk 2 bottles, eggs 1 pack, daikon 1. Keep product name and quantity separate. Never put a whole sentence into one item.',
     strict: true,
     parameters: {
       type: 'object',
@@ -37,7 +37,7 @@ const tools = [
   {
     type: 'function',
     name: 'add_follow_up',
-    description: 'Add a follow-up/contact candidate.',
+    description: 'Extract one follow-up/contact action. Call when the user will contact, reply, call, LINE, email, confirm, or follow up with someone. If a person and contact action are mentioned, this tool is mandatory.',
     strict: true,
     parameters: {
       type: 'object',
@@ -61,7 +61,7 @@ const tools = [
   {
     type: 'function',
     name: 'add_google_calendar_candidate',
-    description: 'Add a future or calendar-worthy event candidate.',
+    description: 'Extract one Google Calendar candidate. Call for a future-dated event with a clear numeric time, such as tomorrow 18:00 gathering or next Tuesday 10:00 meeting.',
     strict: true,
     parameters: {
       type: 'object',
@@ -421,6 +421,10 @@ Tool policy:
 - Use show_review_card when the user says to save, confirm, OK, or asks to start the day.
 - When the user mentions actionable schedule, shopping, follow-up, or calendar candidates, call the matching tools immediately to keep those candidates in currentDraft. This is required even when the user is only asking for a recommended order.
 - When the user asks "what order should I do this in", first call tools for every actionable candidate in the utterance, then call update_priority, then answer naturally.
+- Critical parallel extraction rule: when one utterance contains multiple entities such as a schedule, shopping items, a follow-up, and a future timed event, call multiple function tools in the same response. Never choose only one entity. Never give up because the sentence is complex.
+- Example: "銀行に行って、牛乳を買って、田中にLINEする" must call add_schedule, add_shopping_item, and add_follow_up together.
+- Example: "明日の午前中に銀行へ行って、帰りに牛乳2本と卵1パックを買って、田中さんにLINEして、夕方18時から会合があります" must call add_schedule, add_shopping_item, add_shopping_item, add_follow_up, and add_google_calendar_candidate.
+- If the user says "全部追加して", "お願い", "それで", "保存して", or "これでOK", refer to the previous assistant suggestion and currentDraft, then call every needed tool again so the app can rebuild the Review Draft.
 - If the user says "全部追加して", call every needed tool from the current utterance and currentDraft: calendar candidates, shopping items, Follow Up items, priority if useful, then summarize what was added.
 - If the user says "買い物だけ", "買い物も入れて", or equivalent, call only add_shopping_item for shopping items.
 - If the user says "カレンダーに入れて" or equivalent, call only add_google_calendar_candidate for calendar-worthy events.
