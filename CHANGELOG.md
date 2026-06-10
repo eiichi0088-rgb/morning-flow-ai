@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## Version 6.0.0 - 2026-06-10
+
+- Reworked the normal assistant path into Pure LLM Secretary Core.
+- `/api/assistant` now asks OpenAI for strict structured JSON instead of using function tool calls as the primary app action path.
+- The frontend now applies OpenAI JSON directly to the Review Draft for schedules, shopping items, Follow Up items, Google Calendar candidates, and priority suggestions.
+- Normal conversation flow no longer depends on regex recovery, entity rejection filters, clause segmentation, action repair, raw tool call counts, or lost entity counting.
+- Save commands display the current Review Draft instead of asking the frontend to re-extract entities.
+- Developer Debug now emphasizes JSON Parse Success, Last LLM JSON, structured item counts, needs_clarification, clarifying_question, and parse error.
+- Preserved v5.1.1 voice stability and the existing AI secretary UI.
+
 ## Version 5.3.3 - 2026-06-10
 
 - Strengthened the OpenAI assistant system prompt so compound utterances must trigger multiple parallel tool calls instead of choosing one entity.

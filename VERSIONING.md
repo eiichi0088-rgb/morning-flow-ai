@@ -7,6 +7,17 @@
 5. ZIP should include `dist` after build.
 6. v5.3.2 is based on v5.3.1 plus Developer Debug Visibility Fix.
 
+## Version 6.0.0 Pure LLM Secretary Core - 2026-06-10
+
+- Screen display: v6.0.0
+- ZIP: morning-flow-ai-v6.0.0.zip
+- Next planned version: Version 6.0.1
+- Normal assistant flow now uses OpenAI structured JSON as the source of truth.
+- Tool Calling, regex recovery, entity filters, clause segmentation, action repair, add-all repair, and lost entity debug are no longer used in the normal path.
+- Frontend applies JSON directly to Review Draft display/save structures.
+- Developer Debug focuses on JSON Parse Success, Last LLM JSON, structured item counts, needs_clarification, clarifying_question, and parse error.
+- Voice stability and current AI secretary UI are preserved.
+
 ## Version 5.3.3 Parallel Tool Calling Fix - 2026-06-10
 
 - Screen display: v5.3.3

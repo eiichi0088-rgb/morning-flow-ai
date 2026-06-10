@@ -230,6 +230,17 @@ type LlmAssistantAction =
   | { type: 'update_priority'; payload: { items?: { title?: string; reason?: string }[] } }
   | { type: 'show_review_card'; payload: { summary?: string } };
 
+type PureLlmSecretaryJson = {
+  assistant_reply: string;
+  schedule_items: { title?: string; date_text?: string; time_text?: string; notes?: string }[];
+  shopping_items: { name?: string; quantity?: string }[];
+  follow_up_items: { title?: string; person_name?: string; action?: string; due_text?: string; notes?: string }[];
+  google_calendar_candidates: { title?: string; date_text?: string; time?: string; notes?: string }[];
+  priority_suggestions: { title?: string; reason?: string }[];
+  needs_clarification: boolean;
+  clarifying_question: string;
+};
+
 type LlmAssistantDebug = {
   actionsCount: number;
   assistantLinesCount: number;
@@ -242,8 +253,14 @@ type LlmAssistantDebug = {
   calendarRejectReasons: string[];
   followUpRejectReasons: string[];
   followUpCount: number;
+  jsonParseSuccess: boolean;
+  lastLlmJson: string;
   lastAssistantResponse: string;
   lostEntityCount: number;
+  needsClarification: boolean;
+  clarifyingQuestion: string;
+  parseError: string;
+  prioritySuggestionsCount: number;
   rawToolCallsCount: number;
   scheduleCount: number;
   shoppingCount: number;
@@ -264,8 +281,14 @@ type LlmAssistantResult = {
   calendarRejectReasons: string[];
   followUpRejectReasons: string[];
   followUpCount: number;
+  jsonParseSuccess: boolean;
+  lastLlmJson: string;
   lastAssistantResponse: string;
   lostEntityCount: number;
+  needsClarification: boolean;
+  clarifyingQuestion: string;
+  parseError: string;
+  prioritySuggestionsCount: number;
   mode: 'llm-native' | 'fallback';
   model: string;
   rawToolCallsCount: number;
@@ -289,12 +312,18 @@ type AssistantRuntimeDebug = {
   calendarRejectReasons: string[];
   followUpRejectReasons: string[];
   followUpCount: number;
+  jsonParseSuccess: boolean;
+  lastLlmJson: string;
   fallbackError: string;
   lastActions: string[];
   lastAssistantResponse: string;
   lastAssistantAction: string;
   lastUserIntent: string;
   lostEntityCount: number;
+  needsClarification: boolean;
+  clarifyingQuestion: string;
+  parseError: string;
+  prioritySuggestionsCount: number;
   mode: 'not checked' | 'llm-native' | 'fallback';
   model: string;
   rawToolCallsCount: number;
@@ -1095,12 +1124,18 @@ function App() {
     calendarRejectReasons: [],
     followUpRejectReasons: [],
     followUpCount: 0,
+    jsonParseSuccess: false,
+    lastLlmJson: '',
     fallbackError: '',
     lastActions: [],
     lastAssistantResponse: '',
     lastAssistantAction: '',
     lastUserIntent: '',
     lostEntityCount: 0,
+    needsClarification: false,
+    clarifyingQuestion: '',
+    parseError: '',
+    prioritySuggestionsCount: 0,
     mode: 'not checked',
     model: '',
     rawToolCallsCount: 0,
@@ -1624,12 +1659,18 @@ function App() {
           calendarRejectReasons: llmResult.calendarRejectReasons,
           followUpRejectReasons: llmResult.followUpRejectReasons,
           followUpCount: llmResult.followUpCount,
+          jsonParseSuccess: llmResult.jsonParseSuccess,
+          lastLlmJson: llmResult.lastLlmJson,
           fallbackError: '',
           lastActions: llmResult.lastActions,
           lastAssistantResponse: llmResult.lastAssistantResponse,
           lastAssistantAction: describeAssistantAction(llmResult.toolCalls, llmResult.shouldOpenReview),
           lastUserIntent: detectNaturalUserIntent(normalized),
           lostEntityCount: llmResult.lostEntityCount,
+          needsClarification: llmResult.needsClarification,
+          clarifyingQuestion: llmResult.clarifyingQuestion,
+          parseError: llmResult.parseError,
+          prioritySuggestionsCount: llmResult.prioritySuggestionsCount,
           mode: 'llm-native',
           model: llmResult.model,
           rawToolCallsCount: llmResult.rawToolCallsCount,
@@ -1665,12 +1706,18 @@ function App() {
           calendarRejectReasons: [],
           followUpRejectReasons: [],
           followUpCount: 0,
+          jsonParseSuccess: false,
+          lastLlmJson: '',
           fallbackError: error instanceof Error ? error.message : String(error),
           lastActions: [],
           lastAssistantResponse: '',
           lastAssistantAction: 'fallback-message-only',
           lastUserIntent: detectNaturalUserIntent(normalized),
           lostEntityCount: 0,
+          needsClarification: false,
+          clarifyingQuestion: '',
+          parseError: error instanceof Error ? error.message : String(error),
+          prioritySuggestionsCount: 0,
           mode: 'fallback',
           model: '',
           rawToolCallsCount: 0,
@@ -3618,6 +3665,45 @@ async function processLlmAssistantTurn({
   shoppingItems: ShoppingItem[];
   text: string;
 }): Promise<LlmAssistantResult> {
+  if (isConversationSaveCommand(text)) {
+    const hasDraft = hasConversationDraftContent(conversationDraft);
+    const assistantLines = hasDraft
+      ? ['保存前確認を表示します。内容を確認してください。']
+      : ['保存できる候補がまだありません。もう一度、予定や買い物を話してください。'];
+    const extracted = summarizePureLlmDraft(conversationDraft);
+    return {
+      actionsCount: extracted.extractedCount,
+      assistantLines,
+      assistantLinesCount: assistantLines.length,
+      draft: conversationDraft,
+      calendarCount: extracted.calendarCount,
+      extractedCalendarCandidates: extracted.extractedCalendarCandidates,
+      extractedFollowUpItems: extracted.extractedFollowUpItems,
+      extractedScheduleItems: extracted.extractedScheduleItems,
+      extractedShoppingItems: extracted.extractedShoppingItems,
+      extractedCount: extracted.extractedCount,
+      calendarRejectReasons: [],
+      followUpRejectReasons: [],
+      followUpCount: extracted.followUpCount,
+      jsonParseSuccess: true,
+      lastLlmJson: '',
+      lastAssistantResponse: assistantLines.join('\n'),
+      lostEntityCount: 0,
+      needsClarification: false,
+      clarifyingQuestion: '',
+      parseError: '',
+      prioritySuggestionsCount: 0,
+      mode: 'llm-native',
+      model: '',
+      rawToolCallsCount: 0,
+      scheduleCount: extracted.scheduleCount,
+      shoppingCount: extracted.shoppingCount,
+      shouldOpenReview: hasDraft,
+      lastActions: [],
+      toolCalls: [],
+    };
+  }
+
   const response = await fetch('/api/assistant', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -3634,6 +3720,55 @@ async function processLlmAssistantTurn({
   if (!response.ok) {
     throw new Error(payload?.message ?? 'LLM assistant request failed.');
   }
+
+  const llmJson = normalizePureLlmSecretaryJson(payload?.result);
+  const appliedPure = applyPureLlmSecretaryJson(conversationDraft, llmJson, text);
+  const extractedPure = summarizePureLlmJson(llmJson);
+  const pureAssistantLines = dedupeConversationLines(
+    [llmJson.assistant_reply, llmJson.needs_clarification ? llmJson.clarifying_question : '']
+      .map((line) => line.trim())
+      .filter(Boolean),
+  );
+  console.info('[MORNING FLOW AI] Pure LLM secretary debug', {
+    jsonParseSuccess: Boolean(payload?.debug?.jsonParseSuccess),
+    scheduleItemsCount: llmJson.schedule_items.length,
+    shoppingItemsCount: llmJson.shopping_items.length,
+    followUpItemsCount: llmJson.follow_up_items.length,
+    googleCalendarCandidatesCount: llmJson.google_calendar_candidates.length,
+    prioritySuggestionsCount: llmJson.priority_suggestions.length,
+    needsClarification: llmJson.needs_clarification,
+  });
+  return {
+    actionsCount: extractedPure.extractedCount,
+    assistantLines: pureAssistantLines,
+    assistantLinesCount: pureAssistantLines.length,
+    draft: appliedPure.draft,
+    calendarCount: extractedPure.calendarCount,
+    extractedCalendarCandidates: extractedPure.extractedCalendarCandidates,
+    extractedFollowUpItems: extractedPure.extractedFollowUpItems,
+    extractedScheduleItems: extractedPure.extractedScheduleItems,
+    extractedShoppingItems: extractedPure.extractedShoppingItems,
+    extractedCount: extractedPure.extractedCount,
+    calendarRejectReasons: [],
+    followUpRejectReasons: [],
+    followUpCount: extractedPure.followUpCount,
+    jsonParseSuccess: Boolean(payload?.debug?.jsonParseSuccess),
+    lastLlmJson: String(payload?.debug?.lastLlmJson ?? ''),
+    lastAssistantResponse: llmJson.assistant_reply,
+    lostEntityCount: 0,
+    needsClarification: llmJson.needs_clarification,
+    clarifyingQuestion: llmJson.clarifying_question,
+    parseError: String(payload?.debug?.parseError ?? ''),
+    prioritySuggestionsCount: llmJson.priority_suggestions.length,
+    mode: payload?.mode === 'llm-native' ? 'llm-native' : 'llm-native',
+    model: String(payload?.model ?? ''),
+    rawToolCallsCount: 0,
+    scheduleCount: extractedPure.scheduleCount,
+    shoppingCount: extractedPure.shoppingCount,
+    shouldOpenReview: false,
+    lastActions: [],
+    toolCalls: [],
+  };
 
   const apiActions = normalizeLlmAssistantActions(payload?.actions);
   const repairedActions = apiActions.length ? [] : createContextRepairActions(conversationDraft, text);
@@ -3692,8 +3827,14 @@ async function processLlmAssistantTurn({
     calendarRejectReasons: rejectReasons.calendar,
     followUpRejectReasons: rejectReasons.followUp,
     followUpCount: coverage.followUpCount,
+    jsonParseSuccess: false,
+    lastLlmJson: '',
     lastAssistantResponse: debug.lastAssistantResponse,
     lostEntityCount: coverage.lostEntityCount,
+    needsClarification: false,
+    clarifyingQuestion: '',
+    parseError: '',
+    prioritySuggestionsCount: 0,
     mode: payload?.mode === 'llm-native' ? 'llm-native' : 'llm-native',
     model: String(payload?.model ?? ''),
     rawToolCallsCount: debug.rawToolCallsCount,
@@ -3702,6 +3843,140 @@ async function processLlmAssistantTurn({
     shouldOpenReview: applied.shouldOpenReview || isConversationSaveCommand(text),
     lastActions: actions.map((action) => action.type),
     toolCalls: debug.toolCalls.length ? debug.toolCalls : actions.map((action) => action.type),
+  };
+}
+
+function normalizePureLlmSecretaryJson(value: unknown): PureLlmSecretaryJson {
+  const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  return {
+    assistant_reply: stringPayload(source.assistant_reply) || '内容を整理しました。',
+    schedule_items: objectArray(source.schedule_items).map((item) => ({
+      title: stringPayload(item.title),
+      date_text: stringPayload(item.date_text),
+      time_text: stringPayload(item.time_text),
+      notes: stringPayload(item.notes),
+    })).filter((item) => item.title),
+    shopping_items: objectArray(source.shopping_items).map((item) => ({
+      name: stringPayload(item.name),
+      quantity: stringPayload(item.quantity),
+    })).filter((item) => item.name),
+    follow_up_items: objectArray(source.follow_up_items).map((item) => ({
+      title: stringPayload(item.title),
+      person_name: stringPayload(item.person_name),
+      action: stringPayload(item.action),
+      due_text: stringPayload(item.due_text),
+      notes: stringPayload(item.notes),
+    })).filter((item) => item.title || item.person_name || item.action),
+    google_calendar_candidates: objectArray(source.google_calendar_candidates).map((item) => ({
+      title: stringPayload(item.title),
+      date_text: stringPayload(item.date_text),
+      time: stringPayload(item.time),
+      notes: stringPayload(item.notes),
+    })).filter((item) => item.title),
+    priority_suggestions: objectArray(source.priority_suggestions).map((item) => ({
+      title: stringPayload(item.title),
+      reason: stringPayload(item.reason),
+    })).filter((item) => item.title),
+    needs_clarification: Boolean(source.needs_clarification),
+    clarifying_question: stringPayload(source.clarifying_question),
+  };
+}
+
+function objectArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+    : [];
+}
+
+function applyPureLlmSecretaryJson(draft: MorningReviewDraft, result: PureLlmSecretaryJson, sourceText: string) {
+  let nextDraft = { ...draft, sourceText: appendVoiceText(draft.sourceText, sourceText) };
+  result.schedule_items.forEach((item) => {
+    nextDraft = applyLlmScheduleAction(nextDraft, {
+      date_text: item.date_text,
+      memo: item.notes,
+      time: item.time_text,
+      title: item.title,
+    });
+  });
+  result.google_calendar_candidates.forEach((item) => {
+    nextDraft = applyLlmGoogleCalendarAction(nextDraft, {
+      date_text: item.date_text,
+      memo: item.notes,
+      time: item.time,
+      title: item.title,
+    });
+  });
+  result.shopping_items.forEach((item) => {
+    nextDraft = applyLlmShoppingAction(nextDraft, {
+      name: item.name,
+      quantity: item.quantity,
+    });
+  });
+  result.follow_up_items.forEach((item) => {
+    nextDraft = applyLlmFollowUpAction(nextDraft, {
+      action: item.action,
+      due_text: item.due_text,
+      memo: item.notes,
+      person_name: item.person_name,
+      title: item.title,
+    });
+  });
+  if (result.priority_suggestions.length || result.assistant_reply) {
+    nextDraft = {
+      ...nextDraft,
+      plan: {
+        ...nextDraft.plan,
+        advice: dedupeTodos([
+          ...result.priority_suggestions.map((item) => [item.title, item.reason].filter(Boolean).join(': ')),
+          result.assistant_reply,
+          ...nextDraft.plan.advice,
+        ]),
+        priorities: {
+          ...nextDraft.plan.priorities,
+          highest: dedupeTodos([
+            ...result.priority_suggestions.map((item) => item.title ?? '').filter(Boolean),
+            ...nextDraft.plan.priorities.highest,
+          ]).slice(0, 3),
+        },
+      },
+    };
+  }
+  return { draft: nextDraft };
+}
+
+function summarizePureLlmJson(result: PureLlmSecretaryJson) {
+  const extractedScheduleItems = result.schedule_items.map((item) => item.title ?? '').filter(Boolean);
+  const extractedShoppingItems = result.shopping_items.map((item) => [item.name, item.quantity].filter(Boolean).join(' ')).filter(Boolean);
+  const extractedFollowUpItems = result.follow_up_items.map((item) => item.title || [item.person_name, item.action].filter(Boolean).join('へ')).filter(Boolean);
+  const extractedCalendarCandidates = result.google_calendar_candidates.map((item) => [item.date_text, item.time, item.title].filter(Boolean).join(' ')).filter(Boolean);
+  return {
+    calendarCount: extractedCalendarCandidates.length,
+    extractedCalendarCandidates,
+    extractedFollowUpItems,
+    extractedScheduleItems,
+    extractedShoppingItems,
+    extractedCount: extractedScheduleItems.length + extractedShoppingItems.length + extractedFollowUpItems.length + extractedCalendarCandidates.length,
+    followUpCount: extractedFollowUpItems.length,
+    scheduleCount: extractedScheduleItems.length,
+    shoppingCount: extractedShoppingItems.length,
+  };
+}
+
+function summarizePureLlmDraft(draft: MorningReviewDraft) {
+  const extractedScheduleItems = cleanScheduleItems(draft.plan.schedule).map((item) => item.task).filter(Boolean);
+  const extractedShoppingItems = draft.shoppingItems.map((item) => [item.name, item.quantity].filter(Boolean).join(' ')).filter(Boolean);
+  const extractedFollowUpItems = draft.followUpCandidates.map((item) => [item.name, item.content].filter(Boolean).join('へ')).filter(Boolean);
+  const extractedCalendarCandidates = createCalendarEvents(draft.plan).map((item) => [item.sourceTime, item.title].filter(Boolean).join(' ')).filter(Boolean);
+  return {
+    calendarCount: extractedCalendarCandidates.length,
+    extractedCalendarCandidates,
+    extractedFollowUpItems,
+    extractedScheduleItems,
+    extractedShoppingItems,
+    extractedCount: extractedScheduleItems.length + extractedShoppingItems.length + extractedFollowUpItems.length + extractedCalendarCandidates.length,
+    followUpCount: extractedFollowUpItems.length,
+    scheduleCount: extractedScheduleItems.length,
+    shoppingCount: extractedShoppingItems.length,
   };
 }
 
@@ -3787,8 +4062,14 @@ function normalizeLlmAssistantDebug(value: unknown, actions: LlmAssistantAction[
     calendarRejectReasons: [],
     followUpRejectReasons: [],
     followUpCount: extracted.followUp.length,
+    jsonParseSuccess: false,
+    lastLlmJson: '',
     lastAssistantResponse: stringPayload(debug.lastAssistantResponse),
     lostEntityCount: 0,
+    needsClarification: false,
+    clarifyingQuestion: '',
+    parseError: '',
+    prioritySuggestionsCount: 0,
     rawToolCallsCount: numberPayload(debug.rawToolCallsCount, actions.length),
     scheduleCount: extracted.schedule.length,
     shoppingCount: extracted.shopping.length,
@@ -5246,23 +5527,29 @@ function AssistantRuntimeDebugPanel({ debug }: { debug: AssistantRuntimeDebug })
       <small>Tool Calls: {debug.toolCalls.length ? debug.toolCalls.join(', ') : 'none'}</small>
       <small>Raw Tool Calls Count: {debug.rawToolCallsCount}</small>
       <small>Actions Count: {debug.actionsCount}</small>
+      <small>JSON Parse Success: {debug.jsonParseSuccess ? 'true' : 'false'}</small>
       <small>Assistant Lines Count: {debug.assistantLinesCount}</small>
       <small>Extracted Count: {debug.extractedCount}</small>
       <small>Schedule Count: {debug.scheduleCount}</small>
       <small>Shopping Count: {debug.shoppingCount}</small>
       <small>Follow Up Count: {debug.followUpCount}</small>
       <small>Calendar Count: {debug.calendarCount}</small>
+      <small>Priority Suggestions Count: {debug.prioritySuggestionsCount}</small>
       <small>Lost Entity Count: {debug.lostEntityCount}</small>
       <small>Follow Up Reject Reason: {debug.followUpRejectReasons.length ? debug.followUpRejectReasons.join(' / ') : 'none'}</small>
       <small>Calendar Reject Reason: {debug.calendarRejectReasons.length ? debug.calendarRejectReasons.join(' / ') : 'none'}</small>
       <small>Last Actions: {debug.lastActions.length ? debug.lastActions.join(', ') : 'none'}</small>
       <small>Last Assistant Response: {debug.lastAssistantResponse || 'none'}</small>
+      <small>Last LLM JSON: {debug.lastLlmJson || 'none'}</small>
       <small>Extracted Schedule Items: {debug.extractedScheduleItems.length ? debug.extractedScheduleItems.join(', ') : 'none'}</small>
       <small>Extracted Shopping Items: {debug.extractedShoppingItems.length ? debug.extractedShoppingItems.join(', ') : 'none'}</small>
       <small>Extracted Follow Up Items: {debug.extractedFollowUpItems.length ? debug.extractedFollowUpItems.join(', ') : 'none'}</small>
       <small>Extracted Calendar Candidates: {debug.extractedCalendarCandidates.length ? debug.extractedCalendarCandidates.join(', ') : 'none'}</small>
       <small>Last User Intent: {debug.lastUserIntent || 'none'}</small>
       <small>Last Assistant Action: {debug.lastAssistantAction || 'none'}</small>
+      <small>Needs Clarification: {debug.needsClarification ? 'true' : 'false'}</small>
+      <small>Clarifying Question: {debug.clarifyingQuestion || 'none'}</small>
+      <small>Parse Error: {debug.parseError || 'none'}</small>
       <small>Fallback Error: {debug.fallbackError || 'none'}</small>
       <small>Updated: {debug.updatedAt || 'not checked'}</small>
       <small>Error: {debug.error || 'none'}</small>
@@ -5297,11 +5584,13 @@ function DeveloperDebugDialog({
           <DebugMetric label="Assistant Lines Count" value={assistantDebug.assistantLinesCount} />
           <DebugMetric label="Raw Tool Calls Count" value={assistantDebug.rawToolCallsCount} />
           <DebugMetric label="Actions Count" value={assistantDebug.actionsCount} />
+          <DebugMetric label="JSON Parse Success" value={assistantDebug.jsonParseSuccess ? 'true' : 'false'} />
           <DebugMetric label="Extracted Count" value={assistantDebug.extractedCount} />
           <DebugMetric label="Schedule Count" value={assistantDebug.scheduleCount} />
           <DebugMetric label="Shopping Count" value={assistantDebug.shoppingCount} />
           <DebugMetric label="Follow Up Count" value={assistantDebug.followUpCount} />
           <DebugMetric label="Calendar Count" value={assistantDebug.calendarCount} />
+          <DebugMetric label="Priority Suggestions Count" value={assistantDebug.prioritySuggestionsCount} />
           <DebugMetric label="Lost Entity Count" value={assistantDebug.lostEntityCount} />
           <DebugMetric label="Follow Up Reject Reason" value={assistantDebug.followUpRejectReasons.length ? assistantDebug.followUpRejectReasons.join(' / ') : 'none'} />
           <DebugMetric label="Calendar Reject Reason" value={assistantDebug.calendarRejectReasons.length ? assistantDebug.calendarRejectReasons.join(' / ') : 'none'} />
@@ -5317,6 +5606,18 @@ function DeveloperDebugDialog({
         <section className="developer-debug-section">
           <span>Last Assistant Response</span>
           <p>{assistantDebug.lastAssistantResponse || 'none'}</p>
+        </section>
+
+        <section className="developer-debug-section">
+          <span>Last LLM JSON</span>
+          <p>{assistantDebug.lastLlmJson || 'none'}</p>
+        </section>
+
+        <section className="developer-debug-section">
+          <span>Clarification</span>
+          <p>Needs Clarification: {assistantDebug.needsClarification ? 'true' : 'false'}</p>
+          <p>Question: {assistantDebug.clarifyingQuestion || 'none'}</p>
+          <p>Parse Error: {assistantDebug.parseError || 'none'}</p>
         </section>
 
         <section className="developer-debug-section">

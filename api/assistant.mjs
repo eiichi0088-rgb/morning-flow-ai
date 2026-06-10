@@ -116,6 +116,93 @@ const tools = [
   },
 ];
 
+const assistantJsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    assistant_reply: { type: 'string' },
+    schedule_items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          title: { type: 'string' },
+          date_text: { type: 'string' },
+          time_text: { type: 'string' },
+          notes: { type: 'string' },
+        },
+        required: ['title', 'date_text', 'time_text', 'notes'],
+      },
+    },
+    shopping_items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          name: { type: 'string' },
+          quantity: { type: 'string' },
+        },
+        required: ['name', 'quantity'],
+      },
+    },
+    follow_up_items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          title: { type: 'string' },
+          person_name: { type: 'string' },
+          action: { type: 'string' },
+          due_text: { type: 'string' },
+          notes: { type: 'string' },
+        },
+        required: ['title', 'person_name', 'action', 'due_text', 'notes'],
+      },
+    },
+    google_calendar_candidates: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          title: { type: 'string' },
+          date_text: { type: 'string' },
+          time: { type: 'string' },
+          notes: { type: 'string' },
+        },
+        required: ['title', 'date_text', 'time', 'notes'],
+      },
+    },
+    priority_suggestions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          title: { type: 'string' },
+          reason: { type: 'string' },
+        },
+        required: ['title', 'reason'],
+      },
+    },
+    needs_clarification: { type: 'boolean' },
+    clarifying_question: { type: 'string' },
+  },
+  required: [
+    'assistant_reply',
+    'schedule_items',
+    'shopping_items',
+    'follow_up_items',
+    'google_calendar_candidates',
+    'priority_suggestions',
+    'needs_clarification',
+    'clarifying_question',
+  ],
+};
+
 export default {
   async fetch(request) {
     if (request.method !== 'POST') {
@@ -155,47 +242,28 @@ export default {
         ],
       });
 
-      const rawToolCalls = extractToolCalls(first);
-      const actions = rawToolCalls.map(normalizeToolCallAction).filter(Boolean);
       let finalText = extractOutputText(first);
-      let lastAssistantResponse = finalText;
-
-      if (rawToolCalls.length) {
-        const toolOutputs = rawToolCalls.map((action) => ({
-          type: 'function_call_output',
-          call_id: action.call_id,
-          output: JSON.stringify({ ok: true, action: action.name, received: action.arguments }),
-        }));
-        const second = await createResponse({
-          previous_response_id: first.id,
-          input: toolOutputs,
-        });
-        const secondText = extractOutputText(second);
-        finalText = secondText || finalText;
-        lastAssistantResponse = secondText || lastAssistantResponse;
-      }
-      const assistantLines = splitAssistantText(finalText);
+      const result = parseAssistantJson(finalText);
+      finalText = JSON.stringify(result);
 
       console.info('[MORNING FLOW AI] assistant response debug', {
-        actionsCount: actions.length,
-        assistantLinesCount: assistantLines.length,
+        jsonParseSuccess: true,
         firstOutputTypes: getOutputTypes(first),
-        rawToolCallsCount: rawToolCalls.length,
         textLength: finalText.length,
       });
 
       return Response.json({
-        actions,
-        assistantLines,
+        result,
         debug: {
-          actionsCount: actions.length,
-          assistantLinesCount: assistantLines.length,
-          lastAssistantResponse: lastAssistantResponse.slice(0, 1200),
+          jsonParseSuccess: true,
+          lastLlmJson: finalText.slice(0, 4000),
+          parseError: '',
           mode: 'llm-native',
           model: process.env.OPENAI_ASSISTANT_MODEL || defaultModel,
+          needsClarification: Boolean(result.needs_clarification),
           outputTypes: getOutputTypes(first),
-          rawToolCallsCount: rawToolCalls.length,
-          toolCalls: rawToolCalls.map((action) => action.name),
+          rawToolCallsCount: 0,
+          toolCalls: [],
         },
         model: process.env.OPENAI_ASSISTANT_MODEL || defaultModel,
         mode: 'llm-native',
@@ -218,10 +286,16 @@ async function createResponse(payload) {
     },
     body: JSON.stringify({
       model: process.env.OPENAI_ASSISTANT_MODEL || defaultModel,
-      instructions: assistantInstructions,
-      max_output_tokens: 900,
-      parallel_tool_calls: true,
-      tools,
+      instructions: pureAssistantInstructions,
+      max_output_tokens: 1800,
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'morning_flow_secretary_result',
+          strict: true,
+          schema: assistantJsonSchema,
+        },
+      },
       ...payload,
     }),
   });
@@ -231,6 +305,68 @@ async function createResponse(payload) {
     throw new Error(json?.error?.message || json?.message || `OpenAI Responses API error ${response.status}`);
   }
   return json;
+}
+
+function parseAssistantJson(text) {
+  const raw = String(text || '').trim();
+  const jsonText = extractJsonObjectText(raw);
+  if (!jsonText) {
+    throw new Error('Assistant did not return valid JSON.');
+  }
+  const parsed = safeJsonParse(jsonText);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Assistant JSON parse failed.');
+  }
+  return normalizeAssistantJson(parsed);
+}
+
+function extractJsonObjectText(text) {
+  if (!text) return '';
+  if (text.startsWith('{') && text.endsWith('}')) return text;
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
+  if (fenced?.startsWith('{') && fenced.endsWith('}')) return fenced;
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  return start >= 0 && end > start ? text.slice(start, end + 1) : '';
+}
+
+function normalizeAssistantJson(value) {
+  return {
+    assistant_reply: stringValue(value.assistant_reply),
+    schedule_items: objectArray(value.schedule_items).map((item) => ({
+      title: stringValue(item.title),
+      date_text: stringValue(item.date_text),
+      time_text: stringValue(item.time_text),
+      notes: stringValue(item.notes),
+    })),
+    shopping_items: objectArray(value.shopping_items).map((item) => ({
+      name: stringValue(item.name),
+      quantity: stringValue(item.quantity),
+    })),
+    follow_up_items: objectArray(value.follow_up_items).map((item) => ({
+      title: stringValue(item.title),
+      person_name: stringValue(item.person_name),
+      action: stringValue(item.action),
+      due_text: stringValue(item.due_text),
+      notes: stringValue(item.notes),
+    })),
+    google_calendar_candidates: objectArray(value.google_calendar_candidates).map((item) => ({
+      title: stringValue(item.title),
+      date_text: stringValue(item.date_text),
+      time: stringValue(item.time),
+      notes: stringValue(item.notes),
+    })),
+    priority_suggestions: objectArray(value.priority_suggestions).map((item) => ({
+      title: stringValue(item.title),
+      reason: stringValue(item.reason),
+    })),
+    needs_clarification: Boolean(value.needs_clarification),
+    clarifying_question: stringValue(value.clarifying_question),
+  };
+}
+
+function objectArray(value) {
+  return Array.isArray(value) ? value.filter((item) => item && typeof item === 'object') : [];
 }
 
 function extractToolCalls(response) {
@@ -450,4 +586,37 @@ Example style:
 User asks what order to move in.
 Reply: "おすすめはこの順番です。" then a numbered order is OK for explanation only. Then say which candidates can be added, and invite "全部追加して" or "カレンダーだけ追加して".
 Do not use A/B/C labels for those actions.
+`;
+
+const pureAssistantInstructions = `
+You are MORNING FLOW AI's Pure LLM Secretary Core for Japanese voice-first users.
+
+Return only valid JSON that matches the provided schema. Do not output Markdown, code fences, explanations, or tool calls.
+
+Your job is to understand the user's natural speech and structure it into:
+- assistant_reply
+- schedule_items
+- shopping_items
+- follow_up_items
+- google_calendar_candidates
+- priority_suggestions
+- needs_clarification
+- clarifying_question
+
+The app will display and save your JSON directly. Do not rely on the app to reclassify, repair, or extract entities with rules.
+
+Extraction rules:
+- Put errands, actions, and vague-time plans into schedule_items. Example: bank visit tomorrow morning.
+- Put every product into shopping_items, one item per product. Keep quantities exactly.
+- Put person/contact actions into follow_up_items. Example: Tanaka-san LINE.
+- Put future-dated events with a clear numeric time into google_calendar_candidates. Example: tomorrow 18:00 gathering.
+- If the user asks for the recommended order, fill priority_suggestions and write a natural assistant_reply.
+- If information is insufficient, set needs_clarification true and write clarifying_question. Otherwise false and empty string.
+
+Important:
+- Do not invent missing exact times. "tomorrow morning" stays time_text "morning" in schedule_items, not 09:00.
+- Do not duplicate shopping items into follow_up_items.
+- Do not duplicate vague schedules into google_calendar_candidates unless a future date and clear numeric time are present.
+- Keep assistant_reply short, calm, and useful.
+- Use empty arrays when there are no items.
 `;

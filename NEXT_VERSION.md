@@ -1,6 +1,6 @@
 # NEXT VERSION
 
-Next planned version: Version 5.3.4
+Next planned version: Version 6.0.1
 
 ## ??
 
