@@ -7,6 +7,17 @@
 5. ZIP should include `dist` after build.
 6. v5.3.2 is based on v5.3.1 plus Developer Debug Visibility Fix.
 
+## Version 6.2.0 LLM First Accuracy Upgrade - 2026-06-10
+
+- Screen display: v6.2.0
+- ZIP: morning-flow-ai-v6.2.0.zip
+- Next planned version: Version 6.2.1
+- OpenAI structured output remains the source of truth for Review Draft generation.
+- App-side post-processing is limited to minimal normalization and duplicate removal.
+- GPT-provided shopping quantities and schedule date/time text are preserved.
+- Review Draft content and saved shopping content now use the same LLM-first normalized items.
+- No new keyword-heavy classification rules were added.
+
 ## Version 6.1.0 Auto Review Draft - 2026-06-10
 
 - Screen display: v6.1.0

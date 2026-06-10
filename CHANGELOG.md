@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## Version 6.2.0 - 2026-06-10
+
+- Strengthened the LLM-first architecture by keeping OpenAI structured output as the source of truth.
+- Added minimal post-LLM deduplication for schedules, shopping items, Follow Up items, Google Calendar candidates, and priority suggestions.
+- Preserved GPT-provided shopping quantities instead of reprocessing shopping text during Review Draft save.
+- Preserved GPT-provided date/time text through the Review Draft path.
+- Aligned Review Draft shopping items and saved shopping items so the confirmed content matches what the user reviewed.
+- Avoided adding keyword classification rules or frontend re-extraction logic.
+
 ## Version 6.1.0 - 2026-06-10
 
 - Auto-generates the Review Draft as soon as OpenAI structured JSON returns schedule, shopping, Follow Up, or Google Calendar candidates.

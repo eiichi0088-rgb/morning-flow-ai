@@ -1636,7 +1636,7 @@ function App() {
         setOriginalTranscript((current) => appendVoiceText(current, normalized));
         setInterimTranscript('');
         setPlan(draft.plan);
-        const reviewedShoppingItems = postProcessShoppingItems(draft.shoppingItems, draft.sourceText);
+        const reviewedShoppingItems = normalizeLlmFirstShoppingItems(draft.shoppingItems);
         setShoppingItems(reviewedShoppingItems);
         void syncShoppingItemsToSupabase(reviewedShoppingItems);
         setMorningFollowUpCandidates(draft.followUpCandidates);
@@ -2130,7 +2130,7 @@ function App() {
     if (!draft) return;
 
     setPlan(draft.plan);
-    const reviewedShoppingItems = postProcessShoppingItems(draft.shoppingItems, draft.sourceText);
+    const reviewedShoppingItems = normalizeLlmFirstShoppingItems(draft.shoppingItems);
     setShoppingItems(reviewedShoppingItems);
     void syncShoppingItemsToSupabase(reviewedShoppingItems);
     setMorningFollowUpCandidates(draft.followUpCandidates);
@@ -3910,7 +3910,7 @@ async function processLlmAssistantTurn({
 
 function normalizePureLlmSecretaryJson(value: unknown): PureLlmSecretaryJson {
   const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
-  return {
+  const normalized = {
     assistant_reply: stringPayload(source.assistant_reply) || '内容を整理しました。',
     schedule_items: objectArray(source.schedule_items).map((item) => ({
       title: stringPayload(item.title),
@@ -3942,12 +3942,59 @@ function normalizePureLlmSecretaryJson(value: unknown): PureLlmSecretaryJson {
     needs_clarification: Boolean(source.needs_clarification),
     clarifying_question: stringPayload(source.clarifying_question),
   };
+  return dedupePureLlmSecretaryJson(normalized);
 }
 
 function objectArray(value: unknown): Record<string, unknown>[] {
   return Array.isArray(value)
     ? value.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
     : [];
+}
+
+function dedupePureLlmSecretaryJson(result: PureLlmSecretaryJson): PureLlmSecretaryJson {
+  return {
+    ...result,
+    schedule_items: dedupeByKey(result.schedule_items, (item) =>
+      normalizeTaskText([item.date_text, item.time_text, item.title].filter(Boolean).join(' ')),
+    ),
+    shopping_items: dedupeShoppingJsonItems(result.shopping_items),
+    follow_up_items: dedupeByKey(result.follow_up_items, (item) =>
+      normalizeTaskText([item.title, item.person_name, item.action].filter(Boolean).join(' ')),
+    ),
+    google_calendar_candidates: dedupeByKey(result.google_calendar_candidates, (item) =>
+      normalizeTaskText([item.date_text, item.time, item.title].filter(Boolean).join(' ')),
+    ),
+    priority_suggestions: dedupeByKey(result.priority_suggestions, (item) => normalizeTaskText(item.title ?? '')),
+  };
+}
+
+function dedupeByKey<T>(items: T[], getKey: (item: T) => string) {
+  const seen = new Set<string>();
+  const deduped: T[] = [];
+  items.forEach((item) => {
+    const key = getKey(item);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    deduped.push(item);
+  });
+  return deduped;
+}
+
+function dedupeShoppingJsonItems(items: PureLlmSecretaryJson['shopping_items']) {
+  const byName = new Map<string, { name?: string; quantity?: string }>();
+  items.forEach((item) => {
+    const key = normalizeTaskText(item.name ?? '');
+    if (!key) return;
+    const current = byName.get(key);
+    if (!current) {
+      byName.set(key, item);
+      return;
+    }
+    if (!current.quantity && item.quantity) {
+      byName.set(key, { ...current, quantity: item.quantity });
+    }
+  });
+  return Array.from(byName.values());
 }
 
 function applyPureLlmSecretaryJson(draft: MorningReviewDraft, result: PureLlmSecretaryJson, sourceText: string) {
@@ -3969,10 +4016,7 @@ function applyPureLlmSecretaryJson(draft: MorningReviewDraft, result: PureLlmSec
     });
   });
   result.shopping_items.forEach((item) => {
-    nextDraft = applyLlmShoppingAction(nextDraft, {
-      name: item.name,
-      quantity: item.quantity,
-    });
+    nextDraft = appendPureLlmShoppingItem(nextDraft, item);
   });
   result.follow_up_items.forEach((item) => {
     nextDraft = applyLlmFollowUpAction(nextDraft, {
@@ -4003,7 +4047,70 @@ function applyPureLlmSecretaryJson(draft: MorningReviewDraft, result: PureLlmSec
       },
     };
   }
-  return { draft: nextDraft };
+  return { draft: normalizePureLlmReviewDraft(nextDraft) };
+}
+
+function appendPureLlmShoppingItem(draft: MorningReviewDraft, item: { name?: string; quantity?: string }) {
+  const name = String(item.name ?? '').trim();
+  if (!name) return draft;
+  const nextItem: ShoppingItem = {
+    addedAt: new Date().toISOString(),
+    category: classifyShoppingItem(name),
+    completed: false,
+    id: createLocalShoppingItemId(name),
+    name,
+    quantity: String(item.quantity ?? '').trim(),
+    source: 'voice',
+  };
+  return {
+    ...draft,
+    shoppingItems: normalizeLlmFirstShoppingItems([...draft.shoppingItems, nextItem]),
+    shoppingUpdatedAt: new Date().toISOString(),
+  };
+}
+
+function normalizePureLlmReviewDraft(draft: MorningReviewDraft): MorningReviewDraft {
+  return {
+    ...draft,
+    followUpCandidates: dedupeByKey(draft.followUpCandidates, (item) =>
+      normalizeTaskText([item.name, item.content, item.dueDate, item.dueTime].filter(Boolean).join(' ')),
+    ),
+    plan: {
+      ...draft.plan,
+      advice: dedupeTodos(draft.plan.advice),
+      priorities: {
+        highest: dedupeTodos(draft.plan.priorities.highest).slice(0, 3),
+        important: dedupeTodos(draft.plan.priorities.important).slice(0, 3),
+        optional: dedupeTodos(draft.plan.priorities.optional).slice(0, 3),
+      },
+      schedule: dedupeByKey(draft.plan.schedule, (item) =>
+        normalizeTaskText([item.time, item.task].filter(Boolean).join(' ')),
+      ),
+      todos: dedupeTodos(draft.plan.todos),
+    },
+    shoppingItems: normalizeLlmFirstShoppingItems(draft.shoppingItems),
+  };
+}
+
+function normalizeLlmFirstShoppingItems(items: ShoppingItem[]) {
+  const byName = new Map<string, ShoppingItem>();
+  items.forEach((item) => {
+    const key = normalizeTaskText(item.name);
+    if (!key) return;
+    const current = byName.get(key);
+    if (!current) {
+      byName.set(key, {
+        ...item,
+        name: item.name.trim(),
+        quantity: item.quantity.trim(),
+      });
+      return;
+    }
+    if (!current.quantity && item.quantity.trim()) {
+      byName.set(key, { ...current, quantity: item.quantity.trim() });
+    }
+  });
+  return Array.from(byName.values());
 }
 
 function summarizePureLlmJson(result: PureLlmSecretaryJson) {
