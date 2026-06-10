@@ -152,6 +152,7 @@ export default {
       const rawToolCalls = extractToolCalls(first);
       const actions = rawToolCalls.map(normalizeToolCallAction).filter(Boolean);
       let finalText = extractOutputText(first);
+      let lastAssistantResponse = finalText;
 
       if (rawToolCalls.length) {
         const toolOutputs = rawToolCalls.map((action) => ({
@@ -163,16 +164,30 @@ export default {
           previous_response_id: first.id,
           input: toolOutputs,
         });
-        finalText = extractOutputText(second) || finalText;
+        const secondText = extractOutputText(second);
+        finalText = secondText || finalText;
+        lastAssistantResponse = secondText || lastAssistantResponse;
       }
+      const assistantLines = splitAssistantText(finalText);
+
+      console.info('[MORNING FLOW AI] assistant response debug', {
+        actionsCount: actions.length,
+        assistantLinesCount: assistantLines.length,
+        firstOutputTypes: getOutputTypes(first),
+        rawToolCallsCount: rawToolCalls.length,
+        textLength: finalText.length,
+      });
 
       return Response.json({
         actions,
-        assistantLines: splitAssistantText(finalText),
+        assistantLines,
         debug: {
           actionsCount: actions.length,
+          assistantLinesCount: assistantLines.length,
+          lastAssistantResponse: lastAssistantResponse.slice(0, 1200),
           mode: 'llm-native',
           model: process.env.OPENAI_ASSISTANT_MODEL || defaultModel,
+          outputTypes: getOutputTypes(first),
           rawToolCallsCount: rawToolCalls.length,
           toolCalls: rawToolCalls.map((action) => action.name),
         },
@@ -213,14 +228,33 @@ async function createResponse(payload) {
 }
 
 function extractToolCalls(response) {
-  return (Array.isArray(response?.output) ? response.output : [])
-    .filter((item) => item?.type === 'function_call')
+  const calls = [];
+  collectToolCalls(response, calls);
+  return calls
     .map((item) => ({
-      arguments: safeJsonParse(item.arguments),
-      call_id: item.call_id,
-      name: item.name,
+      arguments: typeof item.arguments === 'string' ? safeJsonParse(item.arguments) : item.arguments || {},
+      call_id: item.call_id || item.id,
+      name: item.name || item.function?.name,
     }))
     .filter((item) => item.name && item.call_id);
+}
+
+function collectToolCalls(value, calls, seen = new Set()) {
+  if (!value || typeof value !== 'object' || seen.has(value)) return;
+  seen.add(value);
+  if (value.type === 'function_call' || value.type === 'tool_call') {
+    calls.push(value);
+  }
+  if (Array.isArray(value.tool_calls)) {
+    value.tool_calls.forEach((item) => calls.push(item));
+  }
+  for (const child of Object.values(value)) {
+    if (Array.isArray(child)) {
+      child.forEach((item) => collectToolCalls(item, calls, seen));
+    } else if (child && typeof child === 'object') {
+      collectToolCalls(child, calls, seen);
+    }
+  }
 }
 
 function normalizeToolCallAction(action) {
@@ -287,15 +321,37 @@ function stringValue(value) {
 }
 
 function extractOutputText(response) {
-  if (typeof response?.output_text === 'string') return response.output_text;
+  if (typeof response?.output_text === 'string' && response.output_text.trim()) return response.output_text.trim();
   const parts = [];
-  for (const item of Array.isArray(response?.output) ? response.output : []) {
-    if (item?.type !== 'message') continue;
-    for (const content of Array.isArray(item.content) ? item.content : []) {
-      if (typeof content?.text === 'string') parts.push(content.text);
+  collectOutputText(response, parts);
+  return Array.from(new Set(parts.map((part) => part.trim()).filter(Boolean))).join('\n').trim();
+}
+
+function collectOutputText(value, parts, seen = new Set()) {
+  if (!value || typeof value !== 'object' || seen.has(value)) return;
+  seen.add(value);
+  if ((value.type === 'output_text' || value.type === 'text') && typeof value.text === 'string') {
+    parts.push(value.text);
+  }
+  if (typeof value.content === 'string') {
+    parts.push(value.content);
+  }
+  if (value.type === 'message' && Array.isArray(value.content)) {
+    value.content.forEach((item) => collectOutputText(item, parts, seen));
+  }
+  for (const child of Object.values(value)) {
+    if (Array.isArray(child)) {
+      child.forEach((item) => collectOutputText(item, parts, seen));
+    } else if (child && typeof child === 'object') {
+      collectOutputText(child, parts, seen);
     }
   }
-  return parts.join('\n').trim();
+}
+
+function getOutputTypes(response) {
+  return (Array.isArray(response?.output) ? response.output : [])
+    .map((item) => String(item?.type || 'unknown'))
+    .filter(Boolean);
 }
 
 function splitAssistantText(text) {

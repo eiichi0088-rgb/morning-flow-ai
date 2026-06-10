@@ -5,8 +5,22 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v5.2.1 is based on v5.2.0 plus Tool Calling Repair.
+6. v5.2.2 is based on v5.2.1 plus LLM Response & Tool Recovery.
 
+
+## Version 5.2.2 LLM Response & Tool Recovery - 2026-06-10
+
+- Screen display: v5.2.2
+- ZIP: morning-flow-ai-v5.2.2.zip
+- Next planned version: Version 5.2.3
+- Assistant response extraction now recursively reads `output_text`, message content, and nested output text parts from OpenAI Responses API results.
+- Tool call extraction now recursively collects function/tool calls from response structures and normalizes them to `type` / `payload` actions.
+- API debug logs show Assistant Lines Count, Raw Tool Calls Count, Actions Count, output types, and response text length.
+- Client debug logs show assistant line count, action count, raw tool call count, API action count, repaired action count, and text recovery action count.
+- Developer Mode shows Assistant Mode, Raw Tool Calls Count, Actions Count, Assistant Lines Count, Last Assistant Response, Last Actions, and Fallback Error.
+- Text recovery actions prevent empty Review Drafts when the LLM returns no text and no tool calls for actionable speech.
+- Text recovery restores implicit non-numeric schedule items such as "明日の午前中に銀行へ行く".
+- v5.2.1 normalized action handling, v5.2.0 natural conversation policy, no A/B selection, and v5.1.1 voice stability remain preserved.
 
 ## Version 5.2.1 Tool Calling Repair - 2026-06-10
 

@@ -231,6 +231,8 @@ type LlmAssistantAction =
 
 type LlmAssistantDebug = {
   actionsCount: number;
+  assistantLinesCount: number;
+  lastAssistantResponse: string;
   rawToolCallsCount: number;
   toolCalls: string[];
 };
@@ -238,7 +240,9 @@ type LlmAssistantDebug = {
 type LlmAssistantResult = {
   actionsCount: number;
   assistantLines: string[];
+  assistantLinesCount: number;
   draft: MorningReviewDraft;
+  lastAssistantResponse: string;
   mode: 'llm-native' | 'fallback';
   model: string;
   rawToolCallsCount: number;
@@ -249,9 +253,11 @@ type LlmAssistantResult = {
 
 type AssistantRuntimeDebug = {
   actionsCount: number;
+  assistantLinesCount: number;
   error: string;
   fallbackError: string;
   lastActions: string[];
+  lastAssistantResponse: string;
   lastAssistantAction: string;
   lastUserIntent: string;
   mode: 'not checked' | 'llm-native' | 'fallback';
@@ -1040,9 +1046,11 @@ function App() {
   const [morningReviewDraft, setMorningReviewDraft] = React.useState<MorningReviewDraft | null>(null);
   const [assistantRuntimeDebug, setAssistantRuntimeDebug] = React.useState<AssistantRuntimeDebug>(() => ({
     actionsCount: 0,
+    assistantLinesCount: 0,
     error: '',
     fallbackError: '',
     lastActions: [],
+    lastAssistantResponse: '',
     lastAssistantAction: '',
     lastUserIntent: '',
     mode: 'not checked',
@@ -1555,9 +1563,11 @@ function App() {
         nextPendingFollowUp = null;
         setAssistantRuntimeDebug({
           actionsCount: llmResult.actionsCount,
+          assistantLinesCount: llmResult.assistantLinesCount,
           error: '',
           fallbackError: '',
           lastActions: llmResult.lastActions,
+          lastAssistantResponse: llmResult.lastAssistantResponse,
           lastAssistantAction: describeAssistantAction(llmResult.toolCalls, llmResult.shouldOpenReview),
           lastUserIntent: detectNaturalUserIntent(normalized),
           mode: 'llm-native',
@@ -1582,9 +1592,11 @@ function App() {
         nextPendingFollowUp = null;
         setAssistantRuntimeDebug({
           actionsCount: 0,
+          assistantLinesCount: 0,
           error: error instanceof Error ? error.message : String(error),
           fallbackError: error instanceof Error ? error.message : String(error),
           lastActions: [],
+          lastAssistantResponse: '',
           lastAssistantAction: 'fallback-message-only',
           lastUserIntent: detectNaturalUserIntent(normalized),
           mode: 'fallback',
@@ -3533,22 +3545,35 @@ async function processLlmAssistantTurn({
 
   const apiActions = normalizeLlmAssistantActions(payload?.actions);
   const repairedActions = apiActions.length ? [] : createContextRepairActions(conversationDraft, text);
-  const actions = apiActions.length ? apiActions : repairedActions;
+  const textRecoveryActions = apiActions.length || repairedActions.length ? [] : createTextRecoveryActions(text);
+  const actions = apiActions.length ? apiActions : repairedActions.length ? repairedActions : textRecoveryActions;
   const debug = normalizeLlmAssistantDebug(payload?.debug, actions);
   const applied = applyLlmAssistantActions(conversationDraft, actions, text);
+  const assistantLines = dedupeConversationLines(
+    sanitizeAssistantLines(
+      safeStringArray(payload?.assistantLines).length
+        ? safeStringArray(payload.assistantLines)
+        : createRecoveredAssistantLines(conversationDraft, actions, text),
+    ),
+  );
+  console.info('[MORNING FLOW AI] LLM assistant client debug', {
+    actionsCount: actions.length,
+    apiActionsCount: apiActions.length,
+    assistantLinesCount: assistantLines.length,
+    rawToolCallsCount: debug.rawToolCallsCount,
+    repairedActionsCount: repairedActions.length,
+    textRecoveryActionsCount: textRecoveryActions.length,
+    toolCalls: debug.toolCalls,
+  });
   const fallbackLine = actions.length
     ? '内容を理解して候補へ反映しました。保存するときは「保存して」と話してください。'
     : '内容を受け取りました。必要な確認があれば続けて質問します。';
   return {
     actionsCount: actions.length,
-    assistantLines: dedupeConversationLines(
-      sanitizeAssistantLines(
-        safeStringArray(payload?.assistantLines).length
-          ? safeStringArray(payload.assistantLines)
-          : [createLlmFallbackLine(actions.length)],
-      ),
-    ),
+    assistantLines,
+    assistantLinesCount: assistantLines.length,
     draft: applied.draft,
+    lastAssistantResponse: debug.lastAssistantResponse,
     mode: payload?.mode === 'llm-native' ? 'llm-native' : 'llm-native',
     model: String(payload?.model ?? ''),
     rawToolCallsCount: debug.rawToolCallsCount,
@@ -3624,9 +3649,13 @@ function normalizeLlmActionPayload(type: LlmAssistantAction['type'], payload: Re
 }
 
 function normalizeLlmAssistantDebug(value: unknown, actions: LlmAssistantAction[]): LlmAssistantDebug {
-  const debug = value && typeof value === 'object' ? (value as { actionsCount?: unknown; rawToolCallsCount?: unknown; toolCalls?: unknown }) : {};
+  const debug = value && typeof value === 'object'
+    ? (value as { actionsCount?: unknown; assistantLinesCount?: unknown; lastAssistantResponse?: unknown; rawToolCallsCount?: unknown; toolCalls?: unknown })
+    : {};
   return {
     actionsCount: numberPayload(debug.actionsCount, actions.length),
+    assistantLinesCount: numberPayload(debug.assistantLinesCount, 0),
+    lastAssistantResponse: stringPayload(debug.lastAssistantResponse),
     rawToolCallsCount: numberPayload(debug.rawToolCallsCount, actions.length),
     toolCalls: safeStringArray(debug.toolCalls),
   };
@@ -3710,11 +3739,16 @@ function hasConversationDraftContent(draft: MorningReviewDraft) {
 }
 
 function extractDateTextFromLlmTime(value: string) {
-  return value.replace(/\b\d{1,2}:\d{2}\b/g, '').trim();
+  const withoutClock = value.replace(/\b\d{1,2}:\d{2}\b/g, '').trim();
+  const date = withoutClock.match(/明後日|明日|今日|\d{1,2}月\d{1,2}日/)?.[0];
+  return date ?? withoutClock.replace(/午前中|午前|午後|朝|昼|夕方|夜/g, '').trim();
 }
 
 function extractClockTextFromLlmTime(value: string) {
-  return value.match(/\b\d{1,2}:\d{2}\b/)?.[0] ?? value;
+  const clock = value.match(/\b\d{1,2}:\d{2}\b/)?.[0];
+  if (clock) return clock;
+  if (/午前中|午前|午後|朝|昼|夕方|夜/.test(value)) return value.replace(/明後日|明日|今日/g, '').trim();
+  return '';
 }
 
 function dedupeLlmAssistantActions(actions: LlmAssistantAction[]) {
@@ -3725,6 +3759,116 @@ function dedupeLlmAssistantActions(actions: LlmAssistantAction[]) {
     seen.add(key);
     return true;
   });
+}
+
+function createTextRecoveryActions(text: string): LlmAssistantAction[] {
+  const actions: LlmAssistantAction[] = [];
+  const schedules = recoverImplicitScheduleItems(text, parseConversationScheduleItems(text));
+  const shoppingItems = extractConversationShoppingItems(text);
+  const followUp = createConversationFollowUpCandidate(text);
+  const isPriorityQuestion = detectNaturalUserIntent(text) === 'priority';
+
+  schedules.forEach((item) => {
+    actions.push({
+      payload: {
+        date_text: extractDateTextFromLlmTime(item.time),
+        time: extractClockTextFromLlmTime(item.time),
+        title: item.task,
+      },
+      type: 'add_schedule',
+    });
+    if (isFutureConversationTime(item.time) || isFutureConversationText(`${item.time} ${item.task}`)) {
+      actions.push({
+        payload: {
+          date_text: extractDateTextFromLlmTime(item.time),
+          time: extractClockTextFromLlmTime(item.time),
+          title: item.task,
+        },
+        type: 'add_google_calendar_candidate',
+      });
+    }
+  });
+
+  shoppingItems.forEach((item) => {
+    actions.push({
+      payload: {
+        category: item.category,
+        name: item.name,
+        quantity: item.quantity,
+      },
+      type: 'add_shopping_item',
+    });
+  });
+
+  if (followUp) {
+    actions.push({
+      payload: {
+        action: followUp.content,
+        due_text: followUp.duePreset,
+        method: followUp.kind,
+        person_name: followUp.name,
+        title: `${followUp.name}へ${followUp.content}`,
+      },
+      type: 'add_follow_up',
+    });
+  }
+
+  if (isPriorityQuestion && actions.length) {
+    actions.push({
+      payload: {
+        items: actions
+          .filter((action) => action.type !== 'update_priority')
+          .map((action) => ({ title: getRecoveredActionTitle(action), reason: getAssistantPriorityReason(getRecoveredActionTitle(action)) }))
+          .filter((item) => item.title)
+          .slice(0, 4),
+      },
+      type: 'update_priority',
+    });
+  }
+
+  return dedupeLlmAssistantActions(actions);
+}
+
+function recoverImplicitScheduleItems(text: string, parsed: MorningPlan['schedule']): MorningPlan['schedule'] {
+  const nextItems = [...parsed];
+  const normalized = text.normalize('NFKC');
+  const hasBank = /銀行.*行/.test(normalized);
+  const hasBankAlready = nextItems.some((item) => /銀行/.test(item.task));
+  if (hasBank && !hasBankAlready) {
+    const dateText = /明日/.test(normalized) ? '明日' : /明後日/.test(normalized) ? '明後日' : '';
+    const timeText = /午前中|午前/.test(normalized) ? '午前中' : /朝/.test(normalized) ? '朝' : '';
+    nextItems.push({
+      task: '銀行へ行く',
+      time: [dateText, timeText].filter(Boolean).join(' ') || '時間調整',
+    });
+  }
+  return nextItems;
+}
+
+function getRecoveredActionTitle(action: LlmAssistantAction) {
+  if (action.type === 'add_schedule' || action.type === 'add_google_calendar_candidate') return action.payload.title ?? '';
+  if (action.type === 'add_shopping_item') return [action.payload.name, action.payload.quantity].filter(Boolean).join(' ');
+  if (action.type === 'add_follow_up') return action.payload.title || [action.payload.person_name, action.payload.action].filter(Boolean).join('へ');
+  return '';
+}
+
+function createRecoveredAssistantLines(draft: MorningReviewDraft, actions: LlmAssistantAction[], text: string) {
+  if (!actions.length) return [createLlmFallbackLine(0)];
+  if (actions.some((action) => action.type === 'show_review_card') || detectNaturalUserIntent(text) === 'review') {
+    return ['保存前確認を表示します。'];
+  }
+  if (detectNaturalUserIntent(text) === 'priority' || actions.some((action) => action.type === 'update_priority')) {
+    const titles = actions.map(getRecoveredActionTitle).filter(Boolean);
+    return [
+      'おすすめ順です。',
+      ...titles.slice(0, 4).map((title, index) => `${index + 1}. ${title}`),
+      '必要なら「全部追加して」と言ってください。',
+    ];
+  }
+  const labels = actions.map(getRecoveredActionTitle).filter(Boolean);
+  return labels.length
+    ? ['追加しました。', ...labels.slice(0, 6).map((label) => `・${label}`), '保存前確認を表示する場合は「保存して」と言ってください。']
+    : [createLlmFallbackLine(actions.length)];
 }
 
 function stringPayload(value: unknown) {
@@ -4670,7 +4814,9 @@ function AssistantRuntimeDebugPanel({ debug }: { debug: AssistantRuntimeDebug })
       <small>Tool Calls: {debug.toolCalls.length ? debug.toolCalls.join(', ') : 'none'}</small>
       <small>Raw Tool Calls Count: {debug.rawToolCallsCount}</small>
       <small>Actions Count: {debug.actionsCount}</small>
+      <small>Assistant Lines Count: {debug.assistantLinesCount}</small>
       <small>Last Actions: {debug.lastActions.length ? debug.lastActions.join(', ') : 'none'}</small>
+      <small>Last Assistant Response: {debug.lastAssistantResponse || 'none'}</small>
       <small>Last User Intent: {debug.lastUserIntent || 'none'}</small>
       <small>Last Assistant Action: {debug.lastAssistantAction || 'none'}</small>
       <small>Fallback Error: {debug.fallbackError || 'none'}</small>

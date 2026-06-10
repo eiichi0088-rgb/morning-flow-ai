@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## Version 5.2.2 - 2026-06-10
+
+- Recovered assistant response extraction for OpenAI Responses API by recursively reading `output_text`, message content, and nested output text parts.
+- Recovered tool call extraction by recursively collecting function/tool calls from the response structure instead of only top-level `response.output` items.
+- Added API-side debug logging for assistant line count, raw tool call count, action count, output types, and response text length.
+- Added client-side console debug for assistant line count, action count, raw tool call count, API actions, repaired actions, and text recovery actions.
+- Added Developer Debug fields for Assistant Lines Count and Last Assistant Response.
+- Added text recovery actions when the LLM returns no assistant text and no tool calls, so actionable speech can still populate Review Draft instead of showing an empty review.
+- Text recovery now restores implicit schedule items such as "明日の午前中に銀行へ行く" even without a numeric time.
+- Preserved v5.2.1 normalized action handling, v5.2.0 natural conversation rules, and v5.1.1 voice stability.
+
 ## Version 5.2.1 - 2026-06-10
 
 - Repaired the LLM tool-calling bridge between `/api/assistant` and the home conversation Review Draft.
