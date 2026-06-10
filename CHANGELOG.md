@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## Version 5.3.0 - 2026-06-10
+
+- Reframed the LLM system instructions around Semantic Entity Extraction for schedule, shopping, Follow Up, Google Calendar candidates, priority suggestions, and assistant replies.
+- Strengthened semantic rules so grocery items stay in shopping, person-contact actions stay in Follow Up, and long utterances are not stored as Follow Up.
+- Improved recovery shopping extraction for clauses such as "帰りに牛乳2本と卵1パックを買って".
+- Improved recovery Follow Up extraction so "田中さんへLINE" is isolated from the rest of the utterance.
+- Prevented vague time expressions such as "明日の午前中" from becoming 09:00 Google Calendar candidates.
+- Semantic recovery carries the utterance-level date, so "明日の...18時から会合" becomes a dated Google Calendar candidate.
+- Google Calendar candidates now require an explicit parsed clock time, keeping vague schedule items out of calendar export candidates.
+- Developer Debug now shows extracted schedule items, shopping items, Follow Up items, and calendar candidates.
+- Preserved v5.2.2 LLM response and tool recovery plus v5.1.1 voice stability.
+
 ## Version 5.2.2 - 2026-06-10
 
 - Recovered assistant response extraction for OpenAI Responses API by recursively reading `output_text`, message content, and nested output text parts.

@@ -232,6 +232,10 @@ type LlmAssistantAction =
 type LlmAssistantDebug = {
   actionsCount: number;
   assistantLinesCount: number;
+  extractedCalendarCandidates: string[];
+  extractedFollowUpItems: string[];
+  extractedScheduleItems: string[];
+  extractedShoppingItems: string[];
   lastAssistantResponse: string;
   rawToolCallsCount: number;
   toolCalls: string[];
@@ -242,6 +246,10 @@ type LlmAssistantResult = {
   assistantLines: string[];
   assistantLinesCount: number;
   draft: MorningReviewDraft;
+  extractedCalendarCandidates: string[];
+  extractedFollowUpItems: string[];
+  extractedScheduleItems: string[];
+  extractedShoppingItems: string[];
   lastAssistantResponse: string;
   mode: 'llm-native' | 'fallback';
   model: string;
@@ -255,6 +263,10 @@ type AssistantRuntimeDebug = {
   actionsCount: number;
   assistantLinesCount: number;
   error: string;
+  extractedCalendarCandidates: string[];
+  extractedFollowUpItems: string[];
+  extractedScheduleItems: string[];
+  extractedShoppingItems: string[];
   fallbackError: string;
   lastActions: string[];
   lastAssistantResponse: string;
@@ -1048,6 +1060,10 @@ function App() {
     actionsCount: 0,
     assistantLinesCount: 0,
     error: '',
+    extractedCalendarCandidates: [],
+    extractedFollowUpItems: [],
+    extractedScheduleItems: [],
+    extractedShoppingItems: [],
     fallbackError: '',
     lastActions: [],
     lastAssistantResponse: '',
@@ -1565,6 +1581,10 @@ function App() {
           actionsCount: llmResult.actionsCount,
           assistantLinesCount: llmResult.assistantLinesCount,
           error: '',
+          extractedCalendarCandidates: llmResult.extractedCalendarCandidates,
+          extractedFollowUpItems: llmResult.extractedFollowUpItems,
+          extractedScheduleItems: llmResult.extractedScheduleItems,
+          extractedShoppingItems: llmResult.extractedShoppingItems,
           fallbackError: '',
           lastActions: llmResult.lastActions,
           lastAssistantResponse: llmResult.lastAssistantResponse,
@@ -1594,6 +1614,10 @@ function App() {
           actionsCount: 0,
           assistantLinesCount: 0,
           error: error instanceof Error ? error.message : String(error),
+          extractedCalendarCandidates: [],
+          extractedFollowUpItems: [],
+          extractedScheduleItems: [],
+          extractedShoppingItems: [],
           fallbackError: error instanceof Error ? error.message : String(error),
           lastActions: [],
           lastAssistantResponse: '',
@@ -3546,9 +3570,17 @@ async function processLlmAssistantTurn({
   const apiActions = normalizeLlmAssistantActions(payload?.actions);
   const repairedActions = apiActions.length ? [] : createContextRepairActions(conversationDraft, text);
   const textRecoveryActions = apiActions.length || repairedActions.length ? [] : createTextRecoveryActions(text);
-  const actions = apiActions.length ? apiActions : repairedActions.length ? repairedActions : textRecoveryActions;
+  const semanticRecoveryActions = shouldApplySemanticRecovery(text) ? createTextRecoveryActions(text) : [];
+  const actions = repairSemanticActionBoundaries(
+    apiActions.length
+      ? [...apiActions, ...semanticRecoveryActions]
+      : repairedActions.length
+        ? repairedActions
+        : textRecoveryActions,
+  );
   const debug = normalizeLlmAssistantDebug(payload?.debug, actions);
   const applied = applyLlmAssistantActions(conversationDraft, actions, text);
+  const extracted = summarizeExtractedActions(actions);
   const assistantLines = dedupeConversationLines(
     sanitizeAssistantLines(
       safeStringArray(payload?.assistantLines).length
@@ -3562,6 +3594,7 @@ async function processLlmAssistantTurn({
     assistantLinesCount: assistantLines.length,
     rawToolCallsCount: debug.rawToolCallsCount,
     repairedActionsCount: repairedActions.length,
+    semanticRecoveryActionsCount: semanticRecoveryActions.length,
     textRecoveryActionsCount: textRecoveryActions.length,
     toolCalls: debug.toolCalls,
   });
@@ -3573,6 +3606,10 @@ async function processLlmAssistantTurn({
     assistantLines,
     assistantLinesCount: assistantLines.length,
     draft: applied.draft,
+    extractedCalendarCandidates: extracted.calendar,
+    extractedFollowUpItems: extracted.followUp,
+    extractedScheduleItems: extracted.schedule,
+    extractedShoppingItems: extracted.shopping,
     lastAssistantResponse: debug.lastAssistantResponse,
     mode: payload?.mode === 'llm-native' ? 'llm-native' : 'llm-native',
     model: String(payload?.model ?? ''),
@@ -3652,13 +3689,62 @@ function normalizeLlmAssistantDebug(value: unknown, actions: LlmAssistantAction[
   const debug = value && typeof value === 'object'
     ? (value as { actionsCount?: unknown; assistantLinesCount?: unknown; lastAssistantResponse?: unknown; rawToolCallsCount?: unknown; toolCalls?: unknown })
     : {};
+  const extracted = summarizeExtractedActions(actions);
   return {
     actionsCount: numberPayload(debug.actionsCount, actions.length),
     assistantLinesCount: numberPayload(debug.assistantLinesCount, 0),
+    extractedCalendarCandidates: extracted.calendar,
+    extractedFollowUpItems: extracted.followUp,
+    extractedScheduleItems: extracted.schedule,
+    extractedShoppingItems: extracted.shopping,
     lastAssistantResponse: stringPayload(debug.lastAssistantResponse),
     rawToolCallsCount: numberPayload(debug.rawToolCallsCount, actions.length),
     toolCalls: safeStringArray(debug.toolCalls),
   };
+}
+
+function shouldApplySemanticRecovery(text: string) {
+  const intent = detectNaturalUserIntent(text);
+  return intent === 'priority' || intent === 'freeform';
+}
+
+function repairSemanticActionBoundaries(actions: LlmAssistantAction[]) {
+  return dedupeLlmAssistantActions(actions.filter((action) => {
+    if (action.type === 'add_follow_up') {
+      const label = getRecoveredActionTitle(action);
+      if (containsShoppingEntity(label)) return false;
+      if (label.length > 40 && /買|牛乳|卵|銀行|会合|予定/.test(label)) return false;
+      return Boolean(action.payload.person_name && action.payload.action);
+    }
+    if (action.type === 'add_google_calendar_candidate') {
+      const title = action.payload.title ?? '';
+      const time = action.payload.time ?? '';
+      const date = action.payload.date_text || action.payload.date || '';
+      if (/銀行/.test(title) && !hasExplicitClock(time)) return false;
+      return Boolean(title && date && hasExplicitClock(time));
+    }
+    if (action.type === 'add_shopping_item') {
+      return Boolean(action.payload.name && !/LINE|電話|メール|連絡|返信/.test(action.payload.name));
+    }
+    return true;
+  }));
+}
+
+function summarizeExtractedActions(actions: LlmAssistantAction[]) {
+  return {
+    calendar: actions.filter((action) => action.type === 'add_google_calendar_candidate').map(getRecoveredActionTitle).filter(Boolean),
+    followUp: actions.filter((action) => action.type === 'add_follow_up').map(getRecoveredActionTitle).filter(Boolean),
+    schedule: actions.filter((action) => action.type === 'add_schedule').map(getRecoveredActionTitle).filter(Boolean),
+    shopping: actions.filter((action) => action.type === 'add_shopping_item').map(getRecoveredActionTitle).filter(Boolean),
+  };
+}
+
+function containsShoppingEntity(text: string) {
+  return /牛乳|卵|大根|人参|にんじん|ネギ|ねぎ|買い物|買う|購入|スーパー|パック|本|個|袋/.test(text);
+}
+
+function hasExplicitClock(text: string) {
+  return /\b\d{1,2}:\d{2}\b|\d{1,2}時(?:半|[0-5]?\d分?)?/.test(text);
 }
 
 function createContextRepairActions(draft: MorningReviewDraft, text: string): LlmAssistantAction[] {
@@ -3767,21 +3853,24 @@ function createTextRecoveryActions(text: string): LlmAssistantAction[] {
   const shoppingItems = extractConversationShoppingItems(text);
   const followUp = createConversationFollowUpCandidate(text);
   const isPriorityQuestion = detectNaturalUserIntent(text) === 'priority';
+  const defaultDateText = extractDefaultDateText(text);
 
   schedules.forEach((item) => {
+    const dateText = extractDateTextFromLlmTime(item.time) || defaultDateText;
+    const clockText = extractClockTextFromLlmTime(item.time);
     actions.push({
       payload: {
-        date_text: extractDateTextFromLlmTime(item.time),
-        time: extractClockTextFromLlmTime(item.time),
+        date_text: dateText,
+        time: clockText,
         title: item.task,
       },
       type: 'add_schedule',
     });
-    if (isFutureConversationTime(item.time) || isFutureConversationText(`${item.time} ${item.task}`)) {
+    if ((isFutureConversationTime(item.time) || isFutureConversationText(`${dateText} ${item.time} ${item.task}`)) && hasExplicitClock(item.time)) {
       actions.push({
         payload: {
-          date_text: extractDateTextFromLlmTime(item.time),
-          time: extractClockTextFromLlmTime(item.time),
+          date_text: dateText,
+          time: clockText,
           title: item.task,
         },
         type: 'add_google_calendar_candidate',
@@ -3827,6 +3916,10 @@ function createTextRecoveryActions(text: string): LlmAssistantAction[] {
   }
 
   return dedupeLlmAssistantActions(actions);
+}
+
+function extractDefaultDateText(text: string) {
+  return text.match(/明後日|明日|今日|\d{1,2}月\d{1,2}日/)?.[0] ?? '';
 }
 
 function recoverImplicitScheduleItems(text: string, parsed: MorningPlan['schedule']): MorningPlan['schedule'] {
@@ -4267,7 +4360,7 @@ function normalizeConversationMinute(value: string) {
 function createConversationScheduleTitle(value: string) {
   const cleaned = value
     .replace(/^(に|へ|で|から|は)+/, '')
-    .replace(/(する|します|して)$/g, '')
+    .replace(/(があります|がある|ある|する|します|して)$/g, '')
     .replace(/[、。]/g, '')
     .trim();
   if (!cleaned) return '';
@@ -4278,17 +4371,17 @@ function createConversationScheduleTitle(value: string) {
 }
 
 function extractConversationShoppingItems(text: string): ShoppingItem[] {
-  if (!/買い物|買う|購入/.test(text)) return [];
+  if (!hasShoppingActionIntent(text) && !hasShoppingItemIntent(text)) return [];
   const items: ShoppingItem[] = [];
-  const shoppingText = text
-    .normalize('NFKC')
+  const normalized = text.normalize('NFKC');
+  const shoppingText = extractShoppingClause(normalized)
     .replace(/(?:(?:今日|明日|明後日|来週(?:月曜|火曜|水曜|木曜|金曜|土曜|日曜|月曜日|火曜日|水曜日|木曜日|金曜日|土曜日|日曜日)?|\d{1,2}月\d{1,2}日)\s*)?(?:午前|午後|朝|昼|夜)?\s*\d{1,2}時(?:半|[0-5]?\d分?)?(?:から|に)?/g, ' ')
-    .replace(/買い物で|買い物|購入|を買う|買う/g, ' ');
-  const quantityPattern = /([一-龥ぁ-んァ-ヶーA-Za-z]+)\s*([0-9０-９]+)\s*(本|個|袋|パック|箱|枚|束|玉|丁|g|kg|グラム)/g;
+    .replace(/帰りに|スーパーで|買い物で|買い物|購入|買って帰る|買って|を買う|買う/g, ' ');
+  const quantityPattern = /([一-龥ぁ-んァ-ヶーA-Za-z]+?)\s*([0-9０-９]+)\s*(本|個|袋|パック|箱|枚|束|玉|丁|g|kg|グラム)/g;
   let match: RegExpExecArray | null;
   while ((match = quantityPattern.exec(shoppingText))) {
-    const name = match[1].replace(/^(に|へ|で|と|、|。)+/, '').trim();
-    if (!name || /時|買い物|予定|店/.test(name)) continue;
+    const name = cleanShoppingEntityName(match[1]);
+    if (!name || /時|買い物|予定|店|帰り|銀行|会合|LINE|電話|メール|連絡/.test(name)) continue;
     items.push({
       addedAt: new Date().toISOString(),
       category: classifyShoppingItem(name),
@@ -4302,9 +4395,25 @@ function extractConversationShoppingItems(text: string): ShoppingItem[] {
   return postProcessShoppingItems(items);
 }
 
+function extractShoppingClause(text: string) {
+  const match = text.match(/(?:帰りに|スーパーで|買い物で)?(.+?)(?:を)?(?:買って帰る|買って|買う|購入)/);
+  return match?.[1] ?? text;
+}
+
+function cleanShoppingEntityName(value: string) {
+  const parts = value
+    .replace(/[、。]/g, ' ')
+    .split(/と|や|,|，|\s+/)
+    .map((item) => item.replace(/^(に|へ|で|を|も|は|が|帰りに|スーパーで)+/, '').trim())
+    .filter(Boolean);
+  return parts[parts.length - 1] ?? '';
+}
+
 function createConversationFollowUpCandidate(text: string): FollowUpDraftItem | null {
   if (!/電話|LINE|ライン|返信|折り返し|連絡|確認|メール/.test(text)) return null;
-  const item = createVoiceFollowUp(text);
+  const followUpText = extractFollowUpClause(text);
+  if (!followUpText || containsShoppingEntity(followUpText)) return null;
+  const item = createVoiceFollowUp(followUpText);
   if (!item) return null;
   return {
     company: item.company,
@@ -4320,6 +4429,15 @@ function createConversationFollowUpCandidate(text: string): FollowUpDraftItem | 
     source: 'voice',
     status: item.status ?? 'pending',
   };
+}
+
+function extractFollowUpClause(text: string) {
+  const normalized = text.normalize('NFKC');
+  const personAction = normalized.match(/([一-龥ぁ-んァ-ヶーA-Za-z]+(?:さん|くん|君|ちゃん|様)?)\s*(?:へ|に)?\s*(LINE|ライン|電話|メール|返信|折り返し|連絡|確認)(?:する|して|をする)?/);
+  if (!personAction) return '';
+  const person = personAction[1].trim();
+  const action = personAction[2].replace(/ライン/i, 'LINE');
+  return `${person}へ${action}する`;
 }
 
 function createConversationTodo(text: string) {
@@ -4817,6 +4935,10 @@ function AssistantRuntimeDebugPanel({ debug }: { debug: AssistantRuntimeDebug })
       <small>Assistant Lines Count: {debug.assistantLinesCount}</small>
       <small>Last Actions: {debug.lastActions.length ? debug.lastActions.join(', ') : 'none'}</small>
       <small>Last Assistant Response: {debug.lastAssistantResponse || 'none'}</small>
+      <small>Extracted Schedule Items: {debug.extractedScheduleItems.length ? debug.extractedScheduleItems.join(', ') : 'none'}</small>
+      <small>Extracted Shopping Items: {debug.extractedShoppingItems.length ? debug.extractedShoppingItems.join(', ') : 'none'}</small>
+      <small>Extracted Follow Up Items: {debug.extractedFollowUpItems.length ? debug.extractedFollowUpItems.join(', ') : 'none'}</small>
+      <small>Extracted Calendar Candidates: {debug.extractedCalendarCandidates.length ? debug.extractedCalendarCandidates.join(', ') : 'none'}</small>
       <small>Last User Intent: {debug.lastUserIntent || 'none'}</small>
       <small>Last Assistant Action: {debug.lastAssistantAction || 'none'}</small>
       <small>Fallback Error: {debug.fallbackError || 'none'}</small>
@@ -9420,6 +9542,7 @@ function createCalendarEvents(plan: MorningPlan): CalendarEvent[] {
   return cleanScheduleItems(plan.schedule)
     .map((item, index) => {
       const range = parseScheduleTime(item.time);
+      if (!range) return null;
       const fallbackStartMinutes = 9 * 60 + index * 60;
       const startMinutes = range?.startMinutes ?? fallbackStartMinutes;
       const targetDate = parseScheduleDate(`${item.time} ${item.task}`, today);

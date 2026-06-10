@@ -5,8 +5,22 @@
 3. Always run `npm.cmd run build` before release.
 4. ZIP must not include `node_modules`, `.npm-cache`, or `.env`.
 5. ZIP should include `dist` after build.
-6. v5.2.2 is based on v5.2.1 plus LLM Response & Tool Recovery.
+6. v5.3.0 is based on v5.2.2 plus Semantic Entity Extraction.
 
+
+## Version 5.3.0 Semantic Entity Extraction - 2026-06-10
+
+- Screen display: v5.3.0
+- ZIP: morning-flow-ai-v5.3.0.zip
+- Next planned version: Version 5.3.1
+- LLM instructions now define MORNING FLOW AI as a Semantic Entity Extraction Engine for schedule, shopping, Follow Up, Google Calendar candidates, priority suggestions, and assistant replies.
+- Shopping items such as 牛乳2本 and 卵1パック are kept out of Follow Up and mapped to shopping actions.
+- Follow Up recovery extracts only person-contact actions such as 田中さんへLINE instead of storing the whole utterance.
+- Ambiguous times such as 明日の午前中 are kept as schedule items and are not converted to 09:00.
+- Utterance-level dates are carried into exact-time events, so "明日の...18時から会合" becomes a Google Calendar candidate.
+- Google Calendar candidates require a future/dated item with an explicit clock time, so vague bank visits are not calendar candidates.
+- Developer Mode shows Extracted Schedule Items, Extracted Shopping Items, Extracted Follow Up Items, and Extracted Calendar Candidates.
+- v5.2.2 LLM Response & Tool Recovery, no A/B selection, and v5.1.1 voice stability remain preserved.
 
 ## Version 5.2.2 LLM Response & Tool Recovery - 2026-06-10
 
