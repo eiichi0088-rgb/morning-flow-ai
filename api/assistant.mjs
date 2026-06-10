@@ -43,8 +43,14 @@ const tools = [
       type: 'object',
       additionalProperties: false,
       properties: {
-        person_name: { type: 'string' },
-        action: { type: 'string' },
+        person_name: {
+          type: 'string',
+          description: '連絡する相手の名前。必須。例: 田中さん',
+        },
+        action: {
+          type: 'string',
+          description: '行う行動。必須。例: LINEする、電話する、メールする',
+        },
         method: { type: 'string', enum: ['phone', 'line', 'email', 'sms', 'other'] },
         due_text: { type: 'string' },
         memo: { type: 'string' },

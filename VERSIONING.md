@@ -7,6 +7,16 @@
 5. ZIP should include `dist` after build.
 6. v5.3.2 is based on v5.3.1 plus Developer Debug Visibility Fix.
 
+## Version 5.3.2 Semantic Entity Filter Fix - 2026-06-10
+
+- Screen display: v5.3.2
+- ZIP: morning-flow-ai-v5.3.2.zip
+- Next planned version: Version 5.3.3
+- Google Calendar candidates are no longer rejected when title and explicit time are present but date is empty.
+- Follow Up candidates now accept a non-empty title fallback when person_name/action are missing.
+- Developer Debug shows Follow Up Reject Reason and Calendar Reject Reason.
+- The add_follow_up tool schema descriptions now explicitly mark person_name and action as required with examples.
+
 
 ## Version 5.3.2 Developer Debug Visibility Fix - 2026-06-10
 

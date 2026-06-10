@@ -239,6 +239,8 @@ type LlmAssistantDebug = {
   extractedScheduleItems: string[];
   extractedShoppingItems: string[];
   extractedCount: number;
+  calendarRejectReasons: string[];
+  followUpRejectReasons: string[];
   followUpCount: number;
   lastAssistantResponse: string;
   lostEntityCount: number;
@@ -259,6 +261,8 @@ type LlmAssistantResult = {
   extractedScheduleItems: string[];
   extractedShoppingItems: string[];
   extractedCount: number;
+  calendarRejectReasons: string[];
+  followUpRejectReasons: string[];
   followUpCount: number;
   lastAssistantResponse: string;
   lostEntityCount: number;
@@ -282,6 +286,8 @@ type AssistantRuntimeDebug = {
   extractedScheduleItems: string[];
   extractedShoppingItems: string[];
   extractedCount: number;
+  calendarRejectReasons: string[];
+  followUpRejectReasons: string[];
   followUpCount: number;
   fallbackError: string;
   lastActions: string[];
@@ -1086,6 +1092,8 @@ function App() {
     extractedScheduleItems: [],
     extractedShoppingItems: [],
     extractedCount: 0,
+    calendarRejectReasons: [],
+    followUpRejectReasons: [],
     followUpCount: 0,
     fallbackError: '',
     lastActions: [],
@@ -1613,6 +1621,8 @@ function App() {
           extractedScheduleItems: llmResult.extractedScheduleItems,
           extractedShoppingItems: llmResult.extractedShoppingItems,
           extractedCount: llmResult.extractedCount,
+          calendarRejectReasons: llmResult.calendarRejectReasons,
+          followUpRejectReasons: llmResult.followUpRejectReasons,
           followUpCount: llmResult.followUpCount,
           fallbackError: '',
           lastActions: llmResult.lastActions,
@@ -1652,6 +1662,8 @@ function App() {
           extractedScheduleItems: [],
           extractedShoppingItems: [],
           extractedCount: 0,
+          calendarRejectReasons: [],
+          followUpRejectReasons: [],
           followUpCount: 0,
           fallbackError: error instanceof Error ? error.message : String(error),
           lastActions: [],
@@ -3628,13 +3640,13 @@ async function processLlmAssistantTurn({
   const textRecoveryActions = apiActions.length || repairedActions.length ? [] : createTextRecoveryActions(text);
   const semanticRecoveryActions = shouldApplySemanticRecovery(text) ? createTextRecoveryActions(text) : [];
   const fullCoverageActions = createFullCoverageActions(text);
-  const actions = repairSemanticActionBoundaries(
-    apiActions.length
-      ? [...apiActions, ...semanticRecoveryActions, ...fullCoverageActions]
-      : repairedActions.length
-        ? [...repairedActions, ...fullCoverageActions]
-        : [...textRecoveryActions, ...fullCoverageActions],
-  );
+  const candidateActions = apiActions.length
+    ? [...apiActions, ...semanticRecoveryActions, ...fullCoverageActions]
+    : repairedActions.length
+      ? [...repairedActions, ...fullCoverageActions]
+      : [...textRecoveryActions, ...fullCoverageActions];
+  const actions = repairSemanticActionBoundaries(candidateActions);
+  const rejectReasons = summarizeSemanticRejectReasons(candidateActions);
   const debug = normalizeLlmAssistantDebug(payload?.debug, actions);
   const applied = applyLlmAssistantActions(conversationDraft, actions, text);
   const extracted = summarizeExtractedActions(actions);
@@ -3656,6 +3668,8 @@ async function processLlmAssistantTurn({
     rawToolCallsCount: debug.rawToolCallsCount,
     repairedActionsCount: repairedActions.length,
     fullCoverageActionsCount: fullCoverageActions.length,
+    calendarRejectReasons: rejectReasons.calendar,
+    followUpRejectReasons: rejectReasons.followUp,
     lostEntityCount: coverage.lostEntityCount,
     semanticRecoveryActionsCount: semanticRecoveryActions.length,
     textRecoveryActionsCount: textRecoveryActions.length,
@@ -3675,6 +3689,8 @@ async function processLlmAssistantTurn({
     extractedScheduleItems: extracted.schedule,
     extractedShoppingItems: extracted.shopping,
     extractedCount: coverage.extractedCount,
+    calendarRejectReasons: rejectReasons.calendar,
+    followUpRejectReasons: rejectReasons.followUp,
     followUpCount: coverage.followUpCount,
     lastAssistantResponse: debug.lastAssistantResponse,
     lostEntityCount: coverage.lostEntityCount,
@@ -3768,6 +3784,8 @@ function normalizeLlmAssistantDebug(value: unknown, actions: LlmAssistantAction[
     extractedScheduleItems: extracted.schedule,
     extractedShoppingItems: extracted.shopping,
     extractedCount: extracted.schedule.length + extracted.shopping.length + extracted.followUp.length + extracted.calendar.length,
+    calendarRejectReasons: [],
+    followUpRejectReasons: [],
     followUpCount: extracted.followUp.length,
     lastAssistantResponse: stringPayload(debug.lastAssistantResponse),
     lostEntityCount: 0,
@@ -3789,14 +3807,17 @@ function repairSemanticActionBoundaries(actions: LlmAssistantAction[]) {
       const label = getRecoveredActionTitle(action);
       if (containsShoppingEntity(label)) return false;
       if (label.length > 40 && /買|牛乳|卵|銀行|会合|予定/.test(label)) return false;
-      return Boolean(action.payload.person_name && action.payload.action);
+      return Boolean(
+        (action.payload.person_name && action.payload.action) ||
+        (action.payload.title && action.payload.title.length > 0),
+      );
     }
     if (action.type === 'add_google_calendar_candidate') {
       const title = action.payload.title ?? '';
       const time = action.payload.time ?? '';
       const date = action.payload.date_text || action.payload.date || '';
       if (/銀行/.test(title) && !hasExplicitClock(time)) return false;
-      return Boolean(title && date && hasExplicitClock(time));
+      return Boolean(title && (date || hasExplicitClock(time)));
     }
     if (action.type === 'add_schedule') {
       const time = action.payload.time ?? '';
@@ -3808,6 +3829,53 @@ function repairSemanticActionBoundaries(actions: LlmAssistantAction[]) {
     }
     return true;
   }));
+}
+
+function summarizeSemanticRejectReasons(actions: LlmAssistantAction[]) {
+  return actions.reduce(
+    (summary, action) => {
+      if (action.type === 'add_follow_up') {
+        const reasons = getFollowUpRejectReasons(action);
+        if (reasons.length) summary.followUp.push(reasons.join(', '));
+      }
+      if (action.type === 'add_google_calendar_candidate') {
+        const reasons = getCalendarRejectReasons(action);
+        if (reasons.length) summary.calendar.push(reasons.join(', '));
+      }
+      return summary;
+    },
+    { calendar: [] as string[], followUp: [] as string[] },
+  );
+}
+
+function getFollowUpRejectReasons(action: Extract<LlmAssistantAction, { type: 'add_follow_up' }>) {
+  const label = getRecoveredActionTitle(action);
+  const hasPersonAction = Boolean(action.payload.person_name && action.payload.action);
+  const hasTitleFallback = Boolean(action.payload.title && action.payload.title.length > 0);
+  const reasons: string[] = [];
+  if (containsShoppingEntity(label)) reasons.push('shopping entity');
+  if (label.length > 40 && /買|牛乳|卵|銀行|会合|予定/.test(label)) reasons.push('long mixed entity');
+  if (!hasPersonAction && !hasTitleFallback) {
+    if (!action.payload.person_name) reasons.push('missing person_name');
+    if (!action.payload.action) reasons.push('missing action');
+    if (!action.payload.title) reasons.push('missing title fallback');
+  }
+  return reasons;
+}
+
+function getCalendarRejectReasons(action: Extract<LlmAssistantAction, { type: 'add_google_calendar_candidate' }>) {
+  const title = action.payload.title ?? '';
+  const time = action.payload.time ?? '';
+  const date = action.payload.date_text || action.payload.date || '';
+  const hasClock = hasExplicitClock(time);
+  const reasons: string[] = [];
+  if (/銀行/.test(title) && !hasClock) reasons.push('bank item without explicit clock time');
+  if (!title) reasons.push('missing title');
+  if (!date && !hasClock) {
+    reasons.push('missing date');
+    reasons.push('missing time');
+  }
+  return reasons;
 }
 
 function summarizeExtractedActions(actions: LlmAssistantAction[]) {
@@ -5050,6 +5118,8 @@ function AssistantRuntimeDebugPanel({ debug }: { debug: AssistantRuntimeDebug })
       <small>Follow Up Count: {debug.followUpCount}</small>
       <small>Calendar Count: {debug.calendarCount}</small>
       <small>Lost Entity Count: {debug.lostEntityCount}</small>
+      <small>Follow Up Reject Reason: {debug.followUpRejectReasons.length ? debug.followUpRejectReasons.join(' / ') : 'none'}</small>
+      <small>Calendar Reject Reason: {debug.calendarRejectReasons.length ? debug.calendarRejectReasons.join(' / ') : 'none'}</small>
       <small>Last Actions: {debug.lastActions.length ? debug.lastActions.join(', ') : 'none'}</small>
       <small>Last Assistant Response: {debug.lastAssistantResponse || 'none'}</small>
       <small>Extracted Schedule Items: {debug.extractedScheduleItems.length ? debug.extractedScheduleItems.join(', ') : 'none'}</small>
@@ -5098,6 +5168,8 @@ function DeveloperDebugDialog({
           <DebugMetric label="Follow Up Count" value={assistantDebug.followUpCount} />
           <DebugMetric label="Calendar Count" value={assistantDebug.calendarCount} />
           <DebugMetric label="Lost Entity Count" value={assistantDebug.lostEntityCount} />
+          <DebugMetric label="Follow Up Reject Reason" value={assistantDebug.followUpRejectReasons.length ? assistantDebug.followUpRejectReasons.join(' / ') : 'none'} />
+          <DebugMetric label="Calendar Reject Reason" value={assistantDebug.calendarRejectReasons.length ? assistantDebug.calendarRejectReasons.join(' / ') : 'none'} />
           <DebugMetric label="Fallback Error" value={assistantDebug.fallbackError || 'none'} />
           <DebugMetric label="Voice Status" value={voiceDebug.status} />
         </div>

@@ -4,6 +4,10 @@
 ## Version 5.3.2 - 2026-06-10
 
 - Made the top-right Sparkles button open Developer Debug when Developer Mode is enabled.
+- Fixed the Semantic Entity filter so Google Calendar candidates are kept when they have a title and explicit time even if the date field is empty.
+- Fixed the Follow Up filter so a non-empty title can be used as a fallback when person_name/action are missing from the tool payload.
+- Added Follow Up Reject Reason and Calendar Reject Reason to Developer Debug.
+- Clarified the add_follow_up tool schema descriptions for required person_name and action fields.
 - Added a Settings screen Developer Mode passcode toggle so the debug button can be enabled on real devices.
 - Added a screenshot-friendly Developer Debug dialog with a close button.
 - The dialog shows Assistant Mode, Assistant Lines Count, Raw Tool Calls Count, Actions Count, Extracted Count, Schedule Count, Shopping Count, Follow Up Count, Calendar Count, Lost Entity Count, Last Assistant Response, Last Actions, and Fallback Error.
