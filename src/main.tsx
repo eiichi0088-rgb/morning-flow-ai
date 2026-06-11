@@ -201,6 +201,7 @@ type MorningReviewDraft = {
 type AiConversationMessage = {
   id: string;
   role: 'assistant' | 'user';
+  tone?: 'error';
   title?: string;
   lines: string[];
 };
@@ -1267,6 +1268,7 @@ function App() {
   const [pendingConversationIntent, setPendingConversationIntent] = React.useState<PendingConversationIntent | null>(null);
   const [pendingConversationFollowUp, setPendingConversationFollowUp] = React.useState<FollowUpDraftItem | null>(null);
   const planAnchorRef = React.useRef<HTMLDivElement | null>(null);
+  const isOrganizingRef = React.useRef(false);
   const recognitionRef = React.useRef<SpeechRecognitionLike | null>(null);
   const isListeningRef = React.useRef(false);
   const manualStopRef = React.useRef(false);
@@ -1318,6 +1320,10 @@ function App() {
   React.useEffect(() => {
     activeViewRef.current = activeView;
   }, [activeView]);
+
+  React.useEffect(() => {
+    isOrganizingRef.current = isOrganizing;
+  }, [isOrganizing]);
 
   const getFreshAuthSession = React.useCallback(async (): Promise<{ session: SupabaseAuthSession; tokenStatus: string }> => {
     const currentSession = authSession ?? getStoredSupabaseAuthSession();
@@ -1789,6 +1795,7 @@ function App() {
     async (text: string) => {
       const normalized = text.trim();
       if (!normalized) return;
+      if (isOrganizingRef.current) return;
 
       if (morningReviewDraft && isConversationSaveCommand(normalized)) {
         const draft = morningReviewDraft;
@@ -1833,11 +1840,13 @@ function App() {
       setMorningFollowUpCandidates([]);
       setMorningFollowUpMessage('');
       setInterimTranscript('');
+      isOrganizingRef.current = true;
       setIsOrganizing(true);
       setError('');
 
       let nextDraft = conversationDraft;
       let assistantLines: string[] = [];
+      let assistantTone: AiConversationMessage['tone'] | undefined;
       let shouldOpenReview = false;
       let nextConversationUnderstanding: ConversationUnderstanding | null = null;
       let nextPendingIntent = pendingConversationIntent;
@@ -1907,6 +1916,12 @@ function App() {
           '入力内容は保存せず、この会話内に保持しています。',
         ];
         shouldOpenReview = false;
+        const friendlyError = 'AI\u306e\u5fdc\u7b54\u306b\u6642\u9593\u304c\u304b\u304b\u308a\u307e\u3057\u305f\u3002\u5165\u529b\u5185\u5bb9\u306f\u623b\u3057\u3066\u3042\u308a\u307e\u3059\u3002\u3082\u3046\u4e00\u5ea6\u9001\u4fe1\u3057\u3066\u304f\u3060\u3055\u3044\u3002';
+        setError(friendlyError);
+        setTranscript((current) => current.includes(normalized) ? current : appendVoiceText(current, normalized));
+        setOriginalTranscript((current) => current.includes(normalized) ? current : appendVoiceText(current, normalized));
+        assistantLines = [friendlyError];
+        assistantTone = 'error';
         nextConversationUnderstanding = null;
         nextPendingIntent = null;
         nextPendingFollowUp = null;
@@ -1948,6 +1963,7 @@ function App() {
         });
       }
 
+      isOrganizingRef.current = false;
       setIsOrganizing(false);
       setConversationDraft(nextDraft);
       setConversationUnderstanding(shouldOpenReview ? nextConversationUnderstanding : null);
@@ -1969,6 +1985,7 @@ function App() {
           lines: result.assistantLines,
         },
       ]);
+      setConversationMessages((current) => normalizeRecentConversationMessages(current, normalized, assistantTone));
 
       if (result.shouldOpenReview) {
         setMorningReviewDraft(result.draft);
@@ -1981,6 +1998,7 @@ function App() {
     (text: string, sourceView: AppView) => {
       const normalized = text.trim();
       if (!normalized) return;
+      if (isOrganizingRef.current) return;
 
       if (sourceView === 'shopping') {
         if (shoppingCaptureMode === 'meal') {
@@ -2123,6 +2141,7 @@ function App() {
 
   const startListening = () => {
     const recognition = recognitionRef.current;
+    if (isOrganizingRef.current) return;
     if (!recognition || isListeningRef.current) return;
 
     if (activeView === 'shopping') {
@@ -2165,7 +2184,7 @@ function App() {
     transcriptBufferRef.current = '';
     interimBufferRef.current = '';
     setInterimTranscript('');
-    if (bufferedText) {
+    if (bufferedText && !isOrganizingRef.current) {
       routeFinalVoiceText(bufferedText, activeViewRef.current);
     }
     setVoiceRecognitionDebug((current) => ({
@@ -6151,6 +6170,36 @@ function formatFollowUpDueDraft(item: FollowUpDraftItem) {
   return item.duePreset === 'tomorrow' ? '明日' : '今日中';
 }
 
+function normalizeRecentConversationMessages(
+  messages: AiConversationMessage[],
+  latestUserText: string,
+  assistantTone?: AiConversationMessage['tone'],
+) {
+  const normalized: AiConversationMessage[] = [];
+  let previousUserText = '';
+  messages.forEach((message) => {
+    const userText = message.role === 'user' ? message.lines.join('\n').trim() : '';
+    if (userText && userText === previousUserText) return;
+    if (userText) previousUserText = userText;
+    normalized.push(message);
+  });
+  if (assistantTone) {
+    for (let index = normalized.length - 1; index >= 0; index -= 1) {
+      if (normalized[index].role === 'assistant') {
+        normalized[index] = { ...normalized[index], tone: assistantTone };
+        break;
+      }
+    }
+  }
+  return normalized.filter((message, index, list) => {
+    if (message.role !== 'user' || message.lines.join('\n').trim() !== latestUserText) return true;
+    const previousSameUserIndex = list.findIndex((item, itemIndex) =>
+      itemIndex < index && item.role === 'user' && item.lines.join('\n').trim() === latestUserText,
+    );
+    return previousSameUserIndex < 0 || index - previousSameUserIndex > 2;
+  });
+}
+
 function AiConversationPanel({ messages }: { messages: AiConversationMessage[] }) {
   return (
     <section className="ai-conversation-panel" aria-label="AI conversation">
@@ -6163,7 +6212,7 @@ function AiConversationPanel({ messages }: { messages: AiConversationMessage[] }
       </div>
       <div className="ai-conversation-thread">
         {messages.map((message) => (
-          <article className={`ai-chat-bubble is-${message.role}`} key={message.id}>
+          <article className={`ai-chat-bubble is-${message.role} ${message.tone === 'error' ? 'is-error-message' : ''}`} key={message.id}>
             {message.title && <strong>{message.title}</strong>}
             {message.lines.map((line, index) => (
               <p key={`${message.id}-${index}`}>{line}</p>

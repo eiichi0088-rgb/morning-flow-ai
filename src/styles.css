@@ -1968,6 +1968,18 @@ h1 {
   background: rgba(247, 231, 190, 0.09);
 }
 
+.ai-chat-bubble.is-error-message {
+  border-color: rgba(255, 138, 138, 0.34);
+  color: rgba(255, 238, 238, 0.96);
+  background:
+    linear-gradient(135deg, rgba(255, 138, 138, 0.14), rgba(255, 255, 255, 0.035)),
+    rgba(24, 5, 8, 0.56);
+}
+
+.ai-chat-bubble.is-error-message strong {
+  color: #ffb4b4;
+}
+
 .ai-chat-bubble strong {
   color: #8de5ff;
   font-size: 0.84rem;

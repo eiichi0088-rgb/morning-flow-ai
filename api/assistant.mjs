@@ -1,4 +1,5 @@
-const defaultModel = 'gpt-5-mini';
+const defaultModel = 'gpt-4o-mini';
+const assistantTimeoutMs = 25000;
 
 const tools = [
   {
@@ -360,6 +361,12 @@ export default {
         mode: 'llm-native',
       });
     } catch (error) {
+      if (error?.name === 'AbortError') {
+        return Response.json(
+          { message: 'AIの応答に時間がかかりました。入力内容は戻してあります。もう一度送信してください。' },
+          { status: 504 },
+        );
+      }
       return Response.json(
         { message: error instanceof Error ? error.message : 'Assistant request failed.' },
         { status: 500 },
@@ -369,12 +376,17 @@ export default {
 };
 
 async function createResponse(payload) {
-  const response = await fetch('https://api.openai.com/v1/responses', {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), assistantTimeoutMs);
+  let response;
+  try {
+    response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
       'Content-Type': 'application/json',
     },
+    signal: controller.signal,
     body: JSON.stringify({
       model: process.env.OPENAI_ASSISTANT_MODEL || defaultModel,
       instructions: pureAssistantInstructions,
@@ -389,7 +401,10 @@ async function createResponse(payload) {
       },
       ...payload,
     }),
-  });
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   const json = await response.json().catch(() => null);
   if (!response.ok) {

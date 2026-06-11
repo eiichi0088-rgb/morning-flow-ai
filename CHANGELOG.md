@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## Version 6.4.1 - 2026-06-11
+
+- Changed the assistant default model from `gpt-5-mini` to `gpt-4o-mini` to avoid Vercel 30-second timeouts on compound utterances.
+- Added a 25-second AbortController timeout around the OpenAI Responses API request.
+- Returns a friendly timeout message before Vercel forcefully terminates the function.
+- Restores the original morning conversation text on AI connection failure.
+- Blocks voice finalization while AI processing is already in progress to reduce duplicate sends.
+- Marks AI connection failure messages with an error chat style.
+- Keeps True Conversation First schema, `understanding`, `save_candidates`, `clarification`, classification instructions, Review Draft save flow, Supabase, User Isolation Fix, and Google Calendar behavior unchanged.
+
 ## Version 6.4.0 - 2026-06-11
 
 - Added True Conversation First response fields to `/api/assistant`: `understanding`, `save_candidates`, and `clarification`.

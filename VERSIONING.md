@@ -7,6 +7,17 @@
 5. ZIP should include `dist` after build.
 6. v5.3.2 is based on v5.3.1 plus Developer Debug Visibility Fix.
 
+## Version 6.4.1 Timeout Fix - 2026-06-11
+
+- Screen display: v6.4.1
+- ZIP: morning-flow-ai-v6.4.1.zip
+- Next planned version: Version 6.4.2
+- The assistant default model is `gpt-4o-mini` to reduce Vercel timeout risk.
+- `/api/assistant` aborts OpenAI requests after 25 seconds and returns a friendly timeout message.
+- Morning conversation failures restore the original text and show a visually distinct error message.
+- Voice finalization is ignored while AI processing is already in progress to reduce duplicate sends.
+- True Conversation First schema, prompt structure, classification rules, Review Draft save flow, Supabase persistence, User Isolation Fix, Google Calendar registration, shopping save, and Follow Up save behavior are unchanged.
+
 ## Version 6.4.0 True Conversation First - 2026-06-11
 
 - Screen display: v6.4.0

@@ -1,10 +1,12 @@
 # NEXT VERSION
 
-Next planned version: Version 6.4.1
+Next planned version: Version 6.4.2
 
 ## Current Baseline
 
-- Current stable version: Version 6.4.0
+- Current stable version: Version 6.4.1
+- v6.4.1 fixes AI timeout UX by using `gpt-4o-mini`, adding a 25-second OpenAI request timeout, restoring failed input text, and blocking duplicate voice sends while processing.
+- True Conversation First schema, prompt structure, classification rules, Review Draft save flow, Supabase, User Isolation Fix, and Google Calendar behavior remain unchanged.
 - v6.4.0 moves Review Draft candidate generation toward True Conversation First by prioritizing ChatGPT-provided `save_candidates`.
 - `/api/assistant` now returns `understanding`, `save_candidates`, and `clarification` while keeping legacy arrays as compatibility fallback.
 - The Conversation Understanding Card uses true AI understanding and clarification data instead of assistant reply parsing.
