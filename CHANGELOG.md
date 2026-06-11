@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## Version 6.3.0 - 2026-06-11
+
+- Added a Conversation Understanding Card before Review Draft in the home Conversation First flow.
+- Shows the AI understanding summary from `assistant_reply` separately from structured save candidates.
+- Adds frontend `ConversationUnderstanding` display data with understood items, suggested save targets, and a confidence note.
+- Shows saved candidate counts for schedules, shopping, Follow Up, and Google Calendar candidates so users can notice when understood content is not part of Review Draft.
+- Keeps Review Draft save behavior, Supabase persistence, Google Calendar handling, User Isolation Fix, OpenAI prompt design, and classification logic unchanged.
+
 ## Version 6.2.3 - 2026-06-11
 
 - Strengthened the AI organizing loading state shown immediately after the Morning AI organize action starts.

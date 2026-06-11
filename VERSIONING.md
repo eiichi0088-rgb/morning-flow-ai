@@ -7,6 +7,16 @@
 5. ZIP should include `dist` after build.
 6. v5.3.2 is based on v5.3.1 plus Developer Debug Visibility Fix.
 
+## Version 6.3.0 Conversation First Foundation - 2026-06-11
+
+- Screen display: v6.3.0
+- ZIP: morning-flow-ai-v6.3.0.zip
+- Next planned version: Version 6.3.1
+- Conversation First Phase 1 adds a Conversation Understanding Card before Review Draft.
+- The card presents `assistant_reply` as the AI understanding summary and lists understood items separately from structured save candidates.
+- Save candidate counts for schedules, shopping, Follow Up, and Google Calendar candidates are visible before Review Draft.
+- Review Draft save behavior, Supabase persistence, Google Calendar handling, User Isolation Fix, OpenAI prompt design, and classification logic are unchanged.
+
 ## Version 6.2.3 AI Organizing UX Upgrade - 2026-06-11
 
 - Screen display: v6.2.3
