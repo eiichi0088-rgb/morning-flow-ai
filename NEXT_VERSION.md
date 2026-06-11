@@ -1,6 +1,12 @@
 # NEXT VERSION
 
-Next planned version: Version 6.2.1
+Next planned version: Version 6.2.2
+
+## Current Baseline
+
+- Current stable version: Version 6.2.1
+- v6.2.1 focuses on user isolation for logout, auth switching, localStorage cleanup, React state reset, and Supabase shopping ownership checks.
+- LLM First prompts and classification rules were not changed.
 
 ## ??
 

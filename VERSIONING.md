@@ -7,6 +7,18 @@
 5. ZIP should include `dist` after build.
 6. v5.3.2 is based on v5.3.1 plus Developer Debug Visibility Fix.
 
+## Version 6.2.1 User Isolation Fix - 2026-06-11
+
+- Screen display: v6.2.1
+- ZIP: morning-flow-ai-v6.2.1.zip
+- Next planned version: Version 6.2.2
+- LLM First behavior, prompts, and classification rules are unchanged.
+- Logout clears volatile local personal data before another user can use the same browser.
+- Auth user changes reset React state before Supabase data is loaded for the new user.
+- Logged-in sessions do not restore stale localStorage drafts or shopping lists as new user data.
+- Supabase shopping display is filtered by the active user's id on both the request and response sides.
+- Developer Debug includes user isolation diagnostics for current user, fetched shopping count, local shopping keys, cleared keys, and auth reset status.
+
 ## Version 6.2.0 LLM First Accuracy Upgrade - 2026-06-10
 
 - Screen display: v6.2.0

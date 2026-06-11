@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## Version 6.2.1 - 2026-06-11
+
+- Fixed user isolation around logout, auth switching, localStorage, React state, and Supabase shopping sync.
+- Clears volatile local personal data on logout, including shopping, transcript draft, Follow Up, AI Inbox, and snapshot keys.
+- Resets temporary app state before loading data for a newly authenticated user.
+- Prevents authenticated users from loading stale localStorage drafts or shopping lists as the source of truth after login.
+- Adds a second client-side ownership check so Supabase shopping rows are displayed only when `user_id` matches the current user.
+- Blocks stale shopping uploads if the active auth user changes before a save finishes.
+- Adds Developer Debug fields for current user, shopping fetch count, local shopping storage keys, cleared keys, and auth reset status.
+- Kept the LLM-first assistant prompt and classification behavior unchanged.
+
 ## Version 6.2.0 - 2026-06-10
 
 - Strengthened the LLM-first architecture by keeping OpenAI structured output as the source of truth.

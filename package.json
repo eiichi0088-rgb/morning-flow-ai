@@ -1,6 +1,6 @@
 {
-  "version": "6.2.0",
-  "appVersion": "6.2.0",
+  "version": "6.2.1",
+  "appVersion": "6.2.1",
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "tsc --noEmit && vite build",
