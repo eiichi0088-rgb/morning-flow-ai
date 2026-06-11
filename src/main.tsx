@@ -1796,6 +1796,8 @@ function App() {
       setMorningFollowUpCandidates([]);
       setMorningFollowUpMessage('');
       setInterimTranscript('');
+      setIsOrganizing(true);
+      setError('');
 
       let nextDraft = conversationDraft;
       let assistantLines: string[] = [];
@@ -1855,6 +1857,7 @@ function App() {
         });
       } catch (error) {
         console.warn('[MORNING FLOW AI] LLM assistant fallback', error);
+        setError('整理に失敗しました。もう一度お試しください。');
         nextDraft = {
           ...conversationDraft,
           sourceText: appendVoiceText(conversationDraft.sourceText, normalized),
@@ -1905,6 +1908,7 @@ function App() {
         });
       }
 
+      setIsOrganizing(false);
       setConversationDraft(nextDraft);
       setPendingConversationIntent(nextPendingIntent);
       setPendingConversationFollowUp(nextPendingFollowUp);
@@ -2243,7 +2247,7 @@ function App() {
       })
       .catch((reason: unknown) => {
         console.error(reason);
-        setError('うまく処理できませんでした。もう一度お試しください。');
+        setError('整理に失敗しました。もう一度お試しください。');
       })
       .finally(() => {
         setIsOrganizing(false);
@@ -2295,7 +2299,7 @@ function App() {
       })
       .catch((reason: unknown) => {
         console.error(reason);
-        setError('うまく処理できませんでした。もう一度お試しください。');
+        setError('整理に失敗しました。もう一度お試しください。');
       })
       .finally(() => {
         setIsOrganizing(false);
@@ -3390,7 +3394,7 @@ function App() {
               className={`mic-button v4-mic-button ${isListening ? 'is-listening' : ''}`}
               type="button"
               onClick={isListening ? stopListening : startListening}
-              disabled={!isSupported}
+              disabled={!isSupported || isOrganizing}
               aria-label={isListening ? '音声認識を停止' : '音声認識を開始'}
             >
               <span className="pulse-ring ring-one" aria-hidden="true" />
@@ -3400,9 +3404,9 @@ function App() {
             </button>
           </div>
 
-          <button className="conversation-start-button" type="button" onClick={isListening ? stopListening : startListening} disabled={!isSupported}>
+          <button className="conversation-start-button" type="button" onClick={isListening ? stopListening : startListening} disabled={!isSupported || isOrganizing}>
             <Mic size={19} />
-            {isListening ? '聞き取りを終了' : '今日のことを話す'}
+            {isOrganizing ? 'AIが整理中です…' : isListening ? '聞き取りを終了' : '今日のことを話す'}
           </button>
 
           <div className="status-row" role="status" aria-live="polite">
@@ -3410,6 +3414,17 @@ function App() {
             {getStatusLabel(isSupported, isListening, transcript, plan, voiceRecognitionDebug.status)}
           </div>
         </div>
+
+        {isOrganizing && (
+          <section className="ai-processing-card" role="status" aria-live="polite">
+            <Loader2 className="button-spinner" size={21} />
+            <div>
+              <strong>AIが整理中です…</strong>
+              <p>予定・買い物・Follow Upに分けています。</p>
+              <p>Review Draftを作成中です…</p>
+            </div>
+          </section>
+        )}
 
         <AiConversationPanel messages={conversationMessages} />
         {isDeveloperModeEnabled() && (
@@ -3463,7 +3478,7 @@ function App() {
         {error && <p className="error-message">{error}</p>}
         {isOrganizing && (
           <p className="loading-message" role="status" aria-live="polite">
-            AIが整理中です。少しだけお待ちください。
+            AIが整理中です。予定・買い物・Follow Upに分けています…
           </p>
         )}
 
@@ -6771,7 +6786,7 @@ function FollowUpManagerPage({
           <button
             aria-label={isListening ? '音声入力を止める' : 'フォローアップを音声入力する'}
             className={`mic-button ${isListening ? 'is-listening' : ''}`}
-            disabled={!isSupported}
+            disabled={!isSupported || isOrganizing}
             onClick={isListening ? onStopListening : onStartListening}
             type="button"
           >
@@ -7834,8 +7849,11 @@ function ShoppingListPage({
   updatedAt: string;
 }) {
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
-  const groups = groupShoppingItems(items);
+  const pendingGroups = groupShoppingItems(items.filter((item) => !item.completed));
+  const completedGroups = groupShoppingItems(items.filter((item) => item.completed));
+  const groups: ReturnType<typeof groupShoppingItems> = [];
   const completedCount = items.filter((item) => item.completed).length;
+  const pendingCount = items.length - completedCount;
   const isMealMode = mode === 'meal';
   const updatedLabel = updatedAt
     ? new Date(updatedAt).toLocaleString('ja-JP', {
@@ -7852,6 +7870,81 @@ function ShoppingListPage({
     textarea.style.height = 'auto';
     textarea.style.height = `${textarea.scrollHeight}px`;
   }, [text]);
+
+  const renderShoppingGroups = (
+    sectionGroups: ReturnType<typeof groupShoppingItems>,
+    title: string,
+    emptyText: string,
+    sectionClassName = '',
+  ) => (
+    <section className={`shopping-purchase-section ${sectionClassName}`}>
+      <div className="shopping-purchase-heading">
+        <h3>{title}</h3>
+        <span>{sectionGroups.reduce((total, group) => total + group.items.length, 0)}件</span>
+      </div>
+      {sectionGroups.length ? (
+        <div className="shopping-category-list">
+          {sectionGroups.map((group) => (
+            <div className="shopping-category" key={`${title}-${group.category}`}>
+              <h4>{group.category}</h4>
+              <div className="shopping-check-list">
+                {group.items.map((item) => {
+                  const checkboxId = `shopping-check-${item.id}`;
+                  const shareCheckboxId = `shopping-share-${item.id}`;
+                  return (
+                    <div
+                      className={`shopping-check-row ${highlightedIds.includes(item.id) ? 'is-new' : ''}`}
+                      key={item.id}
+                    >
+                      <label className="shopping-share-select" htmlFor={shareCheckboxId}>
+                        <input
+                          checked={selectedShareIds.includes(item.id)}
+                          id={shareCheckboxId}
+                          onChange={() => onToggleShareItem(item.id)}
+                          type="checkbox"
+                        />
+                        <span>共有</span>
+                      </label>
+                      <label
+                        className={`shopping-check-item ${item.completed ? 'is-completed' : ''}`}
+                        htmlFor={checkboxId}
+                      >
+                        <input
+                          checked={item.completed}
+                          id={checkboxId}
+                          onChange={() => onToggleItem(item.id)}
+                          type="checkbox"
+                        />
+                        <span>{formatShoppingItemLabel(item)}</span>
+                      </label>
+                      <button
+                        aria-label={`${formatShoppingItemLabel(item)}を編集`}
+                        className="shopping-icon-button"
+                        onClick={() => onEditItem(item.id)}
+                        type="button"
+                      >
+                        <Pencil size={17} />
+                      </button>
+                      <button
+                        aria-label={`${formatShoppingItemLabel(item)}を削除`}
+                        className="shopping-icon-button shopping-delete-button"
+                        onClick={() => onDeleteItem(item.id)}
+                        type="button"
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="shopping-section-empty">{emptyText}</p>
+      )}
+    </section>
+  );
 
   return (
     <section className="hero-panel shopping-page" aria-label="買い物リスト">
@@ -7969,10 +8062,10 @@ function ShoppingListPage({
           value={resultText}
         />
         <div className="shopping-editor-actions">
-          <button className="secondary-button" onClick={onClearInput} type="button">
+          <button className="secondary-button" disabled={isOrganizing} onClick={onClearInput} type="button">
             全文削除
           </button>
-          <button className="secondary-button" onClick={onNewList} type="button">
+          <button className="secondary-button" disabled={isOrganizing} onClick={onNewList} type="button">
             新しく作る
           </button>
         </div>
@@ -8065,7 +8158,13 @@ function ShoppingListPage({
               {selectedShareIds.length ? `選択した${selectedShareIds.length}件を共有` : '家族に共有'}
             </button>
             {shareMessage && <p className="shopping-share-message">{shareMessage}</p>}
-            <div className="shopping-category-list">
+            <div className="shopping-purchase-overview" aria-label="買い物の進行状況">
+              <span>未購入 {pendingCount}件</span>
+              <span>購入済み {completedCount}件</span>
+            </div>
+            {renderShoppingGroups(pendingGroups, '未購入', '未購入の商品はありません。')}
+            {renderShoppingGroups(completedGroups, '購入済み', '購入済みの商品はまだありません。', 'is-completed-section')}
+            <div className="shopping-category-list" hidden>
               {groups.map((group) => (
                 <div className="shopping-category" key={group.category}>
                   <h3>{group.category}</h3>

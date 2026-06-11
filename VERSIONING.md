@@ -7,6 +7,17 @@
 5. ZIP should include `dist` after build.
 6. v5.3.2 is based on v5.3.1 plus Developer Debug Visibility Fix.
 
+## Version 6.2.2 Usability Upgrade - 2026-06-11
+
+- Screen display: v6.2.2
+- ZIP: morning-flow-ai-v6.2.2.zip
+- Next planned version: Version 6.2.3
+- LLM prompts, classification rules, and structured output design are unchanged.
+- Morning Voice now shows a visible AI processing card while Review Draft is being created.
+- Processing controls are temporarily disabled to reduce duplicate submissions.
+- Shopping checklist display is split into unpurchased and purchased sections.
+- Shopping checkbox state continues to use `completed` locally and `checked` in Supabase, scoped by the active user id.
+
 ## Version 6.2.1 User Isolation Fix - 2026-06-11
 
 - Screen display: v6.2.1

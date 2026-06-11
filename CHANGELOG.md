@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## Version 6.2.2 - 2026-06-11
+
+- Added a clear AI processing state while Morning Voice is being organized into Review Draft.
+- Disables voice/organize controls during AI processing to prevent duplicate submissions.
+- Shows a retry-safe error message when organization fails.
+- Improved the shopping checklist by separating unpurchased and purchased items.
+- Keeps shopping checkbox state saved through the existing `completed` / Supabase `checked` mapping.
+- Preserves user isolation behavior from v6.2.1 and keeps shopping rows scoped to the active user.
+- Kept LLM prompts, classification rules, and structured output architecture unchanged.
+
 ## Version 6.2.1 - 2026-06-11
 
 - Fixed user isolation around logout, auth switching, localStorage, React state, and Supabase shopping sync.
