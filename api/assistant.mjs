@@ -188,6 +188,94 @@ const assistantJsonSchema = {
         required: ['title', 'reason'],
       },
     },
+    understanding: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        summary: { type: 'string' },
+        understood_items: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+      },
+      required: ['summary', 'understood_items'],
+    },
+    save_candidates: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        schedules: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              title: { type: 'string' },
+              date_text: { type: 'string' },
+              time_text: { type: 'string' },
+              notes: { type: 'string' },
+            },
+            required: ['title', 'date_text', 'time_text', 'notes'],
+          },
+        },
+        shopping: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              name: { type: 'string' },
+              quantity: { type: 'string' },
+              notes: { type: 'string' },
+            },
+            required: ['name', 'quantity', 'notes'],
+          },
+        },
+        follow_ups: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              title: { type: 'string' },
+              person_name: { type: 'string' },
+              action: { type: 'string' },
+              due_text: { type: 'string' },
+              notes: { type: 'string' },
+            },
+            required: ['title', 'person_name', 'action', 'due_text', 'notes'],
+          },
+        },
+        calendar_candidates: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              title: { type: 'string' },
+              date_text: { type: 'string' },
+              time: { type: 'string' },
+              notes: { type: 'string' },
+            },
+            required: ['title', 'date_text', 'time', 'notes'],
+          },
+        },
+      },
+      required: ['schedules', 'shopping', 'follow_ups', 'calendar_candidates'],
+    },
+    clarification: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        needs_clarification: { type: 'boolean' },
+        question: { type: 'string' },
+        missing_fields: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+      },
+      required: ['needs_clarification', 'question', 'missing_fields'],
+    },
     needs_clarification: { type: 'boolean' },
     clarifying_question: { type: 'string' },
   },
@@ -198,6 +286,9 @@ const assistantJsonSchema = {
     'follow_up_items',
     'google_calendar_candidates',
     'priority_suggestions',
+    'understanding',
+    'save_candidates',
+    'clarification',
     'needs_clarification',
     'clarifying_question',
   ],
@@ -287,7 +378,7 @@ async function createResponse(payload) {
     body: JSON.stringify({
       model: process.env.OPENAI_ASSISTANT_MODEL || defaultModel,
       instructions: pureAssistantInstructions,
-      max_output_tokens: 1800,
+      max_output_tokens: 2400,
       text: {
         format: {
           type: 'json_schema',
@@ -331,42 +422,101 @@ function extractJsonObjectText(text) {
 }
 
 function normalizeAssistantJson(value) {
+  const legacySchedules = objectArray(value.schedule_items).map((item) => ({
+    title: stringValue(item.title),
+    date_text: stringValue(item.date_text),
+    time_text: stringValue(item.time_text),
+    notes: stringValue(item.notes),
+  }));
+  const legacyShopping = objectArray(value.shopping_items).map((item) => ({
+    name: stringValue(item.name),
+    quantity: stringValue(item.quantity),
+  }));
+  const legacyFollowUps = objectArray(value.follow_up_items).map((item) => ({
+    title: stringValue(item.title),
+    person_name: stringValue(item.person_name),
+    action: stringValue(item.action),
+    due_text: stringValue(item.due_text),
+    notes: stringValue(item.notes),
+  }));
+  const legacyCalendar = objectArray(value.google_calendar_candidates).map((item) => ({
+    title: stringValue(item.title),
+    date_text: stringValue(item.date_text),
+    time: stringValue(item.time),
+    notes: stringValue(item.notes),
+  }));
+  const candidateSource = value.save_candidates && typeof value.save_candidates === 'object' ? value.save_candidates : {};
+  const candidateSchedules = objectArray(candidateSource.schedules).map((item) => ({
+    title: stringValue(item.title),
+    date_text: stringValue(item.date_text),
+    time_text: stringValue(item.time_text || item.time),
+    notes: stringValue(item.notes),
+  }));
+  const candidateShopping = objectArray(candidateSource.shopping).map((item) => ({
+    name: stringValue(item.name || item.title),
+    quantity: stringValue(item.quantity),
+    notes: stringValue(item.notes),
+  }));
+  const candidateFollowUps = objectArray(candidateSource.follow_ups).map((item) => ({
+    title: stringValue(item.title),
+    person_name: stringValue(item.person_name),
+    action: stringValue(item.action),
+    due_text: stringValue(item.due_text),
+    notes: stringValue(item.notes),
+  }));
+  const candidateCalendar = objectArray(candidateSource.calendar_candidates).map((item) => ({
+    title: stringValue(item.title),
+    date_text: stringValue(item.date_text),
+    time: stringValue(item.time),
+    notes: stringValue(item.notes),
+  }));
+  const schedules = candidateSchedules.length ? candidateSchedules : legacySchedules;
+  const shopping = candidateShopping.length ? candidateShopping : legacyShopping.map((item) => ({ ...item, notes: '' }));
+  const followUps = candidateFollowUps.length ? candidateFollowUps : legacyFollowUps;
+  const calendarCandidates = candidateCalendar.length ? candidateCalendar : legacyCalendar;
+  const understandingSource = value.understanding && typeof value.understanding === 'object' ? value.understanding : {};
+  const clarificationSource = value.clarification && typeof value.clarification === 'object' ? value.clarification : {};
+  const clarificationQuestion = stringValue(clarificationSource.question) || stringValue(value.clarifying_question);
+  const needsClarification = Boolean(clarificationSource.needs_clarification ?? value.needs_clarification);
   return {
     assistant_reply: stringValue(value.assistant_reply),
-    schedule_items: objectArray(value.schedule_items).map((item) => ({
-      title: stringValue(item.title),
-      date_text: stringValue(item.date_text),
-      time_text: stringValue(item.time_text),
-      notes: stringValue(item.notes),
+    schedule_items: legacySchedules.length ? legacySchedules : schedules,
+    shopping_items: legacyShopping.length ? legacyShopping : shopping.map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
     })),
-    shopping_items: objectArray(value.shopping_items).map((item) => ({
-      name: stringValue(item.name),
-      quantity: stringValue(item.quantity),
-    })),
-    follow_up_items: objectArray(value.follow_up_items).map((item) => ({
-      title: stringValue(item.title),
-      person_name: stringValue(item.person_name),
-      action: stringValue(item.action),
-      due_text: stringValue(item.due_text),
-      notes: stringValue(item.notes),
-    })),
-    google_calendar_candidates: objectArray(value.google_calendar_candidates).map((item) => ({
-      title: stringValue(item.title),
-      date_text: stringValue(item.date_text),
-      time: stringValue(item.time),
-      notes: stringValue(item.notes),
-    })),
+    follow_up_items: legacyFollowUps.length ? legacyFollowUps : followUps,
+    google_calendar_candidates: legacyCalendar.length ? legacyCalendar : calendarCandidates,
     priority_suggestions: objectArray(value.priority_suggestions).map((item) => ({
       title: stringValue(item.title),
       reason: stringValue(item.reason),
     })),
-    needs_clarification: Boolean(value.needs_clarification),
-    clarifying_question: stringValue(value.clarifying_question),
+    understanding: {
+      summary: stringValue(understandingSource.summary) || stringValue(value.assistant_reply),
+      understood_items: stringArray(understandingSource.understood_items),
+    },
+    save_candidates: {
+      schedules,
+      shopping,
+      follow_ups: followUps,
+      calendar_candidates: calendarCandidates,
+    },
+    clarification: {
+      needs_clarification: needsClarification,
+      question: clarificationQuestion,
+      missing_fields: stringArray(clarificationSource.missing_fields),
+    },
+    needs_clarification: needsClarification,
+    clarifying_question: clarificationQuestion,
   };
 }
 
 function objectArray(value) {
   return Array.isArray(value) ? value.filter((item) => item && typeof item === 'object') : [];
+}
+
+function stringArray(value) {
+  return Array.isArray(value) ? value.map((item) => String(item || '').trim()).filter(Boolean) : [];
 }
 
 function extractToolCalls(response) {
@@ -595,6 +745,9 @@ Return only valid JSON that matches the provided schema. Do not output Markdown,
 
 Your job is to understand the user's natural speech and structure it into:
 - assistant_reply
+- understanding
+- save_candidates
+- clarification
 - schedule_items
 - shopping_items
 - follow_up_items
@@ -604,6 +757,17 @@ Your job is to understand the user's natural speech and structure it into:
 - clarifying_question
 
 The app will display and save your JSON directly. Do not rely on the app to reclassify, repair, or extract entities with rules.
+
+True Conversation First rules:
+- Do not omit, summarize away, or silently discard any meaningful part of the user's utterance.
+- Put every understood action, errand, purchase, cooking task, destination, and follow-up into understanding.understood_items.
+- Put every item that can be saved into save_candidates, classified as schedules, shopping, follow_ups, or calendar_candidates.
+- Keep the legacy arrays too, but save_candidates is the primary source for app save candidates.
+- Do not drop content just because it does not fit an old JSON array. Keep it in understanding and ask a clarification question if needed.
+- If information is missing, use clarification.needs_clarification, clarification.question, and clarification.missing_fields.
+- Outings such as "店へ行く" and "スターバックスへ行く" are schedule candidates, even without an exact time.
+- Cooking or preparation tasks such as "とんかつを作る" are schedule/task candidates.
+- Buying coffee can be shopping only when the user means an item to remember buying; if it is just part of an outing, keep it in understanding and only add it to shopping when useful.
 
 Extraction rules:
 - Put errands, actions, and vague-time plans into schedule_items. Example: bank visit tomorrow morning.
@@ -619,4 +783,5 @@ Important:
 - Do not duplicate vague schedules into google_calendar_candidates unless a future date and clear numeric time are present.
 - Keep assistant_reply short, calm, and useful.
 - Use empty arrays when there are no items.
+- Keep needs_clarification/clarifying_question aligned with clarification.needs_clarification/clarification.question.
 `;

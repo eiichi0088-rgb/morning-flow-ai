@@ -241,6 +241,25 @@ type PureLlmSecretaryJson = {
   clarifying_question: string;
 };
 
+type ConversationFirstResult = PureLlmSecretaryJson & {
+  understanding: {
+    summary: string;
+    understood_items: string[];
+  };
+  save_candidates: {
+    schedules: { title?: string; date_text?: string; time_text?: string; notes?: string }[];
+    shopping: { name?: string; quantity?: string; notes?: string }[];
+    follow_ups: { title?: string; person_name?: string; action?: string; due_text?: string; notes?: string }[];
+    calendar_candidates: { title?: string; date_text?: string; time?: string; notes?: string }[];
+  };
+  clarification: {
+    needs_clarification: boolean;
+    question: string;
+    missing_fields: string[];
+  };
+  hasSaveCandidates: boolean;
+};
+
 type ConversationUnderstanding = {
   summary: string;
   understoodItems: string[];
@@ -250,6 +269,7 @@ type ConversationUnderstanding = {
     followUps: string[];
     calendarCandidates: string[];
   };
+  clarificationQuestion?: string;
   confidenceNote?: string;
 };
 
@@ -3403,7 +3423,7 @@ function App() {
         </section>
 
         {morningReviewDraft && conversationUnderstanding && (
-          <ConversationUnderstandingCard draft={morningReviewDraft} understanding={conversationUnderstanding} />
+          <ConversationUnderstandingCard understanding={conversationUnderstanding} />
         )}
 
         {morningReviewDraft && (
@@ -3993,16 +4013,16 @@ async function processLlmAssistantTurn({
     throw new Error(payload?.message ?? 'LLM assistant request failed.');
   }
 
-  const llmJson = normalizePureLlmSecretaryJson(payload?.result);
-  const appliedPure = applyPureLlmSecretaryJson(conversationDraft, llmJson, text);
-  const extractedPure = summarizePureLlmJson(llmJson);
-  const shouldAutoReview = extractedPure.extractedCount > 0 && !llmJson.needs_clarification;
+  const llmJson = normalizeConversationFirstResult(payload?.result);
+  const appliedPure = applyConversationFirstResult(conversationDraft, llmJson, text);
+  const extractedPure = summarizeConversationFirstResult(llmJson);
+  const shouldAutoReview = extractedPure.extractedCount > 0;
   const pureAssistantLines = dedupeConversationLines(
-    [llmJson.assistant_reply, llmJson.needs_clarification ? llmJson.clarifying_question : '']
+    [llmJson.assistant_reply, llmJson.clarification.needs_clarification ? llmJson.clarification.question : '']
       .map((line) => line.trim())
       .filter(Boolean),
   );
-  const conversationUnderstanding = createConversationUnderstandingFromPureLlmJson(
+  const conversationUnderstanding = createConversationUnderstandingFromConversationFirstResult(
     llmJson,
     pureAssistantLines.length ? pureAssistantLines.join('\n') : pureUnderstandingFallbackText(text),
   );
@@ -4012,8 +4032,12 @@ async function processLlmAssistantTurn({
     shoppingItemsCount: llmJson.shopping_items.length,
     followUpItemsCount: llmJson.follow_up_items.length,
     googleCalendarCandidatesCount: llmJson.google_calendar_candidates.length,
+    saveCandidateSchedulesCount: llmJson.save_candidates.schedules.length,
+    saveCandidateShoppingCount: llmJson.save_candidates.shopping.length,
+    saveCandidateFollowUpsCount: llmJson.save_candidates.follow_ups.length,
+    saveCandidateCalendarCount: llmJson.save_candidates.calendar_candidates.length,
     prioritySuggestionsCount: llmJson.priority_suggestions.length,
-    needsClarification: llmJson.needs_clarification,
+    needsClarification: llmJson.clarification.needs_clarification,
   });
   return {
     actionsCount: extractedPure.extractedCount,
@@ -4036,8 +4060,8 @@ async function processLlmAssistantTurn({
     lastLlmJson: String(payload?.debug?.lastLlmJson ?? ''),
     lastAssistantResponse: llmJson.assistant_reply,
     lostEntityCount: 0,
-    needsClarification: llmJson.needs_clarification,
-    clarifyingQuestion: llmJson.clarifying_question,
+    needsClarification: llmJson.clarification.needs_clarification,
+    clarifyingQuestion: llmJson.clarification.question,
     parseError: String(payload?.debug?.parseError ?? ''),
     pendingSave: shouldAutoReview,
     prioritySuggestionsCount: llmJson.priority_suggestions.length,
@@ -4168,6 +4192,75 @@ function normalizePureLlmSecretaryJson(value: unknown): PureLlmSecretaryJson {
   return dedupePureLlmSecretaryJson(normalized);
 }
 
+function normalizeConversationFirstResult(value: unknown): ConversationFirstResult {
+  const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const legacy = normalizePureLlmSecretaryJson(source);
+  const candidateSource = source.save_candidates && typeof source.save_candidates === 'object'
+    ? source.save_candidates as Record<string, unknown>
+    : null;
+  const schedules = candidateSource
+    ? objectArray(candidateSource.schedules).map((item) => ({
+      title: stringPayload(item.title),
+      date_text: stringPayload(item.date_text),
+      time_text: stringPayload(item.time_text) || stringPayload(item.time),
+      notes: stringPayload(item.notes),
+    })).filter((item) => item.title)
+    : legacy.schedule_items;
+  const shopping = candidateSource
+    ? objectArray(candidateSource.shopping).map((item) => ({
+      name: stringPayload(item.name) || stringPayload(item.title),
+      quantity: stringPayload(item.quantity),
+      notes: stringPayload(item.notes),
+    })).filter((item) => item.name)
+    : legacy.shopping_items.map((item) => ({ ...item, notes: '' }));
+  const followUps = candidateSource
+    ? objectArray(candidateSource.follow_ups).map((item) => ({
+      title: stringPayload(item.title),
+      person_name: stringPayload(item.person_name),
+      action: stringPayload(item.action),
+      due_text: stringPayload(item.due_text),
+      notes: stringPayload(item.notes),
+    })).filter((item) => item.title || item.person_name || item.action)
+    : legacy.follow_up_items;
+  const calendarCandidates = candidateSource
+    ? objectArray(candidateSource.calendar_candidates).map((item) => ({
+      title: stringPayload(item.title),
+      date_text: stringPayload(item.date_text),
+      time: stringPayload(item.time),
+      notes: stringPayload(item.notes),
+    })).filter((item) => item.title)
+    : legacy.google_calendar_candidates;
+  const understandingSource = source.understanding && typeof source.understanding === 'object'
+    ? source.understanding as Record<string, unknown>
+    : {};
+  const clarificationSource = source.clarification && typeof source.clarification === 'object'
+    ? source.clarification as Record<string, unknown>
+    : {};
+  const clarificationQuestion = stringPayload(clarificationSource.question) || legacy.clarifying_question;
+  const result: ConversationFirstResult = {
+    ...legacy,
+    understanding: {
+      summary: stringPayload(understandingSource.summary) || legacy.assistant_reply,
+      understood_items: safeStringArray(understandingSource.understood_items),
+    },
+    save_candidates: {
+      schedules,
+      shopping,
+      follow_ups: followUps,
+      calendar_candidates: calendarCandidates,
+    },
+    clarification: {
+      needs_clarification: Boolean(clarificationSource.needs_clarification ?? legacy.needs_clarification),
+      question: clarificationQuestion,
+      missing_fields: safeStringArray(clarificationSource.missing_fields),
+    },
+    hasSaveCandidates: Boolean(candidateSource),
+    needs_clarification: Boolean(clarificationSource.needs_clarification ?? legacy.needs_clarification),
+    clarifying_question: clarificationQuestion,
+  };
+  return result;
+}
+
 function objectArray(value: unknown): Record<string, unknown>[] {
   return Array.isArray(value)
     ? value.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
@@ -4242,6 +4335,63 @@ function applyPureLlmSecretaryJson(draft: MorningReviewDraft, result: PureLlmSec
     nextDraft = appendPureLlmShoppingItem(nextDraft, item);
   });
   result.follow_up_items.forEach((item) => {
+    nextDraft = applyLlmFollowUpAction(nextDraft, {
+      action: item.action,
+      due_text: item.due_text,
+      memo: item.notes,
+      person_name: item.person_name,
+      title: item.title,
+    });
+  });
+  if (result.priority_suggestions.length || result.assistant_reply) {
+    nextDraft = {
+      ...nextDraft,
+      plan: {
+        ...nextDraft.plan,
+        advice: dedupeTodos([
+          ...result.priority_suggestions.map((item) => [item.title, item.reason].filter(Boolean).join(': ')),
+          result.assistant_reply,
+          ...nextDraft.plan.advice,
+        ]),
+        priorities: {
+          ...nextDraft.plan.priorities,
+          highest: dedupeTodos([
+            ...result.priority_suggestions.map((item) => item.title ?? '').filter(Boolean),
+            ...nextDraft.plan.priorities.highest,
+          ]).slice(0, 3),
+        },
+      },
+    };
+  }
+  return { draft: normalizePureLlmReviewDraft(nextDraft) };
+}
+
+function applyConversationFirstResult(draft: MorningReviewDraft, result: ConversationFirstResult, sourceText: string) {
+  if (!result.hasSaveCandidates) {
+    return applyPureLlmSecretaryJson(draft, result, sourceText);
+  }
+
+  let nextDraft = { ...draft, sourceText: appendVoiceText(draft.sourceText, sourceText) };
+  result.save_candidates.schedules.forEach((item) => {
+    nextDraft = applyLlmScheduleAction(nextDraft, {
+      date_text: item.date_text,
+      memo: item.notes,
+      time: item.time_text,
+      title: item.title,
+    });
+  });
+  result.save_candidates.calendar_candidates.forEach((item) => {
+    nextDraft = applyLlmGoogleCalendarAction(nextDraft, {
+      date_text: item.date_text,
+      memo: item.notes,
+      time: item.time,
+      title: item.title,
+    });
+  });
+  result.save_candidates.shopping.forEach((item) => {
+    nextDraft = appendPureLlmShoppingItem(nextDraft, item);
+  });
+  result.save_candidates.follow_ups.forEach((item) => {
     nextDraft = applyLlmFollowUpAction(nextDraft, {
       action: item.action,
       due_text: item.due_text,
@@ -4354,23 +4504,57 @@ function summarizePureLlmJson(result: PureLlmSecretaryJson) {
   };
 }
 
-function createConversationUnderstandingFromPureLlmJson(
-  result: PureLlmSecretaryJson,
+function summarizeConversationFirstResult(result: ConversationFirstResult) {
+  if (!result.hasSaveCandidates) return summarizePureLlmJson(result);
+  const extractedScheduleItems = result.save_candidates.schedules.map((item) => item.title ?? '').filter(Boolean);
+  const extractedShoppingItems = result.save_candidates.shopping.map((item) => [item.name, item.quantity].filter(Boolean).join(' ')).filter(Boolean);
+  const extractedFollowUpItems = result.save_candidates.follow_ups.map((item) => item.title || [item.person_name, item.action].filter(Boolean).join('縺ｸ')).filter(Boolean);
+  const extractedCalendarCandidates = result.save_candidates.calendar_candidates.map((item) => [item.date_text, item.time, item.title].filter(Boolean).join(' ')).filter(Boolean);
+  return {
+    calendarCount: extractedCalendarCandidates.length,
+    extractedCalendarCandidates,
+    extractedFollowUpItems,
+    extractedScheduleItems,
+    extractedShoppingItems,
+    extractedCount: extractedScheduleItems.length + extractedShoppingItems.length + extractedFollowUpItems.length + extractedCalendarCandidates.length,
+    followUpCount: extractedFollowUpItems.length,
+    scheduleCount: extractedScheduleItems.length,
+    shoppingCount: extractedShoppingItems.length,
+  };
+}
+
+function createConversationUnderstandingFromConversationFirstResult(
+  result: ConversationFirstResult,
   fallbackSummary: string,
 ): ConversationUnderstanding {
-  const suggestedSaveTargets = {
-    schedules: result.schedule_items.map((item) => [item.date_text, item.time_text, item.title].filter(Boolean).join(' ')).filter(Boolean),
-    shopping: result.shopping_items.map((item) => [item.name, item.quantity].filter(Boolean).join(' ')).filter(Boolean),
-    followUps: result.follow_up_items.map((item) => item.title || [item.person_name, item.action, item.due_text].filter(Boolean).join(' ')).filter(Boolean),
-    calendarCandidates: result.google_calendar_candidates.map((item) => [item.date_text, item.time, item.title].filter(Boolean).join(' ')).filter(Boolean),
-  };
-  const summary = result.assistant_reply.trim() || fallbackSummary;
-  const understoodItems = createUnderstoodItemsFromSummary(summary, suggestedSaveTargets);
+  const suggestedSaveTargets = createConversationFirstTargetLabels(result);
+  const summary = result.understanding.summary.trim() || result.assistant_reply.trim() || fallbackSummary;
+  const understoodItems = result.understanding.understood_items.length
+    ? result.understanding.understood_items
+    : createUnderstoodItemsFromSummary(summary, suggestedSaveTargets);
   return {
     summary,
     understoodItems,
     suggestedSaveTargets,
+    clarificationQuestion: result.clarification.needs_clarification ? result.clarification.question : '',
     confidenceNote: createUnderstandingConfidenceNote(understoodItems, suggestedSaveTargets),
+  };
+}
+
+function createConversationFirstTargetLabels(result: ConversationFirstResult): ConversationUnderstanding['suggestedSaveTargets'] {
+  if (!result.hasSaveCandidates) {
+    return {
+      schedules: result.schedule_items.map((item) => [item.date_text, item.time_text, item.title].filter(Boolean).join(' ')).filter(Boolean),
+      shopping: result.shopping_items.map((item) => [item.name, item.quantity].filter(Boolean).join(' ')).filter(Boolean),
+      followUps: result.follow_up_items.map((item) => item.title || [item.person_name, item.action, item.due_text].filter(Boolean).join(' ')).filter(Boolean),
+      calendarCandidates: result.google_calendar_candidates.map((item) => [item.date_text, item.time, item.title].filter(Boolean).join(' ')).filter(Boolean),
+    };
+  }
+  return {
+    schedules: result.save_candidates.schedules.map((item) => [item.date_text, item.time_text, item.title].filter(Boolean).join(' ')).filter(Boolean),
+    shopping: result.save_candidates.shopping.map((item) => [item.name, item.quantity].filter(Boolean).join(' ')).filter(Boolean),
+    followUps: result.save_candidates.follow_ups.map((item) => item.title || [item.person_name, item.action, item.due_text].filter(Boolean).join(' ')).filter(Boolean),
+    calendarCandidates: result.save_candidates.calendar_candidates.map((item) => [item.date_text, item.time, item.title].filter(Boolean).join(' ')).filter(Boolean),
   };
 }
 
@@ -6294,16 +6478,14 @@ function createConversationQuestions(draft: MorningReviewDraft): string[] {
 }
 
 function ConversationUnderstandingCard({
-  draft,
   understanding,
 }: {
-  draft: MorningReviewDraft;
   understanding: ConversationUnderstanding;
 }) {
-  const scheduleCount = cleanScheduleItems(draft.plan.schedule).length;
-  const shoppingCount = draft.shoppingItems.length;
-  const followUpCount = draft.followUpCandidates.length;
-  const calendarCount = createCalendarEvents(draft.plan).length;
+  const scheduleCount = understanding.suggestedSaveTargets.schedules.length;
+  const shoppingCount = understanding.suggestedSaveTargets.shopping.length;
+  const followUpCount = understanding.suggestedSaveTargets.followUps.length;
+  const calendarCount = understanding.suggestedSaveTargets.calendarCandidates.length;
   const visibleUnderstoodItems = understanding.understoodItems.length
     ? understanding.understoodItems
     : [understanding.summary].filter(Boolean);
@@ -6352,6 +6534,13 @@ function ConversationUnderstandingCard({
         <ConversationTargetPreview title="Follow Up候補" items={understanding.suggestedSaveTargets.followUps} />
         <ConversationTargetPreview title="カレンダー候補" items={understanding.suggestedSaveTargets.calendarCandidates} />
       </div>
+
+      {understanding.clarificationQuestion && (
+        <div className="conversation-clarification-note">
+          <span>確認したいこと</span>
+          <p>{understanding.clarificationQuestion}</p>
+        </div>
+      )}
 
       {understanding.confidenceNote && <p className="conversation-confidence-note">{understanding.confidenceNote}</p>}
       <p className="conversation-understanding-next">この内容で保存前確認へ進みますか？</p>

@@ -1,13 +1,16 @@
 # NEXT VERSION
 
-Next planned version: Version 6.3.1
+Next planned version: Version 6.4.1
 
 ## Current Baseline
 
-- Current stable version: Version 6.3.0
+- Current stable version: Version 6.4.0
+- v6.4.0 moves Review Draft candidate generation toward True Conversation First by prioritizing ChatGPT-provided `save_candidates`.
+- `/api/assistant` now returns `understanding`, `save_candidates`, and `clarification` while keeping legacy arrays as compatibility fallback.
+- The Conversation Understanding Card uses true AI understanding and clarification data instead of assistant reply parsing.
 - v6.3.0 adds the Conversation First Foundation by showing AI understanding before Review Draft.
 - The Conversation Understanding Card uses `assistant_reply` and frontend display data to separate understood content from save candidates.
-- Review Draft save behavior, Supabase persistence, Google Calendar handling, User Isolation Fix, OpenAI prompt design, and classification logic remain unchanged.
+- Review Draft save behavior, Supabase persistence, Google Calendar handling, User Isolation Fix, and old recovery/classification code remain unchanged.
 - v6.2.3 strengthens the Morning AI organizing loading state and duplicate-send prevention.
 - v6.2.2 improves AI processing feedback and shopping checklist usability.
 - v6.2.1 user isolation remains the baseline for logout, auth switching, localStorage cleanup, React state reset, and Supabase shopping ownership checks.

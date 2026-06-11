@@ -7,6 +7,16 @@
 5. ZIP should include `dist` after build.
 6. v5.3.2 is based on v5.3.1 plus Developer Debug Visibility Fix.
 
+## Version 6.4.0 True Conversation First - 2026-06-11
+
+- Screen display: v6.4.0
+- ZIP: morning-flow-ai-v6.4.0.zip
+- Next planned version: Version 6.4.1
+- `/api/assistant` returns `understanding`, `save_candidates`, and `clarification` while keeping legacy arrays for compatibility.
+- `save_candidates` is now the primary source for Review Draft generation in the home conversation flow.
+- The Conversation Understanding Card displays true AI understanding, save candidate counts, and clarification questions.
+- Legacy recovery, lostEntity, excludedReasons, Review Draft confirmation, Supabase persistence, User Isolation Fix, Google Calendar registration, shopping save, and Follow Up save behavior are unchanged.
+
 ## Version 6.3.0 Conversation First Foundation - 2026-06-11
 
 - Screen display: v6.3.0

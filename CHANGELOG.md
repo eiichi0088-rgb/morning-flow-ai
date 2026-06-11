@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## Version 6.4.0 - 2026-06-11
+
+- Added True Conversation First response fields to `/api/assistant`: `understanding`, `save_candidates`, and `clarification`.
+- Updated the assistant schema and prompt so understood utterance parts are kept in `understanding.understood_items` and save-ready items are classified into `save_candidates`.
+- Added frontend `normalizeConversationFirstResult` and `applyConversationFirstResult`.
+- The home conversation flow now prioritizes `save_candidates` for Review Draft generation, falling back to legacy arrays only when needed.
+- Conversation Understanding Card now uses `understanding.summary`, `understanding.understood_items`, save candidate counts, and clarification questions.
+- Keeps legacy arrays, old recovery/debug code, Review Draft confirmation, Supabase persistence, User Isolation Fix, Google Calendar registration, shopping save, and Follow Up save behavior unchanged.
+
 ## Version 6.3.0 - 2026-06-11
 
 - Added a Conversation Understanding Card before Review Draft in the home Conversation First flow.
