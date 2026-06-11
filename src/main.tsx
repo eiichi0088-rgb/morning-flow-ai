@@ -6786,7 +6786,7 @@ function FollowUpManagerPage({
           <button
             aria-label={isListening ? '音声入力を止める' : 'フォローアップを音声入力する'}
             className={`mic-button ${isListening ? 'is-listening' : ''}`}
-            disabled={!isSupported || isOrganizing}
+            disabled={!isSupported}
             onClick={isListening ? onStopListening : onStartListening}
             type="button"
           >
@@ -8011,7 +8011,7 @@ function ShoppingListPage({
           <button
             aria-label={isListening ? '音声入力を止める' : '買い物リストを音声入力する'}
             className={`mic-button ${isListening ? 'is-listening' : ''}`}
-            disabled={!isSupported}
+            disabled={!isSupported || isOrganizing}
             onClick={isListening ? onStopListening : onStartListening}
             type="button"
           >
