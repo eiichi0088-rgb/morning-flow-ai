@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## Version 6.2.3 - 2026-06-11
+
+- Strengthened the AI organizing loading state shown immediately after the Morning AI organize action starts.
+- Added a clear processing card that says the app is checking today's schedule, shopping, Follow Up, and calendar candidates.
+- Added animated dots to the AI organizing card and button label.
+- Marks the organize button as busy and keeps it disabled while processing to prevent duplicate sends.
+- Keeps the error path retry-safe by clearing loading state and showing the existing retry message.
+- Kept AI classification logic, OpenAI prompts, save logic, and user isolation behavior unchanged.
+
 ## Version 6.2.2 - 2026-06-11
 
 - Added a clear AI processing state while Morning Voice is being organized into Review Draft.

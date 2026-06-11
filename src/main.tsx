@@ -3416,6 +3416,26 @@ function App() {
         </div>
 
         {isOrganizing && (
+          <section className="ai-processing-card ai-processing-card-v623" role="status" aria-live="polite" aria-label="AI整理中">
+            <div className="ai-processing-icon" aria-hidden="true">
+              <Loader2 className="button-spinner" size={22} />
+            </div>
+            <div>
+              <strong>
+                AIが整理しています
+                <span className="ai-processing-dots" aria-hidden="true">
+                  <span>.</span>
+                  <span>.</span>
+                  <span>.</span>
+                </span>
+              </strong>
+              <p>今日の予定・買い物・Follow Up・カレンダー候補を確認しています。</p>
+              <p>Review Draftを作成中です。少しだけお待ちください。</p>
+            </div>
+          </section>
+        )}
+
+        {isOrganizing && (
           <section className="ai-processing-card" role="status" aria-live="polite">
             <Loader2 className="button-spinner" size={21} />
             <div>
@@ -3468,8 +3488,19 @@ function App() {
             type="button"
             onClick={organizeMorning}
             disabled={isOrganizing}
+            aria-busy={isOrganizing}
           >
             <Brain size={21} />
+            {isOrganizing && (
+              <span className="ai-organize-button-label">
+                AIが整理しています
+                <span className="ai-processing-dots" aria-hidden="true">
+                  <span>.</span>
+                  <span>.</span>
+                  <span>.</span>
+                </span>
+              </span>
+            )}
             {isOrganizing ? 'AIが整理しています' : 'AI整理'}
             <Sparkles size={18} />
           </button>

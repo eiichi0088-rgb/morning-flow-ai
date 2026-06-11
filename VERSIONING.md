@@ -7,6 +7,16 @@
 5. ZIP should include `dist` after build.
 6. v5.3.2 is based on v5.3.1 plus Developer Debug Visibility Fix.
 
+## Version 6.2.3 AI Organizing UX Upgrade - 2026-06-11
+
+- Screen display: v6.2.3
+- ZIP: morning-flow-ai-v6.2.3.zip
+- Next planned version: Version 6.2.4
+- AI prompts, classification rules, structured output design, save logic, and User Isolation Fix are unchanged.
+- The Morning AI organize flow now shows a clearer loading card as soon as processing starts.
+- The loading card explicitly says the app is checking schedule, shopping, Follow Up, and calendar candidates.
+- The AI organize button shows an animated loading label and remains disabled while processing.
+
 ## Version 6.2.2 Usability Upgrade - 2026-06-11
 
 - Screen display: v6.2.2
