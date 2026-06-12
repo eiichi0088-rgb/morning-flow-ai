@@ -136,7 +136,7 @@ export function parseShoppingItemInput(value: string): ParsedShoppingInput {
   if (!cleaned) return { name: '', quantity: '' };
 
   const quantityPattern =
-    /(?:が|を|は)?\s*([0-9０-９]+(?:[.．][0-9０-９]+)?\s*(?:kg|KG|Kg|キロ|ｋｇ|グラム|g|G|本|個|つ|袋|パック|箱|枚|束|玉|缶|瓶|杯|ロール|ml|mL|ML|ミリ|L|l|リットル))$/;
+    /(?:が|を|は)?\s*([0-9０-９]+(?:[.．][0-9０-９]+)?\s*(?:kg|KG|Kg|キロ|ｋｇ|グラム|g|G|本|個|つ|袋|パック|箱|枚|束|玉|缶|瓶|杯|切れ|ロール|ml|mL|ML|ミリ|L|l|リットル))$/;
   const match = cleaned.match(quantityPattern);
 
   if (!match) {
@@ -277,6 +277,8 @@ function mergeAiItems(
 }
 
 function splitShoppingItemRecord(item: ShoppingItem): ShoppingItem[] {
+  // 既に name と quantity が分離されている場合は再パースしない（数量重複バグ防止）
+  if (item.name && item.quantity) return [item];
   const label = formatShoppingItemLabel(item);
   const parsedItems = extractJapaneseShoppingItems(label);
   if (parsedItems.length <= 1) return [item];
@@ -308,7 +310,7 @@ function extractJapaneseShoppingItems(text: string): Array<{ name: string; quant
   const items: Array<{ name: string; quantity: string; category: ShoppingCategory }> = [];
   const consumedRanges: Array<[number, number]> = [];
   const quantityPattern =
-    /([一-龥ぁ-んァ-ヶーA-Za-z][一-龥ぁ-んァ-ヶーA-Za-z\s]*?)(?:が|を|は)?\s*([0-9０-９一二三四五六七八九十百]+(?:[.．][0-9０-９]+)?\s*(?:パック|個|本|袋|箱|枚|束|玉|丁|缶|瓶|杯|粒|ロール|グラム|g|G|kg|KG|キロ|ml|mL|ML|L|l|リットル|つ))/g;
+    /([一-龥ぁ-んァ-ヶーA-Za-z][一-龥ぁ-んァ-ヶーA-Za-z\s]*?)(?:が|を|は)?\s*([0-9０-９一二三四五六七八九十百]+(?:[.．][0-9０-９]+)?\s*(?:パック|個|本|袋|箱|枚|束|玉|丁|缶|瓶|杯|粒|切れ|ロール|グラム|g|G|kg|KG|キロ|ml|mL|ML|L|l|リットル|つ))/g;
 
   let match: RegExpExecArray | null;
   while ((match = quantityPattern.exec(normalizedText))) {
@@ -400,7 +402,7 @@ function isJapaneseShoppingNoise(value: string) {
 }
 
 function countJapaneseQuantityTokens(value: string) {
-  return (value.match(/[0-9０-９一二三四五六七八九十百]+(?:パック|個|本|袋|箱|枚|束|玉|丁|缶|瓶|杯|粒|ロール|グラム|g|G|kg|KG|キロ|ml|mL|ML|L|l|リットル|つ)/g) ?? []).length;
+  return (value.match(/[0-9０-９一二三四五六七八九十百]+(?:パック|個|本|袋|箱|枚|束|玉|丁|缶|瓶|杯|粒|切れ|ロール|グラム|g|G|kg|KG|キロ|ml|mL|ML|L|l|リットル|つ)/g) ?? []).length;
 }
 
 function extractShoppingItems(text: string): ParsedShoppingInput[] {
@@ -495,7 +497,7 @@ function isTranscriptNoiseItem(item: Pick<ShoppingItem, 'name' | 'quantity'>, al
 }
 
 function countShoppingQuantities(text: string) {
-  return (text.match(/[0-9０-９]+(?:[.．][0-9０-９]+)?(?:kg|キロ|ｋｇ|グラム|g|本|個|つ|袋|パック|箱|枚|束|玉|缶|瓶|杯|ロール|ml|ミリ|l|リットル)/gi) ?? []).length;
+  return (text.match(/[0-9０-９]+(?:[.．][0-9０-９]+)?(?:kg|キロ|ｋｇ|グラム|g|本|個|つ|袋|パック|箱|枚|束|玉|缶|瓶|杯|切れ|ロール|ml|ミリ|l|リットル)/gi) ?? []).length;
 }
 
 function isShoppingMetaOrActionText(text: string) {
