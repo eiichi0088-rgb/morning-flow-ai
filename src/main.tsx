@@ -9,6 +9,7 @@ import {
   ChevronRight,
   CheckCircle2,
   Clock,
+  Cog,
   Download,
   Mail,
   MessageCircle,
@@ -329,7 +330,7 @@ type LlmAssistantResult = {
   parseError: string;
   pendingSave: boolean;
   prioritySuggestionsCount: number;
-  mode: 'llm-native' | 'fallback';
+  mode: 'llm-native' | 'shopping-fast' | 'fallback';
   model: string;
   rawToolCallsCount: number;
   scheduleCount: number;
@@ -367,7 +368,7 @@ type AssistantRuntimeDebug = {
   parseError: string;
   pendingSave: boolean;
   prioritySuggestionsCount: number;
-  mode: 'not checked' | 'llm-native' | 'fallback';
+  mode: 'not checked' | 'llm-native' | 'shopping-fast' | 'fallback';
   model: string;
   rawToolCallsCount: number;
   scheduleCount: number;
@@ -1905,23 +1906,19 @@ function App() {
         });
       } catch (error) {
         console.warn('[MORNING FLOW AI] LLM assistant fallback', error);
-        setError('整理に失敗しました。もう一度お試しください。');
         nextDraft = {
           ...conversationDraft,
           sourceText: appendVoiceText(conversationDraft.sourceText, normalized),
         };
-        assistantLines = [
-          'AI接続に失敗しました。',
-          '少し時間をおいてもう一度お試しください。',
-          '入力内容は保存せず、この会話内に保持しています。',
-        ];
         shouldOpenReview = false;
         const friendlyError = 'AI\u306e\u5fdc\u7b54\u306b\u6642\u9593\u304c\u304b\u304b\u308a\u307e\u3057\u305f\u3002\u5165\u529b\u5185\u5bb9\u306f\u623b\u3057\u3066\u3042\u308a\u307e\u3059\u3002\u3082\u3046\u4e00\u5ea6\u9001\u4fe1\u3057\u3066\u304f\u3060\u3055\u3044\u3002';
+        // エラーはバナー（下部）のみに表示し、会話バブルには出さない（二重表示を防ぐ）
         setError(friendlyError);
         setTranscript((current) => current.includes(normalized) ? current : appendVoiceText(current, normalized));
         setOriginalTranscript((current) => current.includes(normalized) ? current : appendVoiceText(current, normalized));
-        assistantLines = [friendlyError];
-        assistantTone = 'error';
+        // 会話バブルにはエラーを追加しない（バナーのみで通知）
+        assistantLines = [];
+        assistantTone = undefined;
         nextConversationUnderstanding = null;
         nextPendingIntent = null;
         nextPendingFollowUp = null;
@@ -1978,12 +1975,15 @@ function App() {
           title: 'あなた',
           lines: [normalized],
         },
-        {
-          id: createLocalId('conversation-ai'),
-          role: 'assistant',
-          title: result.shouldOpenReview ? '保存前確認です' : 'AI秘書',
-          lines: result.assistantLines,
-        },
+        // エラー時（assistantLines が空）は AI バブルを追加しない（バナーのみで通知）
+        ...(result.assistantLines.length > 0
+          ? [{
+              id: createLocalId('conversation-ai'),
+              role: 'assistant' as const,
+              title: result.shouldOpenReview ? '保存前確認です' : 'AI秘書',
+              lines: result.assistantLines,
+            }]
+          : []),
       ]);
       setConversationMessages((current) => normalizeRecentConversationMessages(current, normalized, assistantTone));
 
@@ -3403,21 +3403,15 @@ function App() {
           onPreferenceChange={updateOnboardingPreference}
         />
       ) : (
-      <section className="hero-panel home-motion-panel" aria-label="音声入力">
-        <div className="digital-motion-field" aria-hidden="true">
-          {Array.from({ length: 7 }).map((_, index) => (
-            <span key={index} />
-          ))}
-        </div>
-
-        <div className="top-bar v4-home-topbar">
+      <section className="hero-panel home-motion-panel home-renew-layout" aria-label="ホーム画面">
+        <div className="top-bar v4-home-topbar home-renew-topbar">
           <div>
             <p className="eyebrow">MORNING FLOW AI <span>{appVersion}</span></p>
-            <p className="hero-subtitle">AI Conversation Core</p>
+            <p className="hero-subtitle">Your calm morning assistant</p>
           </div>
           {isDeveloperModeEnabled() ? (
             <button
-              className="brand-mark debug-brand-button"
+              className="brand-mark debug-brand-button home-renew-brand-mark"
               onClick={() => setIsDeveloperDebugOpen(true)}
               type="button"
               aria-label="Developer Debugを開く"
@@ -3425,46 +3419,28 @@ function App() {
               <Sparkles size={21} />
             </button>
           ) : (
-            <div className="brand-mark" aria-hidden="true">
+            <div className="brand-mark home-renew-brand-mark" aria-hidden="true">
               <Sparkles size={21} />
             </div>
           )}
         </div>
 
-        <section className="home-brand-hero v4-brand-hero" aria-label="MORNING FLOW AI brand visual">
-          <img src="./assets/morning-flow-hero.png" alt="MORNING FLOW AI" />
+        <section className="conversation-hero home-renew-greeting" aria-label="ホームの挨拶">
+          <span>おはようございます！</span>
+          <h1>今日もいい一日にしましょう。</h1>
+          <p>{new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })}</p>
         </section>
 
-        <section className="conversation-hero" aria-label="AI conversation start">
-          <span>おはようございます</span>
-          <h1>今日のことを話してください</h1>
-          <p>予定、買い物、連絡、未来の予定まで、まとめて自然に話せます。</p>
-        </section>
-
-        {morningReviewDraft && conversationUnderstanding && (
-          <ConversationUnderstandingCard understanding={conversationUnderstanding} />
-        )}
-
-        {morningReviewDraft && (
-          <MorningReviewCard
-            aiInboxCount={unprocessedInboxCount}
-            draft={morningReviewDraft}
-            onCancel={cancelMorningReview}
-            onConfirm={confirmMorningReview}
-            onDraftChange={setMorningReviewDraft}
-          />
-        )}
-
-        <div className="focus-area v4-focus-area">
-          <div className={`voice-stage ${isListening ? 'is-listening' : ''}`}>
-            <div className="waveform" aria-hidden="true">
+        <section className="focus-area v4-focus-area home-renew-focus-area" aria-label="音声入力">
+          <div className={`voice-stage home-renew-voice-stage ${isListening ? 'is-listening' : ''}`}>
+            <div className="waveform home-renew-waveform" aria-hidden="true">
               {Array.from({ length: 17 }).map((_, index) => (
                 <span key={index} style={{ animationDelay: `${index * 72}ms` }} />
               ))}
             </div>
 
             <button
-              className={`mic-button v4-mic-button ${isListening ? 'is-listening' : ''}`}
+              className={`mic-button v4-mic-button home-renew-mic-button ${isListening ? 'is-listening' : ''}`}
               type="button"
               onClick={isListening ? stopListening : startListening}
               disabled={!isSupported || isOrganizing}
@@ -3473,21 +3449,134 @@ function App() {
               <span className="pulse-ring ring-one" aria-hidden="true" />
               <span className="pulse-ring ring-two" aria-hidden="true" />
               <span className="mic-glass" aria-hidden="true" />
-              {isListening ? <Square size={42} fill="currentColor" /> : <Mic size={64} />}
+              <span className="home-renew-mic-inner" aria-hidden="true">
+                <span className="home-renew-mic-icon-wrap">{isListening ? <Square size={34} fill="currentColor" /> : <Mic size={58} />}</span>
+                <span className="home-renew-mic-bars">
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              </span>
             </button>
           </div>
 
-          <button className="conversation-start-button" type="button" onClick={isListening ? stopListening : startListening} disabled={!isSupported || isOrganizing}>
+          <p className="home-renew-mic-copy">話すだけで、AIが整理します</p>
+
+          <button
+            className="conversation-start-button home-renew-start-button"
+            type="button"
+            onClick={isListening ? stopListening : startListening}
+            disabled={!isSupported || isOrganizing}
+          >
             <Mic size={19} />
-            {isOrganizing ? 'AIが整理中です…' : isListening ? '聞き取りを終了' : '今日のことを話す'}
+            {isOrganizing ? 'AIが整理中です…' : isListening ? '聞き取りを終了' : 'タップして話す'}
           </button>
 
-          <div className="status-row" role="status" aria-live="polite">
+          <div className="status-row home-renew-status-row" role="status" aria-live="polite">
             <span className={`status-dot ${isListening ? 'active' : ''}`} />
             {getStatusLabel(isSupported, isListening, transcript, plan, voiceRecognitionDebug.status)}
           </div>
-        </div>
+        </section>
 
+        <section className="home-renew-shortcuts" aria-label="ショートカット">
+          <button
+            className="home-renew-shortcut"
+            type="button"
+            onClick={() => planAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          >
+            <CalendarClock size={22} />
+            <strong>予定</strong>
+            <span>を確認</span>
+          </button>
+          <button
+            className="home-renew-shortcut"
+            type="button"
+            onClick={() => {
+              trackAnalyticsFeature(analyticsUserId, 'shopping_list');
+              setActiveView('shopping');
+            }}
+          >
+            <ShoppingCart size={22} />
+            <strong>買い物</strong>
+            <span>リスト</span>
+          </button>
+          <button
+            className="home-renew-shortcut"
+            type="button"
+            onClick={() => {
+              trackAnalyticsFeature(analyticsUserId, 'follow_up');
+              setActiveView('followUp');
+            }}
+          >
+            <MessageCircle size={22} />
+            <strong>Follow Up</strong>
+            <span>確認</span>
+          </button>
+        </section>
+
+        <section className="home-renew-summary-card" aria-label="今日のサマリー">
+          <div className="home-renew-summary-header">
+            <div>
+              <span>今日のサマリー</span>
+              <h2>朝の確認</h2>
+            </div>
+            <strong>{morningDashboard.totalCount}件</strong>
+          </div>
+
+          <div className="home-renew-summary-list">
+            <button
+              className="home-renew-summary-item"
+              type="button"
+              onClick={() => planAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            >
+              <span className="home-renew-summary-icon is-blue"><CheckCircle2 size={18} /></span>
+              <span className="home-renew-summary-label">タスク</span>
+              <strong>{morningDashboard.today.count}件</strong>
+            </button>
+            <button
+              className="home-renew-summary-item"
+              type="button"
+              onClick={() => planAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            >
+              <span className="home-renew-summary-icon is-sky"><CalendarClock size={18} /></span>
+              <span className="home-renew-summary-label">予定</span>
+              <strong>{plan?.schedule?.length ?? 0}件</strong>
+            </button>
+            <button
+              className="home-renew-summary-item"
+              type="button"
+              onClick={() => {
+                trackAnalyticsFeature(analyticsUserId, 'shopping_list');
+                setActiveView('shopping');
+              }}
+            >
+              <span className="home-renew-summary-icon is-orange"><ShoppingCart size={18} /></span>
+              <span className="home-renew-summary-label">買い物リスト</span>
+              <strong>{morningDashboard.shopping.count}件</strong>
+            </button>
+          </div>
+        </section>
+
+        <section className="home-renew-utility-row" aria-label="その他の機能">
+          <button type="button" onClick={() => setActiveView('inbox')}>
+            AI Inbox {unprocessedInboxCount ? `(${unprocessedInboxCount})` : ''}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              trackAnalyticsFeature(analyticsUserId, 'feedback');
+              setActiveView('feedback');
+            }}
+          >
+            ご意見
+          </button>
+          <button type="button" onClick={() => setActiveView('analytics')}>
+            利用状況
+          </button>
+        </section>
+
+        {error && <p className="error-message">{error}</p>}
         {isOrganizing && (
           <section className="ai-processing-card ai-processing-card-v623" role="status" aria-live="polite" aria-label="AI整理中">
             <div className="ai-processing-icon" aria-hidden="true">
@@ -3508,15 +3597,18 @@ function App() {
           </section>
         )}
 
-        {isOrganizing && (
-          <section className="ai-processing-card" role="status" aria-live="polite">
-            <Loader2 className="button-spinner" size={21} />
-            <div>
-              <strong>AIが整理中です…</strong>
-              <p>予定・買い物・Follow Upに分けています。</p>
-              <p>Review Draftを作成中です…</p>
-            </div>
-          </section>
+        {morningReviewDraft && conversationUnderstanding && (
+          <ConversationUnderstandingCard understanding={conversationUnderstanding} />
+        )}
+
+        {morningReviewDraft && (
+          <MorningReviewCard
+            aiInboxCount={unprocessedInboxCount}
+            draft={morningReviewDraft}
+            onCancel={cancelMorningReview}
+            onConfirm={confirmMorningReview}
+            onDraftChange={setMorningReviewDraft}
+          />
         )}
 
         <AiConversationPanel messages={conversationMessages} />
@@ -3555,83 +3647,6 @@ function App() {
           />
         )}
 
-        {canOrganize && (
-          <button
-            className={`organize-button ${isOrganizing ? 'is-organizing' : ''}`}
-            type="button"
-            onClick={organizeMorning}
-            disabled={isOrganizing}
-            aria-busy={isOrganizing}
-          >
-            <Brain size={21} />
-            {isOrganizing && (
-              <span className="ai-organize-button-label">
-                AIが整理しています
-                <span className="ai-processing-dots" aria-hidden="true">
-                  <span>.</span>
-                  <span>.</span>
-                  <span>.</span>
-                </span>
-              </span>
-            )}
-            {isOrganizing ? 'AIが整理しています' : 'AI整理'}
-            <Sparkles size={18} />
-          </button>
-        )}
-
-        {error && <p className="error-message">{error}</p>}
-        {isOrganizing && (
-          <p className="loading-message" role="status" aria-live="polite">
-            AIが整理中です。予定・買い物・Follow Upに分けています…
-          </p>
-        )}
-
-        <div className="flow-switcher" aria-label="MORNING FLOW AI menu">
-          <button className="selected" type="button">
-            今日の予定を整理する
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              trackAnalyticsFeature(analyticsUserId, 'shopping_list');
-              setActiveView('shopping');
-            }}
-          >
-            <ShoppingCart size={18} />
-            買い物リストを作る
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              trackAnalyticsFeature(analyticsUserId, 'follow_up');
-              setActiveView('followUp');
-            }}
-          >
-            <MessageCircle size={18} />
-            {'\u672a\u8fd4\u4fe1\u30fb\u6298\u308a\u8fd4\u3057'}
-            <span className="follow-up-badge">{'\u672a\u8fd4\u4fe1'} {pendingFollowUps.length}{'\u4ef6'} / {'\u4eca\u65e5'} {dueTodayFollowUps.length}{'\u4ef6'}</span>
-          </button>
-          <button type="button" onClick={() => setActiveView('inbox')}>
-            <ListChecks size={18} />
-            AI Inbox
-            <span className="follow-up-badge">未整理 {unprocessedInboxCount}件</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              trackAnalyticsFeature(analyticsUserId, 'feedback');
-              setActiveView('feedback');
-            }}
-          >
-            <Mail size={18} />
-            {'\u3054\u610f\u898b\u30fb\u6539\u5584\u8981\u671b'}
-          </button>
-          <button type="button" onClick={() => setActiveView('analytics')}>
-            <ListChecks size={18} />
-            {'\u5229\u7528\u72b6\u6cc1'}
-          </button>
-        </div>
-
         <div ref={planAnchorRef} />
         {plan && (
           <PlanView
@@ -3651,15 +3666,46 @@ function App() {
         )}
         {morningFollowUpMessage && <p className="follow-up-suggestion">{morningFollowUpMessage}</p>}
 
-        <div className="action-row">
+        <div className="home-renew-secondary-actions">
           <button className="secondary-button" type="button" onClick={() => setIsResetDialogOpen(true)}>
-            <RefreshCw size={19} />
+            <RefreshCw size={18} />
             やり直し
           </button>
           <button className="secondary-button sample-button" type="button" onClick={useSample}>
             サンプル
           </button>
         </div>
+
+        <nav className="home-renew-bottom-nav" aria-label="ホーム画面ナビゲーション">
+          <button className="is-active" type="button" onClick={() => setActiveView('morning')}>
+            <Home size={20} />
+            <span>ホーム</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              trackAnalyticsFeature(analyticsUserId, 'shopping_list');
+              setActiveView('shopping');
+            }}
+          >
+            <ShoppingCart size={20} />
+            <span>買い物</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              trackAnalyticsFeature(analyticsUserId, 'follow_up');
+              setActiveView('followUp');
+            }}
+          >
+            <MessageCircle size={20} />
+            <span>Follow Up</span>
+          </button>
+          <button type="button" onClick={() => setActiveView('settings')}>
+            <Cog size={20} />
+            <span>設定</span>
+          </button>
+        </nav>
       </section>
       )}
       {activeView === 'morning' && (
@@ -4084,7 +4130,7 @@ async function processLlmAssistantTurn({
     parseError: String(payload?.debug?.parseError ?? ''),
     pendingSave: shouldAutoReview,
     prioritySuggestionsCount: llmJson.priority_suggestions.length,
-    mode: payload?.mode === 'llm-native' ? 'llm-native' : 'llm-native',
+    mode: payload?.mode === 'shopping-fast' ? 'shopping-fast' : 'llm-native',
     model: String(payload?.model ?? ''),
     rawToolCallsCount: 0,
     scheduleCount: extractedPure.scheduleCount,
@@ -4163,7 +4209,7 @@ async function processLlmAssistantTurn({
     parseError: '',
     pendingSave: applied.shouldOpenReview || isConversationSaveCommand(text),
     prioritySuggestionsCount: 0,
-    mode: payload?.mode === 'llm-native' ? 'llm-native' : 'llm-native',
+    mode: payload?.mode === 'shopping-fast' ? 'shopping-fast' : 'llm-native',
     model: String(payload?.model ?? ''),
     rawToolCallsCount: debug.rawToolCallsCount,
     scheduleCount: coverage.scheduleCount,
